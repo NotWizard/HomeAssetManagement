@@ -1,7 +1,6 @@
 # 家庭资产管理系统 V1 技术方案（本地 Web）
 
-- 文档日期：2026-03-01
-- 对应 PRD：`docs/plans/2026-03-01-home-asset-management-prd.md`
+- 对应 PRD：`docs/plans/home-asset-management-prd.md`
 - 目标形态：本地 Web（单机、localhost、无登录）
 
 ## 1. 技术决策结论

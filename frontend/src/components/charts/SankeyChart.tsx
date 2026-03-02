@@ -14,7 +14,10 @@ export function SankeyChart({ data }: Props) {
         data: data.nodes,
         links: data.links,
         emphasis: { focus: 'adjacency' },
-        lineStyle: { color: 'gradient', curveness: 0.5 },
+        lineStyle: { color: 'gradient', curveness: 0.45, opacity: 0.42 },
+        nodeGap: 14,
+        nodeWidth: 18,
+        label: { color: '#4b5070', fontSize: 12 },
       },
     ],
   };

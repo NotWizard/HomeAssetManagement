@@ -21,8 +21,8 @@ export function CorrelationHeatmap({ data }: Props) {
         return `${data.assets[y]} vs ${data.assets[x]}<br/>${v.toFixed(4)}`;
       },
     },
-    xAxis: { type: 'category', data: data.assets, splitArea: { show: true } },
-    yAxis: { type: 'category', data: data.assets, splitArea: { show: true } },
+    xAxis: { type: 'category', data: data.assets, splitArea: { show: true }, axisLabel: { color: '#8b90b7' } },
+    yAxis: { type: 'category', data: data.assets, splitArea: { show: true }, axisLabel: { color: '#8b90b7' } },
     visualMap: {
       min: -1,
       max: 1,
@@ -30,6 +30,9 @@ export function CorrelationHeatmap({ data }: Props) {
       orient: 'horizontal',
       left: 'center',
       bottom: 0,
+      inRange: {
+        color: ['#3f8efc', '#f7f8ff', '#f76f8e'],
+      },
     },
     series: [
       {

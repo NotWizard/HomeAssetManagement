@@ -1,4 +1,4 @@
-import { Bell, ChartSpline, Database, Home, Import, Menu, Settings2, WalletCards } from 'lucide-react';
+import { Bell, ChartSpline, Database, Home, Import, Menu, Settings2, UsersRound, WalletCards } from 'lucide-react';
 import { ReactNode, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -15,6 +15,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { key: 'overview', label: '总览', icon: <Home className="h-4 w-4" />, path: '/' },
   { key: 'entry', label: '资产负债录入', icon: <Database className="h-4 w-4" />, path: '/entry' },
+  { key: 'members', label: '成员管理', icon: <UsersRound className="h-4 w-4" />, path: '/members' },
   { key: 'import', label: 'CSV 导入', icon: <Import className="h-4 w-4" />, path: '/import' },
   { key: 'analytics', label: '分析看板', icon: <ChartSpline className="h-4 w-4" />, path: '/analytics' },
   { key: 'settings', label: '设置', icon: <Settings2 className="h-4 w-4" />, path: '/settings' },
@@ -31,25 +32,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const navBody = (
-    <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center gap-2 border-b px-4">
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="flex h-16 items-center gap-2 border-b border-slate-200/70 px-4">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
           <WalletCards className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-sm font-semibold">Home Assets</p>
-          <p className="text-xs text-muted-foreground">Finova Style</p>
+          <p className="text-sm font-semibold tracking-wide">家庭资产管理系统</p>
         </div>
       </div>
-      <nav className="space-y-1 p-3">
+      <nav className="space-y-1.5 p-3">
         {navItems.map((item) => {
           const active = current === item.key;
           return (
             <button
               key={item.key}
               className={cn(
-                'flex h-10 w-full items-center gap-2 rounded-lg px-3 text-sm transition-colors',
-                active ? 'bg-primary text-primary-foreground shadow-soft' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                'flex h-10 w-full items-center gap-2 rounded-xl px-3 text-sm transition-all',
+                active
+                  ? 'bg-gradient-to-r from-primary to-cyan-500 text-primary-foreground shadow-soft'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               )}
               onClick={() => {
                 navigate(item.path);
@@ -67,9 +69,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(80rem_35rem_at_10%_-10%,rgba(108,99,255,0.11),transparent),radial-gradient(70rem_30rem_at_90%_-30%,rgba(64,177,255,0.11),transparent)]">
-      <div className="mx-auto flex min-h-screen max-w-[1600px]">
-        <aside className="hidden w-64 border-r bg-card/80 backdrop-blur md:block">{navBody}</aside>
+    <div className="min-h-screen bg-[radial-gradient(95rem_48rem_at_4%_-8%,rgba(99,102,241,0.13),transparent),radial-gradient(72rem_36rem_at_95%_-28%,rgba(34,211,238,0.12),transparent)]">
+      <div className="flex min-h-screen w-full">
+        <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-slate-200/70 bg-white/85 backdrop-blur-xl md:block">
+          {navBody}
+        </aside>
 
         {mobileOpen ? (
           <div className="fixed inset-0 z-40 md:hidden">
@@ -79,23 +83,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 border-b bg-card/75 backdrop-blur">
-            <div className="flex h-16 items-center justify-between px-4 md:px-6">
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)}>
-                  <Menu className="h-5 w-5" />
-                </Button>
-                <div>
-                  <h1 className="text-base font-semibold">家庭资产管理系统</h1>
-                  <p className="text-xs text-muted-foreground">现代金融专业视图</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <Button variant="ghost" size="icon">
-                  <Bell className="h-4 w-4" />
-                </Button>
-              </div>
+          <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-background/85 backdrop-blur">
+            <div className="flex h-14 items-center justify-end gap-2 px-4 md:px-6">
+              <Button variant="ghost" size="icon" className="mr-auto md:hidden" onClick={() => setMobileOpen(true)}>
+                <Menu className="h-5 w-5" />
+              </Button>
+              <Button variant="ghost" size="icon">
+                <Bell className="h-4 w-4" />
+              </Button>
             </div>
           </header>
 

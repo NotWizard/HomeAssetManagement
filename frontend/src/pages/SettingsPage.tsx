@@ -1,30 +1,56 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import { Select } from '../components/ui/select';
 import { fetchSettings, updateSettings } from '../services/settings';
-import type { Settings } from '../types';
+import type { SettingsUpdatePayload } from '../types';
+
+const COMMON_CURRENCY_OPTIONS = [
+  { value: 'CNY', label: 'CNY 人民币' },
+  { value: 'USD', label: 'USD 美元' },
+  { value: 'EUR', label: 'EUR 欧元' },
+  { value: 'JPY', label: 'JPY 日元' },
+  { value: 'GBP', label: 'GBP 英镑' },
+  { value: 'HKD', label: 'HKD 港币' },
+  { value: 'AUD', label: 'AUD 澳元' },
+  { value: 'CAD', label: 'CAD 加拿大元' },
+  { value: 'CHF', label: 'CHF 瑞士法郎' },
+  { value: 'SGD', label: 'SGD 新加坡元' },
+];
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+  const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
-  const [form, setForm] = useState<Settings>({
+  const [form, setForm] = useState<SettingsUpdatePayload>({
     base_currency: 'CNY',
-    timezone: 'Asia/Shanghai',
+    timezone: browserTimezone,
     rebalance_threshold_pct: 5,
-    fx_provider: 'frankfurter',
   });
   const [error, setError] = useState<string | null>(null);
 
+  const baseCurrencyOptions = useMemo(() => {
+    const current = form.base_currency.toUpperCase();
+    if (COMMON_CURRENCY_OPTIONS.some((option) => option.value === current)) {
+      return COMMON_CURRENCY_OPTIONS;
+    }
+    return [{ value: current, label: `${current} 当前币种` }, ...COMMON_CURRENCY_OPTIONS];
+  }, [form.base_currency]);
+
   useEffect(() => {
     if (settingsQuery.data) {
-      setForm(settingsQuery.data);
+      setForm({
+        base_currency: settingsQuery.data.base_currency,
+        timezone: browserTimezone || settingsQuery.data.timezone,
+        rebalance_threshold_pct: settingsQuery.data.rebalance_threshold_pct,
+      });
     }
-  }, [settingsQuery.data]);
+  }, [settingsQuery.data, browserTimezone]);
 
   const mutation = useMutation({
     mutationFn: updateSettings,
@@ -38,7 +64,7 @@ export function SettingsPage() {
 
   const submit = () => {
     if (!form.base_currency.trim()) {
-      setError('基准币不能为空');
+      setError('基准币种不能为空');
       return;
     }
     if (!form.timezone.trim()) {
@@ -49,10 +75,6 @@ export function SettingsPage() {
       setError('再平衡阈值应在 0 到 100 之间');
       return;
     }
-    if (!form.fx_provider.trim()) {
-      setError('汇率提供方不能为空');
-      return;
-    }
     mutation.mutate(form);
   };
 
@@ -60,7 +82,7 @@ export function SettingsPage() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-semibold">系统设置</h2>
-        <p className="text-sm text-muted-foreground">配置基准币、时区、再平衡阈值与汇率提供方</p>
+        <p className="text-sm text-muted-foreground">配置基准币种、时区、再平衡阈值与汇率提供方</p>
       </div>
 
       <Card className="max-w-3xl">
@@ -69,17 +91,16 @@ export function SettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="基准币">
-              <Input
+            <Field label="基准币种">
+              <Select
                 value={form.base_currency}
                 onChange={(event) => setForm((prev) => ({ ...prev, base_currency: event.target.value.toUpperCase() }))}
+                options={baseCurrencyOptions}
               />
             </Field>
             <Field label="时区">
-              <Input
-                value={form.timezone}
-                onChange={(event) => setForm((prev) => ({ ...prev, timezone: event.target.value }))}
-              />
+              <Input value={form.timezone} disabled readOnly />
+              <p className="text-xs text-muted-foreground">默认读取本机时区，不支持手动修改</p>
             </Field>
             <Field label="再平衡阈值(%)">
               <Input
@@ -97,10 +118,7 @@ export function SettingsPage() {
               />
             </Field>
             <Field label="汇率提供方">
-              <Input
-                value={form.fx_provider}
-                onChange={(event) => setForm((prev) => ({ ...prev, fx_provider: event.target.value }))}
-              />
+              <Input value={settingsQuery.data?.fx_provider ?? 'frankfurter'} disabled />
             </Field>
           </div>
 

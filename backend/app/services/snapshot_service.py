@@ -11,6 +11,7 @@ from app.models.category import Category
 from app.models.holding_item import HoldingItem
 from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
+from app.core.timezone import business_today
 from app.services.common import get_default_family
 from app.utils.serialization import decimal_to_float
 
@@ -38,7 +39,7 @@ class SnapshotService:
         snapshot_date: date | None = None,
     ) -> SnapshotDaily:
         family = get_default_family(session)
-        snapshot_date = snapshot_date or date.today()
+        snapshot_date = snapshot_date or business_today(session)
         payload = _build_snapshot_payload(session)
 
         row = session.scalar(

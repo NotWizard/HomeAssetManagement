@@ -3,12 +3,19 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.timezone import get_business_tzinfo
+from app.core.database import SessionLocal
 from app.jobs.fx_jobs import run_daily_fx_job
 from app.jobs.snapshot_jobs import run_daily_snapshot_job
 
 logger = get_logger(__name__)
 
 scheduler = BackgroundScheduler()
+
+
+def _get_scheduler_timezone():
+    with SessionLocal() as session:
+        return get_business_tzinfo(session)
 
 
 def start_scheduler() -> None:
@@ -20,20 +27,21 @@ def start_scheduler() -> None:
     if scheduler.running:
         return
 
+    scheduler_timezone = _get_scheduler_timezone()
     scheduler.add_job(
         run_daily_fx_job,
-        trigger=CronTrigger(hour=6, minute=0),
+        trigger=CronTrigger(hour=6, minute=0, timezone=scheduler_timezone),
         id="daily_fx_fetch_job",
         replace_existing=True,
     )
     scheduler.add_job(
         run_daily_snapshot_job,
-        trigger=CronTrigger(hour=23, minute=55),
+        trigger=CronTrigger(hour=23, minute=55, timezone=scheduler_timezone),
         id="daily_snapshot_job",
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("scheduler started")
+    logger.info("scheduler started timezone=%s", scheduler_timezone)
 
 
 def stop_scheduler() -> None:

@@ -5,27 +5,67 @@ import { ArrowDownRight, ArrowUpRight, CalendarDays, Globe, Wallet } from 'lucid
 import { TrendChart } from '../components/charts/TrendChart';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Select } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { fetchRebalance, fetchTrend } from '../services/analytics';
 import { fetchHoldings } from '../services/holdings';
+import { fetchSettings } from '../services/settings';
 import { formatCurrency, formatPercent } from '../utils/format';
+
+function calcChangePct(current: number, previous: number | null): number | null {
+  if (previous == null || previous === 0) {
+    return null;
+  }
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
+function formatDelta(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) {
+    return '—';
+  }
+  const prefix = value > 0 ? '+' : '';
+  return `${prefix}${value.toFixed(2)}%`;
+}
 
 export function OverviewPage() {
   const trendQuery = useQuery({ queryKey: ['trend', 'overview'], queryFn: () => fetchTrend(90) });
   const holdingsQuery = useQuery({ queryKey: ['holdings', 'overview'], queryFn: fetchHoldings });
   const rebalanceQuery = useQuery({ queryKey: ['rebalance', 'overview'], queryFn: fetchRebalance });
+  const settingsQuery = useQuery({ queryKey: ['settings', 'overview'], queryFn: fetchSettings });
 
   const latest = useMemo(() => {
     if (!trendQuery.data || trendQuery.data.net_asset.length === 0) {
-      return { totalAsset: 0, totalLiability: 0, netAsset: 0 };
+      return {
+        totalAsset: 0,
+        totalLiability: 0,
+        netAsset: 0,
+        totalAssetDelta: null,
+        totalLiabilityDelta: null,
+        netAssetDelta: null,
+      };
     }
     const index = trendQuery.data.net_asset.length - 1;
+    const prevIndex = index > 0 ? index - 1 : null;
+    const totalAsset = trendQuery.data.total_asset[index];
+    const totalLiability = trendQuery.data.total_liability[index];
+    const netAsset = trendQuery.data.net_asset[index];
+
     return {
-      totalAsset: trendQuery.data.total_asset[index],
-      totalLiability: trendQuery.data.total_liability[index],
-      netAsset: trendQuery.data.net_asset[index],
+      totalAsset,
+      totalLiability,
+      netAsset,
+      totalAssetDelta: calcChangePct(
+        totalAsset,
+        prevIndex == null ? null : trendQuery.data.total_asset[prevIndex]
+      ),
+      totalLiabilityDelta: calcChangePct(
+        totalLiability,
+        prevIndex == null ? null : trendQuery.data.total_liability[prevIndex]
+      ),
+      netAssetDelta: calcChangePct(
+        netAsset,
+        prevIndex == null ? null : trendQuery.data.net_asset[prevIndex]
+      ),
     };
   }, [trendQuery.data]);
 
@@ -45,17 +85,9 @@ export function OverviewPage() {
           <h2 className="text-xl font-semibold">Overview</h2>
           <p className="text-sm text-muted-foreground">家庭资产与负债关键指标概览</p>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          <Select
-            className="w-full sm:w-36"
-            options={[{ label: 'Currency: CNY', value: 'CNY' }, { label: 'Currency: USD', value: 'USD' }]}
-            defaultValue="CNY"
-          />
-          <Select
-            className="w-full sm:w-36"
-            options={[{ label: 'Assets: All', value: 'all' }, { label: 'Assets: Core', value: 'core' }]}
-            defaultValue="all"
-          />
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <Badge variant="secondary">基准币 {settingsQuery.data?.base_currency ?? '--'}</Badge>
+          <Badge variant="secondary">汇率源 {settingsQuery.data?.fx_provider ?? '--'}</Badge>
           <button className="inline-flex h-10 items-center gap-2 rounded-lg border bg-card px-3 text-sm text-muted-foreground">
             <CalendarDays className="h-4 w-4" />
             最近 90 天
@@ -64,10 +96,38 @@ export function OverviewPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="净资产" value={formatCurrency(latest.netAsset)} delta="+12.4%" positive icon={<Wallet className="h-4 w-4" />} loading={loading} />
-        <MetricCard title="总资产" value={formatCurrency(latest.totalAsset)} delta="+9.8%" positive icon={<ArrowUpRight className="h-4 w-4" />} loading={loading} />
-        <MetricCard title="总负债" value={formatCurrency(latest.totalLiability)} delta="-2.1%" positive icon={<ArrowDownRight className="h-4 w-4" />} loading={loading} />
-        <MetricCard title="基准币" value="CNY" delta="实时汇率折算" positive icon={<Globe className="h-4 w-4" />} loading={false} />
+        <MetricCard
+          title="净资产"
+          value={formatCurrency(latest.netAsset)}
+          delta={formatDelta(latest.netAssetDelta)}
+          positive={(latest.netAssetDelta ?? 0) >= 0}
+          icon={<Wallet className="h-4 w-4" />}
+          loading={loading}
+        />
+        <MetricCard
+          title="总资产"
+          value={formatCurrency(latest.totalAsset)}
+          delta={formatDelta(latest.totalAssetDelta)}
+          positive={(latest.totalAssetDelta ?? 0) >= 0}
+          icon={<ArrowUpRight className="h-4 w-4" />}
+          loading={loading}
+        />
+        <MetricCard
+          title="总负债"
+          value={formatCurrency(latest.totalLiability)}
+          delta={formatDelta(latest.totalLiabilityDelta)}
+          positive={(latest.totalLiabilityDelta ?? 0) <= 0}
+          icon={<ArrowDownRight className="h-4 w-4" />}
+          loading={loading}
+        />
+        <MetricCard
+          title="基准币"
+          value={settingsQuery.data?.base_currency ?? '--'}
+          delta={settingsQuery.data ? `汇率源 ${settingsQuery.data.fx_provider}` : '读取设置中'}
+          positive
+          icon={<Globe className="h-4 w-4" />}
+          loading={settingsQuery.isLoading}
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">

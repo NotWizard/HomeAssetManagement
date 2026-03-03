@@ -6,10 +6,10 @@
 ## 1. 技术决策结论
 
 1. 后端采用 Python：`FastAPI + SQLAlchemy + Alembic + APScheduler`。
-2. 前端采用 React：`React + TypeScript + Vite + Ant Design`。
+2. 前端采用 React：`React + TypeScript + Vite + Tailwind CSS + shadcn/ui`。
 3. 图表采用 `Apache ECharts`（React 封装：`echarts-for-react`）。
 4. 本地数据库采用 `SQLite`（启用 WAL，支持并发读写体验）。
-5. 分析计算采用 `pandas + numpy`（波动率、相关性、再平衡偏离）。
+5. 分析计算采用后端手写数学实现（不引入 `pandas` / `numpy`）。
 6. 数据交换采用 REST API + JSON。
 
 这套组合满足：
@@ -200,6 +200,11 @@ HomeAssetManagement/
   - `4040` 资源不存在
   - `4090` 冲突（唯一键/版本冲突）
   - `5000` 系统错误
+- HTTP 状态映射：
+  - `4040 -> 404`
+  - `4090 -> 409`
+  - `5000 -> 500`
+  - 其他业务错误默认 `400`
 
 ## 5.2 主要接口
 
@@ -267,14 +272,20 @@ HomeAssetManagement/
   - 事件快照：记录变更前后关键字段或全量聚合。
   - 日终快照：统一结构，供分析层直接消费。
 
+- `settings_service`
+  - `fx_provider` 固定为 `frankfurter`，创建和更新都强制写入默认值。
+  - `SettingsUpdate` 不允许传入 `fx_provider`（`extra=forbid`）。
+  - 业务时区统一从 settings 获取，用于调度器和日维度计算。
+
 ---
 
-## 6. 前端详细设计（React + ECharts）
+## 6. 前端详细设计（React + Tailwind + shadcn/ui + ECharts）
 
 ## 6.1 页面与路由
 
-- `/overview`
+- `/`（总览）
 - `/entry`
+- `/members`
 - `/import`
 - `/analytics`
 - `/settings`
@@ -288,12 +299,14 @@ HomeAssetManagement/
 
 ## 6.3 表单与校验
 
-- `react-hook-form + zod`（或 Antd Form + rules）
+- 受控组件 + 统一 UI 组件（`Input` / `Select` / `Dialog` / `Table`）
 - 校验规则：
   - 金额 > 0
   - 币种合法
   - 资产 `target_ratio` 必填且 0~100
   - 负债 `target_ratio` 禁止填写
+  - 时区字段只读（默认本机时区）
+  - 汇率提供方字段只读（固定 `frankfurter`）
 
 ## 6.4 ECharts 图表落地
 
@@ -308,6 +321,7 @@ HomeAssetManagement/
 3. 相关性矩阵：`heatmap`
 - 色阶 -1~1
 - tooltip 展示资产对与相关系数
+- 对 `None` 相关系数显示 `N/A / 样本不足`，不映射为 `0`
 
 4. 桑基图：`sankey`
 - 节点建议：成员 -> 一级/二级/三级 -> 资产/负债汇总端
@@ -321,6 +335,8 @@ HomeAssetManagement/
 - 写操作后主动失效关键查询：`holdings`、`overview`、`analytics/*`。
 - 异常统一消息组件：汇率回退、净资产非正、样本不足。
 - 导入页面展示可下载错误报告。
+- 左侧导航与右侧顶部栏均采用 `sticky` 行为，滚动时保持可见。
+- 成员管理从资产录入页抽离为独立菜单页，录入页仅做成员选择与缺省引导。
 
 ---
 
@@ -358,12 +374,14 @@ HomeAssetManagement/
 - 日收益率：`r_t = v_t / v_(t-1) - 1`
 - 年化波动率：`std(r_t) * sqrt(252)`
 - 样本不足（<30）返回 `insufficient_data=true`。
+- 计算在 Python 服务层手写实现，避免引入 `pandas` / `numpy` 依赖。
 
 ## 7.5 相关性矩阵
 
 - 取同窗口各资产收益率向量。
 - 采用 Pearson 相关系数。
 - 输出 NxN 矩阵（资产数 N）。
+- 某些资产对样本不足时返回 `None`，前端按缺失值渲染为 `N/A`。
 
 ## 7.6 桑基图数据构建
 
@@ -385,6 +403,10 @@ HomeAssetManagement/
 - 执行时间：每日 23:55
 - 行为：聚合全量资产负债生成 `snapshot_daily`
 
+3. 时区策略
+- 调度触发时区取自 settings 中的业务时区。
+- 相关“今日日期”计算统一使用业务时区，避免跨时区日切偏差。
+
 ## 8.2 失败与重试
 
 - 网络失败：指数退避重试 3 次。
@@ -396,13 +418,10 @@ HomeAssetManagement/
 
 ## 9.1 汇率源
 
-建议抽象 `FxProvider` 接口：
-- `get_rates(date, base_currency, quote_currencies)`
-
-实现策略：
-1. `provider_a`（主）
-2. `provider_b`（备）
-3. 本地缓存回退（历史最近可用）
+V1 固定使用 `frankfurter`：
+1. 前端设置页显示但不可修改。
+2. 后端 `settings_service` 强制写入 `frankfurter`。
+3. 后续若扩展多提供方，再引入 `FxProvider` 抽象层。
 
 ## 9.2 离线可用性
 
@@ -489,8 +508,8 @@ HomeAssetManagement/
 
 ## 15. 关键风险与应对
 
-1. 汇率源波动/限制
-- 应对：多提供方抽象 + 历史回退 + 明确估算标识。
+1. 固定汇率源可用性风险（Frankfurter）
+- 应对：历史回退 + 明确估算标识；后续版本再评估多提供方扩展。
 
 2. 分类清单尚未最终给定
 - 应对：先实现固定三级结构与只读接口，后续补充种子数据即可。
@@ -507,6 +526,7 @@ HomeAssetManagement/
 
 你的判断是正确的：
 - **后端用 Python（FastAPI）+ 前端用 React** 是这个本地家庭资产管理系统的最优平衡方案。
-- 图表层使用 **ECharts** 可以完整承载趋势、相关性矩阵、桑基图和再平衡展示。
+- **Tailwind CSS + shadcn/ui + ECharts** 可以完整承载当前风格化界面与图表展示。
+- 分析计算维持后端手写数学实现，可控且依赖更轻量。
 
 该技术方案可直接进入开发实施阶段。

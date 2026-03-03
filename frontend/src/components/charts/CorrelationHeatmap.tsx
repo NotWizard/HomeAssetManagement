@@ -5,12 +5,14 @@ type Props = {
   data: CorrelationData;
 };
 
+const MISSING_CORRELATION = 2;
+
 export function CorrelationHeatmap({ data }: Props) {
   const matrixData: Array<[number, number, number]> = [];
 
   data.matrix.forEach((row, rowIndex) => {
     row.forEach((value, colIndex) => {
-      matrixData.push([colIndex, rowIndex, value ?? 0]);
+      matrixData.push([colIndex, rowIndex, value ?? MISSING_CORRELATION]);
     });
   });
 
@@ -18,6 +20,9 @@ export function CorrelationHeatmap({ data }: Props) {
     tooltip: {
       formatter: (params: { data: [number, number, number] }) => {
         const [x, y, v] = params.data;
+        if (v === MISSING_CORRELATION) {
+          return `${data.assets[y]} vs ${data.assets[x]}<br/>样本不足`;
+        }
         return `${data.assets[y]} vs ${data.assets[x]}<br/>${v.toFixed(4)}`;
       },
     },
@@ -33,6 +38,9 @@ export function CorrelationHeatmap({ data }: Props) {
       inRange: {
         color: ['#3f8efc', '#f7f8ff', '#f76f8e'],
       },
+      outOfRange: {
+        color: ['#d8dbe8'],
+      },
     },
     series: [
       {
@@ -40,7 +48,8 @@ export function CorrelationHeatmap({ data }: Props) {
         data: matrixData,
         label: {
           show: true,
-          formatter: (params: { value: [number, number, number] }) => params.value[2].toFixed(2),
+          formatter: (params: { value: [number, number, number] }) =>
+            params.value[2] === MISSING_CORRELATION ? 'N/A' : params.value[2].toFixed(2),
         },
       },
     ],

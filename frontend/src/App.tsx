@@ -4,6 +4,7 @@ import { AppShell } from './components/layout/AppShell';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { EntryPage } from './pages/EntryPage';
 import { ImportPage } from './pages/ImportPage';
+import { MembersPage } from './pages/MembersPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -13,6 +14,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<OverviewPage />} />
         <Route path="/entry" element={<EntryPage />} />
+        <Route path="/members" element={<MembersPage />} />
         <Route path="/import" element={<ImportPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/settings" element={<SettingsPage />} />

@@ -17,6 +17,16 @@ from app.core.database import SessionLocal
 settings = get_settings()
 
 
+def _status_code_for_app_error(code: int) -> int:
+    if code == 4040:
+        return 404
+    if code == 4090:
+        return 409
+    if code == 5000:
+        return 500
+    return 400
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     init_database()
@@ -43,7 +53,10 @@ app.add_middleware(
 
 @app.exception_handler(AppError)
 async def app_error_handler(request, exc: AppError):  # type: ignore[no-untyped-def]
-    return JSONResponse(status_code=400, content=err(exc.code, exc.message))
+    return JSONResponse(
+        status_code=_status_code_for_app_error(exc.code),
+        content=err(exc.code, exc.message),
+    )
 
 
 @app.get("/health")

@@ -45,3 +45,9 @@ export type Settings = {
   rebalance_threshold_pct: number;
   fx_provider: string;
 };
+
+export type SettingsUpdatePayload = {
+  base_currency: string;
+  timezone: string;
+  rebalance_threshold_pct: number;
+};

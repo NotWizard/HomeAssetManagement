@@ -5,6 +5,8 @@ from app.core.config import get_settings
 from app.models.settings import SettingsModel
 from app.services.common import get_default_family
 
+DEFAULT_FX_PROVIDER = "frankfurter"
+
 
 class SettingsService:
     @staticmethod
@@ -20,7 +22,7 @@ class SettingsService:
                 base_currency=app_settings.base_currency,
                 timezone=app_settings.timezone,
                 rebalance_threshold_pct=app_settings.rebalance_threshold_pct,
-                fx_provider="frankfurter",
+                fx_provider=DEFAULT_FX_PROVIDER,
             )
             session.add(settings)
             session.flush()
@@ -32,12 +34,11 @@ class SettingsService:
         base_currency: str,
         timezone: str,
         rebalance_threshold_pct: float,
-        fx_provider: str,
     ) -> SettingsModel:
         settings = SettingsService.get_settings(session)
         settings.base_currency = base_currency.upper()
         settings.timezone = timezone
         settings.rebalance_threshold_pct = rebalance_threshold_pct
-        settings.fx_provider = fx_provider
+        settings.fx_provider = DEFAULT_FX_PROVIDER
         session.flush()
         return settings

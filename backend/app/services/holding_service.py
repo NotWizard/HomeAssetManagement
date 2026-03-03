@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import and_
@@ -13,6 +12,7 @@ from app.services.common import get_default_family
 from app.services.fx_service import FXService
 from app.services.snapshot_service import SnapshotService
 from app.services.settings_service import SettingsService
+from app.core.timezone import business_today
 
 
 class HoldingService:
@@ -48,7 +48,7 @@ class HoldingService:
             session=session,
             quote_currency=payload["currency"],
             base_currency=settings.base_currency,
-            as_of=date.today(),
+            as_of=business_today(session),
         )
 
         amount_original = Decimal(str(payload["amount_original"]))
@@ -87,7 +87,7 @@ class HoldingService:
             session=session,
             quote_currency=payload["currency"],
             base_currency=settings.base_currency,
-            as_of=date.today(),
+            as_of=business_today(session),
         )
 
         amount_original = Decimal(str(payload["amount_original"]))

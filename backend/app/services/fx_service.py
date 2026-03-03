@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.timezone import business_today
 from app.models.fx_rate_daily import FxRateDaily
 from app.services.settings_service import SettingsService
 
@@ -24,7 +25,7 @@ class FXService:
         base_currency: str | None = None,
     ) -> int:
         if rate_date is None:
-            rate_date = date.today()
+            rate_date = business_today(session)
 
         settings = SettingsService.get_settings(session)
         base = (base_currency or settings.base_currency).upper()
@@ -113,7 +114,7 @@ class FXService:
         settings = SettingsService.get_settings(session)
         base = (base_currency or settings.base_currency).upper()
         quote = quote_currency.upper()
-        as_of_date = as_of or date.today()
+        as_of_date = as_of or business_today(session)
 
         if quote == base:
             return Decimal("1"), False
@@ -164,7 +165,7 @@ class FXService:
 
     @staticmethod
     def list_rates(session: Session, on_date: date | None = None) -> list[FxRateDaily]:
-        target_date = on_date or date.today()
+        target_date = on_date or business_today(session)
         settings = SettingsService.get_settings(session)
         base = settings.base_currency.upper()
         rows = list(

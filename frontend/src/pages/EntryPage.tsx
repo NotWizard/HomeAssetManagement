@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { Pencil, Plus, Trash2, UsersRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -9,7 +10,7 @@ import { Dialog } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { createMember, fetchMembers } from '../services/members';
+import { fetchMembers } from '../services/members';
 import { createHolding, deleteHolding, fetchHoldings, updateHolding, type HoldingPayload } from '../services/holdings';
 import { fetchCategories } from '../services/categories';
 import type { CategoryNode, Holding } from '../types';
@@ -63,8 +64,8 @@ function buildPathOptions(tree: CategoryNode[]): PathOption[] {
 
 export function EntryPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const [newMemberName, setNewMemberName] = useState('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Holding | null>(null);
   const [form, setForm] = useState<EntryFormState>(INITIAL_FORM);
@@ -74,14 +75,6 @@ export function EntryPage() {
   const holdingsQuery = useQuery({ queryKey: ['holdings'], queryFn: fetchHoldings });
   const assetCategoryQuery = useQuery({ queryKey: ['categories', 'asset'], queryFn: () => fetchCategories('asset') });
   const liabilityCategoryQuery = useQuery({ queryKey: ['categories', 'liability'], queryFn: () => fetchCategories('liability') });
-
-  const createMemberMutation = useMutation({
-    mutationFn: createMember,
-    onSuccess: async () => {
-      setNewMemberName('');
-      await queryClient.invalidateQueries({ queryKey: ['members'] });
-    },
-  });
 
   const createHoldingMutation = useMutation({
     mutationFn: createHolding,
@@ -128,6 +121,7 @@ export function EntryPage() {
     (membersQuery.data ?? []).forEach((m) => map.set(m.id, m.name));
     return map;
   }, [membersQuery.data]);
+  const hasMembers = (membersQuery.data ?? []).length > 0;
 
   const openCreateDialog = () => {
     setEditing(null);
@@ -209,7 +203,7 @@ export function EntryPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-xl font-semibold">资产与负债录入</h2>
-          <p className="text-sm text-muted-foreground">成员归属、固定三级分类与多币种金额录入</p>
+          <p className="text-sm text-muted-foreground">固定三级分类与多币种金额录入，成员由“成员管理”菜单统一维护</p>
         </div>
         <Button onClick={openCreateDialog}>
           <Plus className="mr-2 h-4 w-4" />
@@ -217,40 +211,19 @@ export function EntryPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">成员管理</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              value={newMemberName}
-              onChange={(event) => setNewMemberName(event.target.value)}
-              placeholder="输入成员名称，如：配偶"
-              className="sm:max-w-xs"
-            />
-            <Button
-              variant="secondary"
-              onClick={() => {
-                const value = newMemberName.trim();
-                if (!value) return;
-                createMemberMutation.mutate(value);
-              }}
-              disabled={createMemberMutation.isPending}
-            >
-              <Users className="mr-2 h-4 w-4" />
-              添加成员
+      {!hasMembers ? (
+        <Card className="border-amber-200 bg-amber-50/60">
+          <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-amber-900">
+              当前还没有可用成员，新增资产负债前请先创建成员。
+            </div>
+            <Button variant="secondary" onClick={() => navigate('/members')}>
+              <UsersRound className="mr-2 h-4 w-4" />
+              去成员管理
             </Button>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(membersQuery.data ?? []).map((member) => (
-              <Badge key={member.id} variant="secondary">
-                {member.name}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-1">

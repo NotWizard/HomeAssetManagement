@@ -51,3 +51,10 @@ export type SettingsUpdatePayload = {
   timezone: string;
   rebalance_threshold_pct: number;
 };
+
+export type MigrationImportResult = {
+  family_name: string;
+  members_count: number;
+  holdings_count: number;
+  daily_snapshots_count: number;
+};

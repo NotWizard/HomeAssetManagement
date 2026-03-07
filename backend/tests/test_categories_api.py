@@ -1,16 +1,9 @@
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from fastapi.testclient import TestClient
 
-from app.core.config import get_settings
-from app.core.database import Base
-from app.core.database import engine
-from app.models.category import Category
-from app.models.family import Family
-from app.models.holding_item import HoldingItem
-from app.models.settings import SettingsModel
+from app.main import app
 
 
-ASSET_CATEGORY_TREE = [
+EXPECTED_ASSET_TREE = [
     {
         "name": "现金与存款",
         "children": [
@@ -63,7 +56,7 @@ ASSET_CATEGORY_TREE = [
     },
 ]
 
-LIABILITY_CATEGORY_TREE = [
+EXPECTED_LIABILITY_TREE = [
     {
         "name": "房屋相关负债",
         "children": [
@@ -109,102 +102,48 @@ LIABILITY_CATEGORY_TREE = [
     },
 ]
 
-LEGACY_CATEGORY_NAMES = {"默认一级", "默认二级", "默认三级"}
+
+LEGACY_PLACEHOLDERS = {"默认一级", "默认二级", "默认三级", "外币现钞"}
 
 
-def init_database() -> None:
-    Base.metadata.create_all(bind=engine)
-    with Session(engine) as session:
-        _ensure_default_family(session)
-        _ensure_default_settings(session)
-        _ensure_default_categories(session)
-        session.commit()
+def _project_tree(nodes: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": node["name"],
+            "children": [
+                {"name": child["name"], "children": [leaf["name"] for leaf in child["children"]]}
+                for child in node["children"]
+            ],
+        }
+        for node in nodes
+    ]
 
 
-def _ensure_default_family(session: Session) -> Family:
-    family = session.scalar(select(Family).limit(1))
-    if family:
-        return family
-    family = Family(name="我的家庭")
-    session.add(family)
-    session.flush()
-    return family
+def _collect_names(nodes: list[dict]) -> set[str]:
+    names: set[str] = set()
+    for node in nodes:
+        names.add(node["name"])
+        for child in node["children"]:
+            names.add(child["name"])
+            for leaf in child["children"]:
+                names.add(leaf["name"])
+    return names
 
 
-def _ensure_default_settings(session: Session) -> None:
-    settings = get_settings()
-    family = _ensure_default_family(session)
-    exists = session.scalar(
-        select(SettingsModel).where(SettingsModel.family_id == family.id).limit(1)
-    )
-    if exists:
-        return
-    session.add(
-        SettingsModel(
-            family_id=family.id,
-            base_currency=settings.base_currency,
-            timezone=settings.timezone,
-            rebalance_threshold_pct=settings.rebalance_threshold_pct,
-            fx_provider="frankfurter",
-        )
-    )
+def test_categories_api_returns_curated_asset_and_liability_trees():
+    with TestClient(app) as client:
+        asset_resp = client.get("/api/v1/categories", params={"type": "asset"})
+        liability_resp = client.get("/api/v1/categories", params={"type": "liability"})
 
+    assert asset_resp.status_code == 200
+    assert liability_resp.status_code == 200
 
-def _ensure_default_categories(session: Session) -> None:
-    existing = list(session.scalars(select(Category).order_by(Category.level.asc(), Category.id.asc())))
-    if existing and not _should_replace_legacy_categories(session, existing):
-        return
+    asset_tree = asset_resp.json()["data"]
+    liability_tree = liability_resp.json()["data"]
 
-    if existing:
-        for row in sorted(existing, key=lambda item: item.level, reverse=True):
-            session.delete(row)
-        session.flush()
+    assert _project_tree(asset_tree) == EXPECTED_ASSET_TREE
+    assert _project_tree(liability_tree) == EXPECTED_LIABILITY_TREE
 
-    _seed_category_tree(session, "asset", ASSET_CATEGORY_TREE)
-    _seed_category_tree(session, "liability", LIABILITY_CATEGORY_TREE)
-
-
-def _should_replace_legacy_categories(session: Session, categories: list[Category]) -> bool:
-    if not categories:
-        return True
-
-    if any(category.name not in LEGACY_CATEGORY_NAMES for category in categories):
-        return False
-
-    holding_exists = session.scalar(select(HoldingItem.id).limit(1))
-    return holding_exists is None
-
-
-def _seed_category_tree(session: Session, category_type: str, tree: list[dict]) -> None:
-    for l1_index, l1_node in enumerate(tree, start=1):
-        l1 = Category(
-            type=category_type,
-            level=1,
-            parent_id=None,
-            name=l1_node["name"],
-            sort_order=l1_index,
-        )
-        session.add(l1)
-        session.flush()
-
-        for l2_index, l2_node in enumerate(l1_node["children"], start=1):
-            l2 = Category(
-                type=category_type,
-                level=2,
-                parent_id=l1.id,
-                name=l2_node["name"],
-                sort_order=l2_index,
-            )
-            session.add(l2)
-            session.flush()
-
-            for l3_index, l3_name in enumerate(l2_node["children"], start=1):
-                session.add(
-                    Category(
-                        type=category_type,
-                        level=3,
-                        parent_id=l2.id,
-                        name=l3_name,
-                        sort_order=l3_index,
-                    )
-                )
+    all_names = _collect_names(asset_tree) | _collect_names(liability_tree)
+    assert "美元现金" in all_names
+    assert not (LEGACY_PLACEHOLDERS & all_names)

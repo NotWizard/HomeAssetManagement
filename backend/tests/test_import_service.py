@@ -16,7 +16,7 @@ def test_import_preview_detects_insert_or_update_actions():
         content = "\n".join(
             [
                 "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
-                "US ETF,asset,Alice,默认一级,默认二级,默认三级,USD,1000,30",
+                "US ETF,asset,Alice,权益投资,基金,指数基金/ETF,USD,1000,30",
             ]
         ).encode("utf-8")
 

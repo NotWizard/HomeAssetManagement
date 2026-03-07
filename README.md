@@ -11,6 +11,7 @@
 - 自动事件快照 + 每日日频快照
 - 分析看板：趋势、波动率、相关性矩阵、桑基图、再平衡提醒
 - 设置页：基准币、时区、全局偏离阈值、汇率提供方
+- 迁移包导出/导入：支持导出家庭信息、系统设置、成员、资产负债与每日日快照，并在新环境中一键恢复
 
 ## 目录
 
@@ -46,6 +47,14 @@ source .venv/bin/activate
 python -m pytest backend/tests -q
 npm --prefix frontend run build
 ```
+
+
+## 迁移包
+
+- 入口：设置页中的`数据迁移 / 备份`卡片
+- 导出内容：`family`、`settings`、`members`、当前有效 `holdings`、`daily_snapshots`
+- 导入格式：ZIP 迁移包（包含 `manifest.json` 与分域数据文件）
+- 导入行为：会清空当前环境中的系统设置、成员、资产负债与每日日快照，再恢复迁移包内容
 
 ## CSV 模板字段
 

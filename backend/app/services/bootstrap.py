@@ -152,16 +152,22 @@ def _ensure_default_settings(session: Session) -> None:
 
 def _ensure_default_categories(session: Session) -> None:
     existing = list(session.scalars(select(Category).order_by(Category.level.asc(), Category.id.asc())))
-    if existing and not _should_replace_legacy_categories(session, existing):
+
+    if not existing:
+        _seed_category_tree(session, "asset", ASSET_CATEGORY_TREE)
+        _seed_category_tree(session, "liability", LIABILITY_CATEGORY_TREE)
         return
 
-    if existing:
+    if _should_replace_legacy_categories(session, existing):
         for row in sorted(existing, key=lambda item: item.level, reverse=True):
             session.delete(row)
         session.flush()
+        _seed_category_tree(session, "asset", ASSET_CATEGORY_TREE)
+        _seed_category_tree(session, "liability", LIABILITY_CATEGORY_TREE)
+        return
 
-    _seed_category_tree(session, "asset", ASSET_CATEGORY_TREE)
-    _seed_category_tree(session, "liability", LIABILITY_CATEGORY_TREE)
+    _ensure_curated_category_tree(session, "asset", ASSET_CATEGORY_TREE)
+    _ensure_curated_category_tree(session, "liability", LIABILITY_CATEGORY_TREE)
 
 
 def _should_replace_legacy_categories(session: Session, categories: list[Category]) -> bool:
@@ -175,36 +181,54 @@ def _should_replace_legacy_categories(session: Session, categories: list[Categor
     return holding_exists is None
 
 
+def _ensure_curated_category_tree(session: Session, category_type: str, tree: list[dict]) -> None:
+    existing_root_names = set(
+        session.scalars(
+            select(Category.name).where(Category.type == category_type, Category.level == 1)
+        )
+    )
+
+    for root_index, root_node in enumerate(tree, start=1):
+        if root_node["name"] in existing_root_names:
+            continue
+        _seed_category_subtree(session, category_type, root_node, root_index)
+
+
 def _seed_category_tree(session: Session, category_type: str, tree: list[dict]) -> None:
     for l1_index, l1_node in enumerate(tree, start=1):
-        l1 = Category(
+        _seed_category_subtree(session, category_type, l1_node, l1_index)
+
+
+
+def _seed_category_subtree(session: Session, category_type: str, l1_node: dict, l1_sort_order: int) -> None:
+    l1 = Category(
+        type=category_type,
+        level=1,
+        parent_id=None,
+        name=l1_node["name"],
+        sort_order=l1_sort_order,
+    )
+    session.add(l1)
+    session.flush()
+
+    for l2_index, l2_node in enumerate(l1_node["children"], start=1):
+        l2 = Category(
             type=category_type,
-            level=1,
-            parent_id=None,
-            name=l1_node["name"],
-            sort_order=l1_index,
+            level=2,
+            parent_id=l1.id,
+            name=l2_node["name"],
+            sort_order=l2_index,
         )
-        session.add(l1)
+        session.add(l2)
         session.flush()
 
-        for l2_index, l2_node in enumerate(l1_node["children"], start=1):
-            l2 = Category(
-                type=category_type,
-                level=2,
-                parent_id=l1.id,
-                name=l2_node["name"],
-                sort_order=l2_index,
-            )
-            session.add(l2)
-            session.flush()
-
-            for l3_index, l3_name in enumerate(l2_node["children"], start=1):
-                session.add(
-                    Category(
-                        type=category_type,
-                        level=3,
-                        parent_id=l2.id,
-                        name=l3_name,
-                        sort_order=l3_index,
-                    )
+        for l3_index, l3_name in enumerate(l2_node["children"], start=1):
+            session.add(
+                Category(
+                    type=category_type,
+                    level=3,
+                    parent_id=l2.id,
+                    name=l3_name,
+                    sort_order=l3_index,
                 )
+            )

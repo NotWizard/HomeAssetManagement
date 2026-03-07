@@ -8,11 +8,13 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Dialog } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
+import { SearchableSelect, type SearchableSelectOption } from '../components/ui/searchable-select';
 import { Select } from '../components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { fetchMembers } from '../services/members';
-import { createHolding, deleteHolding, fetchHoldings, updateHolding, type HoldingPayload } from '../services/holdings';
+import { Tooltip } from '../components/ui/tooltip';
 import { fetchCategories } from '../services/categories';
+import { createHolding, deleteHolding, fetchHoldings, updateHolding, type HoldingPayload } from '../services/holdings';
+import { fetchMembers } from '../services/members';
 import type { CategoryNode, Holding } from '../types';
 import { formatCurrency } from '../utils/format';
 
@@ -39,10 +41,27 @@ const INITIAL_FORM: EntryFormState = {
   type: 'asset',
   name: '',
   pathKey: '',
-  currency: 'CNY',
+  currency: '',
   amountOriginal: '',
   targetRatio: '',
 };
+
+const AMOUNT_PATTERN = /^\d*(?:\.\d{0,2})?$/;
+
+const LEGACY_CATEGORY_PATH_LABEL = '默认一级 / 默认二级 / 默认三级';
+
+const COMMON_CURRENCY_OPTIONS: SearchableSelectOption[] = [
+  { value: 'CNY', label: 'CNY（人民币）', searchText: '人民币 china chinese yuan renminbi' },
+  { value: 'USD', label: 'USD（美元）', searchText: '美元 us dollar america' },
+  { value: 'EUR', label: 'EUR（欧元）', searchText: '欧元 euro' },
+  { value: 'HKD', label: 'HKD（港币）', searchText: '港币 hong kong dollar' },
+  { value: 'JPY', label: 'JPY（日元）', searchText: '日元 yen japan' },
+  { value: 'GBP', label: 'GBP（英镑）', searchText: '英镑 pound uk' },
+  { value: 'AUD', label: 'AUD（澳元）', searchText: '澳元 australia dollar' },
+  { value: 'CAD', label: 'CAD（加拿大元）', searchText: '加拿大元 canada dollar' },
+  { value: 'CHF', label: 'CHF（瑞士法郎）', searchText: '瑞士法郎 swiss franc' },
+  { value: 'SGD', label: 'SGD（新加坡元）', searchText: '新加坡元 singapore dollar' },
+];
 
 function buildPathOptions(tree: CategoryNode[]): PathOption[] {
   const result: PathOption[] = [];
@@ -60,6 +79,21 @@ function buildPathOptions(tree: CategoryNode[]): PathOption[] {
     }
   }
   return result;
+}
+
+function normalizeAmountInput(value: string): string | null {
+  if (value === '') {
+    return '';
+  }
+  const normalized = value === '.' ? '0.' : value.startsWith('.') ? `0${value}` : value;
+  if (!AMOUNT_PATTERN.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function hasValidTwoDecimalAmount(value: string): boolean {
+  return /^\d+(?:\.\d{1,2})?$/.test(value) && Number(value) > 0;
 }
 
 export function EntryPage() {
@@ -109,12 +143,43 @@ export function EntryPage() {
     },
   });
 
-  const pathOptions = useMemo(() => {
+  const allPathOptions = useMemo(() => {
     if (form.type === 'asset') {
       return buildPathOptions(assetCategoryQuery.data ?? []);
     }
     return buildPathOptions(liabilityCategoryQuery.data ?? []);
   }, [form.type, assetCategoryQuery.data, liabilityCategoryQuery.data]);
+
+  const pathOptions = useMemo(() => {
+    const filtered = allPathOptions.filter((option) => option.label !== LEGACY_CATEGORY_PATH_LABEL);
+    if (editing == null) {
+      return filtered;
+    }
+
+    const selected = allPathOptions.find((option) => option.key === form.pathKey);
+    if (!selected || selected.label !== LEGACY_CATEGORY_PATH_LABEL) {
+      return filtered;
+    }
+    return [selected, ...filtered];
+  }, [allPathOptions, editing, form.pathKey]);
+
+  const pathSelectOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      pathOptions.map((option) => ({
+        value: option.key,
+        label: option.label,
+        searchText: option.label.replace(/\//g, ' '),
+      })),
+    [pathOptions]
+  );
+
+  const currencyOptions = useMemo(() => {
+    const current = form.currency.trim().toUpperCase();
+    if (!current || COMMON_CURRENCY_OPTIONS.some((option) => String(option.value) === current)) {
+      return COMMON_CURRENCY_OPTIONS;
+    }
+    return [{ value: current, label: `${current}（当前币种）`, searchText: current }, ...COMMON_CURRENCY_OPTIONS];
+  }, [form.currency]);
 
   const memberNameMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -124,13 +189,17 @@ export function EntryPage() {
   const hasMembers = (membersQuery.data ?? []).length > 0;
 
   const openCreateDialog = () => {
+    void assetCategoryQuery.refetch();
+    void liabilityCategoryQuery.refetch();
     setEditing(null);
-    setForm({ ...INITIAL_FORM, memberId: String((membersQuery.data ?? [])[0]?.id ?? '') });
+    setForm({ ...INITIAL_FORM, memberId: String((membersQuery.data ?? [])[0]?.id ?? ''), pathKey: '' });
     setError(null);
     setOpen(true);
   };
 
   const openEditDialog = (row: Holding) => {
+    void assetCategoryQuery.refetch();
+    void liabilityCategoryQuery.refetch();
     setEditing(row);
     setError(null);
     setForm({
@@ -161,11 +230,15 @@ export function EntryPage() {
       return;
     }
     if (!form.currency.trim()) {
-      setError('请输入币种');
+      setError('请选择币种');
       return;
     }
-    if (!form.amountOriginal || Number(form.amountOriginal) <= 0) {
-      setError('金额必须大于 0');
+    if (!form.amountOriginal) {
+      setError('请输入金额');
+      return;
+    }
+    if (!hasValidTwoDecimalAmount(form.amountOriginal)) {
+      setError('金额必须大于 0，且最多支持两位小数');
       return;
     }
     if (form.type === 'asset' && (!form.targetRatio || Number(form.targetRatio) < 0 || Number(form.targetRatio) > 100)) {
@@ -205,7 +278,7 @@ export function EntryPage() {
           <h2 className="text-xl font-semibold">资产与负债录入</h2>
           <p className="text-sm text-muted-foreground">固定三级分类与多币种金额录入，成员由“成员管理”菜单统一维护</p>
         </div>
-        <Button onClick={openCreateDialog}>
+        <Button onClick={openCreateDialog} disabled={!hasMembers}>
           <Plus className="mr-2 h-4 w-4" />
           新增条目
         </Button>
@@ -214,19 +287,17 @@ export function EntryPage() {
       {!hasMembers ? (
         <Card className="border-amber-200 bg-amber-50/60">
           <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm text-amber-900">
-              当前还没有可用成员，新增资产负债前请先创建成员。
-            </div>
+            <div className="text-sm text-amber-900">当前还没有可用成员，新增资产负债前请先创建成员。</div>
             <Button variant="secondary" onClick={() => navigate('/members')}>
               <UsersRound className="mr-2 h-4 w-4" />
-              去成员管理
+              去新增成员
             </Button>
           </CardContent>
         </Card>
       ) : null}
 
       <Card>
-        <CardHeader className="pb-1">
+        <CardHeader className="pb-2">
           <CardTitle className="text-sm">录入列表</CardTitle>
         </CardHeader>
         <CardContent>
@@ -249,9 +320,7 @@ export function EntryPage() {
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell>
-                      <Badge variant={row.type === 'asset' ? 'default' : 'secondary'}>
-                        {row.type === 'asset' ? '资产' : '负债'}
-                      </Badge>
+                      <Badge variant={row.type === 'asset' ? 'default' : 'secondary'}>{row.type === 'asset' ? '资产' : '负债'}</Badge>
                     </TableCell>
                     <TableCell>{memberNameMap.get(row.member_id) ?? row.member_id}</TableCell>
                     <TableCell>{row.currency}</TableCell>
@@ -314,7 +383,12 @@ export function EntryPage() {
               value={form.type}
               onChange={(event) => {
                 const nextType = event.target.value as 'asset' | 'liability';
-                setForm((prev) => ({ ...prev, type: nextType, pathKey: '', targetRatio: nextType === 'asset' ? prev.targetRatio : '' }));
+                setForm((prev) => ({
+                  ...prev,
+                  type: nextType,
+                  pathKey: '',
+                  targetRatio: nextType === 'asset' ? prev.targetRatio : '',
+                }));
               }}
               options={[
                 { label: '资产', value: 'asset' },
@@ -327,29 +401,60 @@ export function EntryPage() {
             <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm text-muted-foreground">三级分类路径</label>
-            <Select
+            <div className="mb-1 flex items-center gap-1.5">
+              <label className="block text-sm text-muted-foreground">三级分类路径</label>
+              <Tooltip
+                content="请选择完整的一级 / 二级 / 三级分类路径；支持输入关键词搜索，例如“权益”“住房”“信用卡”。"
+                label="三级分类路径说明"
+              />
+            </div>
+            <SearchableSelect
               value={form.pathKey}
-              onChange={(event) => setForm((prev) => ({ ...prev, pathKey: event.target.value }))}
-              options={[{ label: '请选择分类路径', value: '' }, ...pathOptions.map((option) => ({ label: option.label, value: option.key }))]}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, pathKey: value }))}
+              options={pathSelectOptions}
+              placeholder="搜索一级 / 二级 / 三级分类"
+              emptyMessage="没有匹配的分类路径"
             />
           </div>
           <div>
             <label className="mb-1 block text-sm text-muted-foreground">币种</label>
-            <Input value={form.currency} onChange={(event) => setForm((prev) => ({ ...prev, currency: event.target.value }))} />
+            <SearchableSelect
+              value={form.currency}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, currency: value }))}
+              options={currencyOptions}
+              placeholder="搜索币种代码或中文名"
+              emptyMessage="没有匹配的币种"
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-muted-foreground">金额</label>
+            <div className="mb-1 flex items-center gap-1.5">
+              <label className="block text-sm text-muted-foreground">金额</label>
+              <Tooltip content="金额仅支持输入两位小数，例如 100.00" label="金额输入说明" />
+            </div>
             <Input
-              type="number"
+              type="text"
+              inputMode="decimal"
               min="0"
+              step="0.01"
+              placeholder="0.00"
               value={form.amountOriginal}
-              onChange={(event) => setForm((prev) => ({ ...prev, amountOriginal: event.target.value }))}
+              onChange={(event) => {
+                const nextValue = normalizeAmountInput(event.target.value);
+                if (nextValue !== null) {
+                  setForm((prev) => ({ ...prev, amountOriginal: nextValue }));
+                }
+              }}
             />
           </div>
           {form.type === 'asset' ? (
             <div>
-              <label className="mb-1 block text-sm text-muted-foreground">期望占比(%)</label>
+              <div className="mb-1 flex items-center gap-1.5">
+                <label className="block text-sm text-muted-foreground">期望占比(%)</label>
+                <Tooltip
+                  content="仅对资产生效，表示该资产希望占家庭净资产的目标比例；请输入 0 到 100 之间的百分比。"
+                  label="期望占比说明"
+                />
+              </div>
               <Input
                 type="number"
                 min="0"

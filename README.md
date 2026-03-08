@@ -48,6 +48,13 @@ python -m pytest backend/tests -q
 npm --prefix frontend run build
 ```
 
+## 仓库约定
+
+- 默认工作分支为 `main`。
+- 本地配置通过仓库根目录 `.env` 读取，并使用 `HAM_` 前缀覆盖默认值；`.env` 与 `.env.*` 仅用于本地环境，不应提交到版本库。
+- Git commit 说明需要结构化且清晰：标题简洁，必要时补充正文，说明背景、关键改动和验证结果。
+- 不要提交本地或构建产物，例如 `.venv`、`node_modules`、SQLite 数据库、导入错误 CSV，以及 `frontend/tsconfig.tsbuildinfo`。
+
 
 ## 迁移包
 

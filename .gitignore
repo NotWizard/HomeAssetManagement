@@ -5,6 +5,10 @@ __pycache__/
 *.pyo
 .pytest_cache/
 
+# Local env
+.env
+.env.*
+
 # Local data
 backend/data/*.db
 backend/data/*.db-shm
@@ -15,6 +19,7 @@ backend/logs/
 # Node
 frontend/node_modules/
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store

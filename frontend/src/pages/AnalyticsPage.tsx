@@ -1,10 +1,11 @@
 import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Coins, Sparkles } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Coins, Sparkles } from 'lucide-react';
 
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -25,14 +26,6 @@ const VIEW_OPTIONS: Array<{ value: AnalyticsView; label: string; description: st
   { value: 'risk', label: '风险与配置', description: '关注波动、相关性以及当前配置是否偏离目标。' },
   { value: 'currency', label: '币种总览', description: '按币种查看资产、负债、净资产和各项条目的占比。' },
 ];
-
-const WINDOW_OPTIONS = [
-  { label: '30 天', value: 30 },
-  { label: '90 天', value: 90 },
-  { label: '180 天', value: 180 },
-  { label: '365 天', value: 365 },
-];
-
 
 const TrendChart = lazy(() => import('../components/charts/TrendChart').then((module) => ({ default: module.TrendChart })));
 const VolatilityChart = lazy(() => import('../components/charts/VolatilityChart').then((module) => ({ default: module.VolatilityChart })));
@@ -60,27 +53,54 @@ const CURRENCY_LABELS: Record<string, string> = {
   SGD: 'SGD（新加坡元）',
 };
 
+function formatDateRangeLabel(startDate: string, endDate: string): string {
+  if (!startDate || !endDate) {
+    return '请选择日期区间';
+  }
+  return `${startDate} 至 ${endDate}`;
+}
+
 export function AnalyticsPage() {
-  const window = useUIStore((state) => state.analyticsWindow);
+  const analyticsDateRange = useUIStore((state) => state.analyticsDateRange);
   const analyticsView = useUIStore((state) => state.analyticsView);
   const selectedCurrency = useUIStore((state) => state.selectedAnalyticsCurrency);
-  const setWindow = useUIStore((state) => state.setAnalyticsWindow);
+  const setAnalyticsDateRange = useUIStore((state) => state.setAnalyticsDateRange);
   const setAnalyticsView = useUIStore((state) => state.setAnalyticsView);
   const setSelectedAnalyticsCurrency = useUIStore((state) => state.setSelectedAnalyticsCurrency);
 
+  const handleStartDateChange = (startDate: string) => {
+    if (!startDate) {
+      return;
+    }
+    setAnalyticsDateRange({
+      startDate,
+      endDate: startDate > analyticsDateRange.endDate ? startDate : analyticsDateRange.endDate,
+    });
+  };
+
+  const handleEndDateChange = (endDate: string) => {
+    if (!endDate) {
+      return;
+    }
+    setAnalyticsDateRange({
+      startDate: endDate < analyticsDateRange.startDate ? endDate : analyticsDateRange.startDate,
+      endDate,
+    });
+  };
+
   const trendQuery = useQuery({
-    queryKey: ['trend', window],
-    queryFn: () => fetchTrend(window),
+    queryKey: ['trend', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryFn: () => fetchTrend(analyticsDateRange),
     enabled: analyticsView === 'overview',
   });
   const volatilityQuery = useQuery({
-    queryKey: ['volatility', window],
-    queryFn: () => fetchVolatility(window),
+    queryKey: ['volatility', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryFn: () => fetchVolatility(analyticsDateRange),
     enabled: analyticsView === 'risk',
   });
   const correlationQuery = useQuery({
-    queryKey: ['correlation', window],
-    queryFn: () => fetchCorrelation(window),
+    queryKey: ['correlation', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryFn: () => fetchCorrelation(analyticsDateRange),
     enabled: analyticsView === 'risk',
   });
   const sankeyQuery = useQuery({
@@ -148,12 +168,31 @@ export function AnalyticsPage() {
             </div>
           )
         ) : (
-          <Select
-            className="w-40"
-            value={window}
-            onChange={(event) => setWindow(Number(event.target.value))}
-            options={WINDOW_OPTIONS}
-          />
+          <div className="grid gap-2 sm:grid-cols-2 lg:w-auto">
+            <label className="space-y-1 text-sm">
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                开始日期
+              </span>
+              <Input
+                type="date"
+                className="min-w-[168px]"
+                value={analyticsDateRange.startDate}
+                max={analyticsDateRange.endDate}
+                onChange={(event) => handleStartDateChange(event.target.value)}
+              />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="text-muted-foreground">结束日期</span>
+              <Input
+                type="date"
+                className="min-w-[168px]"
+                value={analyticsDateRange.endDate}
+                min={analyticsDateRange.startDate}
+                onChange={(event) => handleEndDateChange(event.target.value)}
+              />
+            </label>
+          </div>
         )}
       </div>
 
@@ -172,12 +211,15 @@ export function AnalyticsPage() {
             ))}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">{currentView.description}</p>
+          {analyticsView !== 'currency' ? (
+            <p className="mt-2 text-xs text-muted-foreground">当前区间：{formatDateRangeLabel(analyticsDateRange.startDate, analyticsDateRange.endDate)}</p>
+          ) : null}
         </CardContent>
       </Card>
 
       {analyticsView === 'overview' ? (
-        <div className="grid gap-4 xl:grid-cols-5">
-          <Card className="xl:col-span-3">
+        <div className="space-y-4">
+          <Card>
             <CardHeader className="pb-1">
               <CardTitle className="text-sm">总资产趋势</CardTitle>
               <CardDescription>从时间维度查看总资产、总负债与净资产的变化。</CardDescription>
@@ -198,7 +240,7 @@ export function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          <Card className="xl:col-span-2">
+          <Card>
             <CardHeader className="pb-1">
               <CardTitle className="text-sm">家庭资产负债桑基图</CardTitle>
               <CardDescription>查看资产与负债在家庭结构中的分布流向。</CardDescription>

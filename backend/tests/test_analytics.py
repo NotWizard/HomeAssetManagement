@@ -1,14 +1,47 @@
+import json
 from datetime import UTC
 from datetime import date
 from datetime import datetime
+
+from fastapi.testclient import TestClient
 
 from app.analytics.currency_overview import build_currency_overview
 from app.analytics.correlation import compute_correlation
 from app.analytics.series_builder import build_daily_series
 from app.analytics.volatility import compute_volatility
 from app.core.database import SessionLocal
+from app.main import app
+from app.models.snapshot_daily import SnapshotDaily
 from app.services.bootstrap import init_database
+from app.services.common import get_default_family
 from app.services.snapshot_service import SnapshotService
+
+
+def _reset_daily_snapshots() -> None:
+    init_database()
+    with SessionLocal() as session:
+        session.query(SnapshotDaily).delete()
+        session.commit()
+
+
+def _snapshot_payload(total_asset: float, total_liability: float, holding_name: str = '现金') -> dict:
+    return {
+        'totals': {
+            'total_asset': total_asset,
+            'total_liability': total_liability,
+            'net_asset': total_asset - total_liability,
+        },
+        'holdings': [
+            {
+                'id': 1,
+                'name': holding_name,
+                'type': 'asset',
+                'amount_base': total_asset,
+            }
+        ]
+        if total_asset > 0
+        else [],
+    }
 
 
 def test_compute_volatility_returns_values_for_sufficient_samples():
@@ -149,3 +182,46 @@ def test_build_daily_series_generated_at_uses_utc_z_suffix():
     assert result['generated_at'].endswith('Z')
     parsed = datetime.fromisoformat(result['generated_at'].replace('Z', '+00:00'))
     assert parsed.tzinfo is UTC
+
+
+def test_trend_api_supports_date_range_filters():
+    _reset_daily_snapshots()
+
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        session.add_all(
+            [
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 1),
+                    payload_json=json.dumps(_snapshot_payload(100.0, 0.0), ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 2),
+                    payload_json=json.dumps(_snapshot_payload(200.0, 10.0), ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 3),
+                    payload_json=json.dumps(_snapshot_payload(300.0, 20.0), ensure_ascii=False),
+                ),
+            ]
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        response = client.get(
+            '/api/v1/analytics/trend',
+            params={
+                'start_date': '2026-03-02',
+                'end_date': '2026-03-03',
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()['data']
+    assert payload['dates'] == ['2026-03-02', '2026-03-03']
+    assert payload['total_asset'] == [200.0, 300.0]
+    assert payload['total_liability'] == [10.0, 20.0]
+    assert payload['asset_series']['现金'] == [200.0, 300.0]

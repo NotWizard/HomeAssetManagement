@@ -70,7 +70,7 @@ class HoldingService:
         )
         session.add(row)
         session.flush()
-        SnapshotService.create_event_snapshot(session, trigger_type="create", note=f"holding:{row.id}")
+        _refresh_snapshots(session, trigger_type="create", note=f"holding:{row.id}")
         return row
 
     @staticmethod
@@ -106,7 +106,7 @@ class HoldingService:
         row.source = payload.get("source", row.source)
 
         session.flush()
-        SnapshotService.create_event_snapshot(session, trigger_type="update", note=f"holding:{row.id}")
+        _refresh_snapshots(session, trigger_type="update", note=f"holding:{row.id}")
         return row
 
     @staticmethod
@@ -116,7 +116,12 @@ class HoldingService:
             raise AppError(4040, "资产/负债不存在")
         row.is_deleted = True
         session.flush()
-        SnapshotService.create_event_snapshot(session, trigger_type="update", note=f"delete:{row.id}")
+        _refresh_snapshots(session, trigger_type="update", note=f"delete:{row.id}")
+
+
+def _refresh_snapshots(session: Session, trigger_type: str, note: str | None = None) -> None:
+    SnapshotService.create_event_snapshot(session, trigger_type=trigger_type, note=note)
+    SnapshotService.create_daily_snapshot(session)
 
 
 

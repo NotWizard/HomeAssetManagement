@@ -138,7 +138,7 @@ export function SettingsPage() {
         <p className="text-sm text-muted-foreground">配置基准币种、时区、再平衡阈值、汇率提供方与迁移备份能力</p>
       </div>
 
-      <Card className="max-w-3xl">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">全局设置</CardTitle>
         </CardHeader>
@@ -184,7 +184,7 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className="max-w-3xl">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">数据迁移 / 备份</CardTitle>
         </CardHeader>

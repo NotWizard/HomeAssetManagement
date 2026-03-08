@@ -1,5 +1,10 @@
 import { getJSON } from './apiClient';
 
+export type AnalyticsDateRange = {
+  startDate: string;
+  endDate: string;
+};
+
 export type TrendData = {
   dates: string[];
   total_asset: number[];
@@ -70,16 +75,29 @@ export type CurrencyOverviewData = {
   details: Record<string, CurrencyOverviewDetail>;
 };
 
-export function fetchTrend(window = 90) {
-  return getJSON<TrendData>(`/analytics/trend?window=${window}`);
+function buildAnalyticsQuery(filters: number | AnalyticsDateRange): string {
+  const params = new URLSearchParams();
+
+  if (typeof filters === 'number') {
+    params.set('window', String(filters));
+  } else {
+    params.set('start_date', filters.startDate);
+    params.set('end_date', filters.endDate);
+  }
+
+  return params.toString();
 }
 
-export function fetchVolatility(window = 90) {
-  return getJSON<VolatilityItem[]>(`/analytics/volatility?window=${window}`);
+export function fetchTrend(filters: number | AnalyticsDateRange = 90) {
+  return getJSON<TrendData>(`/analytics/trend?${buildAnalyticsQuery(filters)}`);
 }
 
-export function fetchCorrelation(window = 90) {
-  return getJSON<CorrelationData>(`/analytics/correlation?window=${window}`);
+export function fetchVolatility(filters: number | AnalyticsDateRange = 90) {
+  return getJSON<VolatilityItem[]>(`/analytics/volatility?${buildAnalyticsQuery(filters)}`);
+}
+
+export function fetchCorrelation(filters: number | AnalyticsDateRange = 90) {
+  return getJSON<CorrelationData>(`/analytics/correlation?${buildAnalyticsQuery(filters)}`);
 }
 
 export function fetchSankey() {

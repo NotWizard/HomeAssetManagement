@@ -1,6 +1,6 @@
 import { type ReactNode, Suspense, lazy, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownRight, ArrowUpRight, CalendarDays, Globe, Wallet } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Globe, Wallet } from 'lucide-react';
 
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -89,10 +89,6 @@ export function OverviewPage() {
         <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
           <Badge variant="secondary">基准币 {settingsQuery.data?.base_currency ?? '--'}</Badge>
           <Badge variant="secondary">汇率源 {settingsQuery.data?.fx_provider ?? '--'}</Badge>
-          <button className="inline-flex h-10 items-center gap-2 rounded-lg border bg-card px-3 text-sm text-muted-foreground">
-            <CalendarDays className="h-4 w-4" />
-            最近 90 天
-          </button>
         </div>
       </div>
 

@@ -1,3 +1,4 @@
+from datetime import date
 import json
 
 from fastapi import APIRouter
@@ -13,6 +14,7 @@ from app.analytics.sankey_builder import build_sankey
 from app.analytics.series_builder import build_daily_series
 from app.analytics.volatility import compute_volatility
 from app.core.database import get_db
+from app.core.exceptions import AppError
 from app.core.response import ok
 from app.models.member import Member
 from app.models.snapshot_daily import SnapshotDaily
@@ -22,20 +24,46 @@ from app.services.snapshot_service import SnapshotService
 router = APIRouter()
 
 
+def _load_series(
+    db: Session,
+    window: int,
+    start_date: date | None,
+    end_date: date | None,
+) -> dict:
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise AppError(4002, "开始日期不能晚于结束日期")
+    return build_daily_series(db, window=window, start_date=start_date, end_date=end_date)
+
+
 @router.get("/trend")
-def get_trend(window: int = Query(default=90, ge=1, le=3650), db: Session = Depends(get_db)):
-    return ok(build_daily_series(db, window=window))
+def get_trend(
+    window: int = Query(default=90, ge=1, le=3650),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    return ok(_load_series(db, window, start_date, end_date))
 
 
 @router.get("/volatility")
-def get_volatility(window: int = Query(default=90, ge=2, le=3650), db: Session = Depends(get_db)):
-    series = build_daily_series(db, window=window)
+def get_volatility(
+    window: int = Query(default=90, ge=2, le=3650),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    series = _load_series(db, window, start_date, end_date)
     return ok(compute_volatility(series["asset_series"]))
 
 
 @router.get("/correlation")
-def get_correlation(window: int = Query(default=90, ge=2, le=3650), db: Session = Depends(get_db)):
-    series = build_daily_series(db, window=window)
+def get_correlation(
+    window: int = Query(default=90, ge=2, le=3650),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    series = _load_series(db, window, start_date, end_date)
     return ok(compute_correlation(series["asset_series"]))
 
 

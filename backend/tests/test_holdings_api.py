@@ -66,6 +66,62 @@ def test_create_holding_via_api_creates_snapshot():
         assert len(snapshots) >= 1
 
 
+def test_delete_holding_updates_daily_analytics_snapshot_immediately():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Carol"})
+        assert member_resp.status_code == 200
+        member_id = member_resp.json()["data"]["id"]
+
+        category_resp = client.get("/api/v1/categories", params={"type": "asset"})
+        assert category_resp.status_code == 200
+        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金与存款", "银行存款", "活期存款"))
+
+        create_resp = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "家庭备用金",
+                "category_l1_id": asset_l1["id"],
+                "category_l2_id": asset_l2["id"],
+                "category_l3_id": asset_l3["id"],
+                "currency": "CNY",
+                "amount_original": "100",
+                "target_ratio": "10",
+            },
+        )
+        assert create_resp.status_code == 200
+        holding_id = create_resp.json()["data"]["id"]
+
+        trend_after_create = client.get("/api/v1/analytics/trend", params={"window": 30})
+        assert trend_after_create.status_code == 200
+        trend_payload = trend_after_create.json()["data"]
+        assert trend_payload["total_asset"][-1] == 100.0
+        assert trend_payload["net_asset"][-1] == 100.0
+
+        sankey_after_create = client.get("/api/v1/analytics/sankey")
+        assert sankey_after_create.status_code == 200
+        assert len(sankey_after_create.json()["data"]["nodes"]) > 0
+
+        delete_resp = client.delete(f"/api/v1/holdings/{holding_id}")
+        assert delete_resp.status_code == 200
+
+        holdings_after_delete = client.get("/api/v1/holdings")
+        assert holdings_after_delete.status_code == 200
+        assert holdings_after_delete.json()["data"] == []
+
+        trend_after_delete = client.get("/api/v1/analytics/trend", params={"window": 30})
+        assert trend_after_delete.status_code == 200
+        trend_payload = trend_after_delete.json()["data"]
+        assert trend_payload["total_asset"][-1] == 0.0
+        assert trend_payload["net_asset"][-1] == 0.0
+
+        sankey_after_delete = client.get("/api/v1/analytics/sankey")
+        assert sankey_after_delete.status_code == 200
+        assert sankey_after_delete.json()["data"] == {"nodes": [], "links": []}
+
+
 def test_currency_overview_api_returns_empty_payload_when_no_snapshot_exists():
     _reset_runtime_data()
     with TestClient(app) as client:

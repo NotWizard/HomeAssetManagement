@@ -110,15 +110,25 @@ export function EntryPage() {
   const assetCategoryQuery = useQuery({ queryKey: ['categories', 'asset'], queryFn: () => fetchCategories('asset') });
   const liabilityCategoryQuery = useQuery({ queryKey: ['categories', 'liability'], queryFn: () => fetchCategories('liability') });
 
+  const refreshHoldingRelatedQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['holdings'] }),
+      queryClient.invalidateQueries({ queryKey: ['trend'] }),
+      queryClient.invalidateQueries({ queryKey: ['rebalance'] }),
+      queryClient.invalidateQueries({ queryKey: ['sankey'] }),
+      queryClient.invalidateQueries({ queryKey: ['volatility'] }),
+      queryClient.invalidateQueries({ queryKey: ['correlation'] }),
+      queryClient.invalidateQueries({ queryKey: ['currency-overview'] }),
+    ]);
+  };
+
   const createHoldingMutation = useMutation({
     mutationFn: createHolding,
     onSuccess: async () => {
       setOpen(false);
       setForm(INITIAL_FORM);
       setEditing(null);
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] });
-      await queryClient.invalidateQueries({ queryKey: ['trend'] });
-      await queryClient.invalidateQueries({ queryKey: ['rebalance'] });
+      await refreshHoldingRelatedQueries();
     },
   });
 
@@ -128,18 +138,14 @@ export function EntryPage() {
       setOpen(false);
       setForm(INITIAL_FORM);
       setEditing(null);
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] });
-      await queryClient.invalidateQueries({ queryKey: ['trend'] });
-      await queryClient.invalidateQueries({ queryKey: ['rebalance'] });
+      await refreshHoldingRelatedQueries();
     },
   });
 
   const deleteHoldingMutation = useMutation({
     mutationFn: deleteHolding,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] });
-      await queryClient.invalidateQueries({ queryKey: ['trend'] });
-      await queryClient.invalidateQueries({ queryKey: ['rebalance'] });
+      await refreshHoldingRelatedQueries();
     },
   });
 

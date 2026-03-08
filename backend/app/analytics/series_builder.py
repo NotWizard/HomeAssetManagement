@@ -1,5 +1,6 @@
 import json
 from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,12 +8,22 @@ from app.core.clock import format_utc_iso_z
 from app.models.snapshot_daily import SnapshotDaily
 
 
-def build_daily_series(session: Session, window: int = 90) -> dict:
-    rows = list(
-        session.scalars(
-            select(SnapshotDaily).order_by(SnapshotDaily.snapshot_date.desc()).limit(max(1, window))
-        )
-    )
+def build_daily_series(
+    session: Session,
+    window: int = 90,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> dict:
+    stmt = select(SnapshotDaily)
+    if start_date is not None:
+        stmt = stmt.where(SnapshotDaily.snapshot_date >= start_date)
+    if end_date is not None:
+        stmt = stmt.where(SnapshotDaily.snapshot_date <= end_date)
+    stmt = stmt.order_by(SnapshotDaily.snapshot_date.desc())
+    if start_date is None and end_date is None:
+        stmt = stmt.limit(max(1, window))
+
+    rows = list(session.scalars(stmt))
     rows.reverse()
 
     dates: list[str] = []

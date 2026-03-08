@@ -39,7 +39,7 @@ function getNodeColor(node: SankeyNode): string {
 function getNodeBorderColor(node: SankeyNode): string {
   if (node.node_type === 'member') return '#cbd5e1';
   if (node.holding_type === 'liability') {
-    return node.node_type === 'category' ? '#fda4af' : '#fda4af';
+    return '#fda4af';
   }
   return node.node_type === 'category' ? '#7dd3fc' : '#5eead4';
 }
@@ -80,14 +80,9 @@ function getDisplayName(node?: SankeyNode): string {
     return node.member_id ? `成员 ${node.member_id}` : '未命名成员';
   }
 
-  if (node.node_type === 'category') {
-    const categoryName = String(node.category_path ?? '').split(' / ')[0]?.trim();
-    if (categoryName) {
-      return categoryName;
-    }
-  }
-
-  return rawName || '未命名';
+  const parts = String(node.category_path ?? '').split(' / ').filter(Boolean);
+  const categoryName = parts.length > 0 ? parts[parts.length - 1]?.trim() : '';
+  return categoryName || rawName || '未命名';
 }
 
 function pickVisibleHoldingIds(nodes: SankeyNode[]): Set<string> {
@@ -109,6 +104,27 @@ function pickVisibleHoldingIds(nodes: SankeyNode[]): Set<string> {
   });
 
   return visibleIds;
+}
+
+function formatValue(value: unknown): string {
+  const numeric = Number(value ?? 0);
+  return Number.isFinite(numeric) ? numeric.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) : '0';
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return '0%';
+  }
+  const digits = value >= 10 ? 0 : 1;
+  return `${value.toFixed(digits)}%`;
+}
+
+function getDefaultLabel(node: SankeyNode): string {
+  const name = getDisplayName(node);
+  if (node.node_type === 'category' && (node.share_pct ?? 0) >= 20) {
+    return `${name}\n${formatPercent(node.share_pct)}`;
+  }
+  return name;
 }
 
 export function SankeyChart({ data }: Props) {
@@ -134,11 +150,6 @@ export function SankeyChart({ data }: Props) {
     const memberNodeIds = new Set(data.nodes.filter((node) => node.node_type === 'member').map((node) => node.id));
     const visibleHoldingIds = pickVisibleHoldingIds(data.nodes);
 
-    const formatValue = (value: unknown) => {
-      const numeric = Number(value ?? 0);
-      return Number.isFinite(numeric) ? numeric.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) : '0';
-    };
-
     const getNodeByParams = (params: LabelParams | TooltipParams) => {
       const nodeId = params.data?.id ?? params.name ?? '';
       return nodeMap.get(nodeId);
@@ -146,8 +157,9 @@ export function SankeyChart({ data }: Props) {
 
     const echartsNodes = data.nodes.map((node) => {
       const isMember = node.node_type === 'member';
+      const isCategory = node.node_type === 'category';
       const isHolding = node.node_type === 'holding';
-      const showLabel = isMember || visibleHoldingIds.has(node.id);
+      const showLabel = isMember || isCategory || visibleHoldingIds.has(node.id);
 
       return {
         ...node,
@@ -163,20 +175,22 @@ export function SankeyChart({ data }: Props) {
           show: showLabel,
           position: getLabelPosition(node),
           color: isMember ? '#f8fafc' : node.holding_type === 'liability' ? '#881337' : '#0f4c81',
-          fontWeight: isMember ? 700 : 500,
+          fontWeight: isMember ? 700 : isCategory ? 600 : 500,
           fontSize: isMember ? 12 : 10,
           lineHeight: isMember ? 15 : 13,
           distance: isMember ? 0 : 8,
-          width: isMember ? 80 : 104,
+          width: isMember ? 80 : isCategory ? 118 : 96,
           overflow: 'truncate',
           ellipsis: '…',
+          formatter: () => getDefaultLabel(node),
         },
         emphasis: {
           label: {
-            show: isHolding || node.node_type === 'category',
+            show: isHolding || isCategory,
             width: 144,
             overflow: 'truncate',
             ellipsis: '…',
+            formatter: () => getDisplayName(node),
           },
         },
       };
@@ -189,10 +203,14 @@ export function SankeyChart({ data }: Props) {
           if (params.dataType === 'edge') {
             const sourceNode = nodeMap.get(params.data?.source ?? '');
             const targetNode = nodeMap.get(params.data?.target ?? '');
-            return [
+            const lines = [
               `${getDisplayName(sourceNode)} → ${getDisplayName(targetNode)}`,
               `金额：${formatValue(params.data?.value)}`,
-            ].join('<br/>');
+            ];
+            if (targetNode?.holding_type && targetNode.share_pct != null) {
+              lines.push(`占比：${formatPercent(targetNode.share_pct)}`);
+            }
+            return lines.join('<br/>');
           }
 
           const node = getNodeByParams(params);
@@ -209,6 +227,9 @@ export function SankeyChart({ data }: Props) {
           }
           if (node.category_path) {
             lines.push(`分类：${node.category_path}`);
+          }
+          if (node.holding_type && node.share_pct != null) {
+            lines.push(`占比：${formatPercent(node.share_pct)}`);
           }
           return lines.join('<br/>');
         },
@@ -233,10 +254,7 @@ export function SankeyChart({ data }: Props) {
           },
           nodeGap: layout.nodeGap,
           nodeWidth: layout.nodeWidth,
-          label: {
-            show: true,
-            formatter: (params: LabelParams) => getDisplayName(getNodeByParams(params)),
-          },
+          label: { show: false },
         },
       ],
     };

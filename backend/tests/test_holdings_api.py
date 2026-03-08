@@ -317,3 +317,44 @@ def test_bulk_delete_holdings_by_member_only_removes_target_member_rows():
         trend_payload = trend_after_delete.json()["data"]
         assert trend_payload["total_asset"][-1] == 80.0
         assert trend_payload["net_asset"][-1] == 80.0
+
+
+
+def test_delete_member_succeeds_after_bulk_deleting_all_member_holdings():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Erin"})
+        assert member_resp.status_code == 200
+        member_id = member_resp.json()["data"]["id"]
+
+        asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
+        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金与存款", "银行存款", "活期存款"))
+
+        create_resp = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "Erin 工资卡",
+                "category_l1_id": asset_l1["id"],
+                "category_l2_id": asset_l2["id"],
+                "category_l3_id": asset_l3["id"],
+                "currency": "CNY",
+                "amount_original": "100",
+                "target_ratio": "10",
+            },
+        )
+        assert create_resp.status_code == 200
+
+        bulk_delete_resp = client.post(
+            "/api/v1/holdings/bulk-delete",
+            json={"mode": "member", "member_id": member_id},
+        )
+        assert bulk_delete_resp.status_code == 200
+
+        delete_member_resp = client.delete(f"/api/v1/members/{member_id}")
+        assert delete_member_resp.status_code == 200
+
+        members_after_delete = client.get("/api/v1/members")
+        assert members_after_delete.status_code == 200
+        assert members_after_delete.json()["data"] == []

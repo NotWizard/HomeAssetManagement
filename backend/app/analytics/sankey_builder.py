@@ -1,6 +1,7 @@
 def build_sankey(holdings: list[dict], member_names: dict[int, str]) -> dict:
     nodes: dict[str, dict] = {}
     links: dict[tuple[str, str], float] = {}
+    member_side_totals: dict[tuple[int, str], float] = {}
 
     def ensure_node(
         key: str,
@@ -25,6 +26,7 @@ def build_sankey(holdings: list[dict], member_names: dict[int, str]) -> dict:
                 "member_id": member_id,
                 "member_name": member_name,
                 "category_path": category_path,
+                "share_pct": None,
             }
         nodes[key]["amount"] += amount
         if member_name is not None:
@@ -45,13 +47,17 @@ def build_sankey(holdings: list[dict], member_names: dict[int, str]) -> dict:
 
         member_id = int(item.get("member_id", 0) or 0)
         member_label = member_names.get(member_id, f"成员 {member_id}")
-        holding_id = int(item.get("id", 0) or 0)
         holding_type = str(item.get("type", "")).strip()
-        item_name = str(item.get("name") or f"条目 {holding_id}")
+        if holding_type not in {"asset", "liability"}:
+            continue
+
         l1 = str(item.get("category_l1", "未分类"))
         l2 = str(item.get("category_l2", "未分类"))
         l3 = str(item.get("category_l3", "未分类"))
-        category_path = f"{l1} / {l2} / {l3}"
+        l2_path = f"{l1} / {l2}"
+        l3_path = f"{l1} / {l2} / {l3}"
+
+        member_side_totals[(member_id, holding_type)] = member_side_totals.get((member_id, holding_type), 0.0) + value
 
         member_key = f"member:{member_id}"
         ensure_node(
@@ -65,59 +71,66 @@ def build_sankey(holdings: list[dict], member_names: dict[int, str]) -> dict:
         )
 
         if holding_type == "liability":
-            category_key = f"liability:l1:{l1}"
-            item_key = f"liability:item:{holding_id}"
+            category_key = f"liability:l2:{member_id}:{l1}/{l2}"
+            item_key = f"liability:l3:{member_id}:{l1}/{l2}/{l3}"
             ensure_node(
                 category_key,
-                label=l1,
+                label=l2,
                 depth=1,
                 node_type="category",
                 holding_type="liability",
                 amount=value,
-                category_path=l1,
+                member_id=member_id,
+                member_name=member_label,
+                category_path=l2_path,
             )
             ensure_node(
                 item_key,
-                label=item_name,
+                label=l3,
                 depth=0,
                 node_type="holding",
                 holding_type="liability",
                 amount=value,
                 member_id=member_id,
                 member_name=member_label,
-                category_path=category_path,
+                category_path=l3_path,
             )
             add_link(member_key, category_key, value)
             add_link(category_key, item_key, value)
             continue
 
-        if holding_type != "asset":
-            continue
-
-        category_key = f"asset:l1:{l1}"
-        item_key = f"asset:item:{holding_id}"
+        category_key = f"asset:l2:{member_id}:{l1}/{l2}"
+        item_key = f"asset:l3:{member_id}:{l1}/{l2}/{l3}"
         ensure_node(
             category_key,
-            label=l1,
+            label=l2,
             depth=3,
             node_type="category",
             holding_type="asset",
             amount=value,
-            category_path=l1,
+            member_id=member_id,
+            member_name=member_label,
+            category_path=l2_path,
         )
         ensure_node(
             item_key,
-            label=item_name,
+            label=l3,
             depth=4,
             node_type="holding",
             holding_type="asset",
             amount=value,
             member_id=member_id,
             member_name=member_label,
-            category_path=category_path,
+            category_path=l3_path,
         )
         add_link(member_key, category_key, value)
         add_link(category_key, item_key, value)
+
+    for node in nodes.values():
+        if node["node_type"] == "member" or node["holding_type"] is None or node["member_id"] is None:
+            continue
+        total = member_side_totals.get((node["member_id"], node["holding_type"]), 0.0)
+        node["share_pct"] = round(node["amount"] / total * 100, 2) if total > 0 else 0.0
 
     return {
         "nodes": list(nodes.values()),

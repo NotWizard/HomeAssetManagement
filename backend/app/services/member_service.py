@@ -1,3 +1,4 @@
+from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -50,5 +51,11 @@ class MemberService:
         if holding is not None:
             raise AppError(4002, "成员存在关联资产或负债，无法删除")
 
+        session.execute(
+            delete(HoldingItem).where(
+                HoldingItem.member_id == member_id,
+                HoldingItem.is_deleted.is_(True),
+            )
+        )
         session.delete(member)
         session.flush()

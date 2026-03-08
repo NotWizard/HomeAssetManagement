@@ -173,7 +173,7 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
     holdings = [
         {
             'id': 1,
-            'name': '活期存款',
+            'name': '招商银行工资卡',
             'type': 'asset',
             'member_id': 7,
             'amount_base': 120.0,
@@ -191,6 +191,16 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
             'category_l2': '信用卡',
             'category_l3': '已出账单',
         },
+        {
+            'id': 3,
+            'name': '公积金账户',
+            'type': 'asset',
+            'member_id': 7,
+            'amount_base': 30.0,
+            'category_l1': '现金与存款',
+            'category_l2': '银行存款',
+            'category_l3': '定期存款',
+        },
     ]
 
     result = build_sankey(holdings, {7: 'Alice'})
@@ -198,23 +208,30 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
     node_map = {node['id']: node for node in result['nodes']}
     link_map = {(link['source'], link['target']): link['value'] for link in result['links']}
 
-    assert node_map['liability:item:2']['depth'] == 0
-    assert node_map['liability:item:2']['name'] == '信用卡已出账单'
-    assert node_map['liability:item:2']['category_path'] == '消费负债 / 信用卡 / 已出账单'
-    assert node_map['liability:l1:消费负债']['depth'] == 1
-    assert node_map['liability:l1:消费负债']['name'] == '消费负债'
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['depth'] == 0
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['name'] == '已出账单'
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['category_path'] == '消费负债 / 信用卡 / 已出账单'
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['share_pct'] == 100.0
+    assert node_map['liability:l2:7:消费负债/信用卡']['depth'] == 1
+    assert node_map['liability:l2:7:消费负债/信用卡']['name'] == '信用卡'
+    assert node_map['liability:l2:7:消费负债/信用卡']['share_pct'] == 100.0
     assert node_map['member:7']['depth'] == 2
     assert node_map['member:7']['name'] == 'Alice'
-    assert node_map['asset:l1:现金与存款']['depth'] == 3
-    assert node_map['asset:l1:现金与存款']['name'] == '现金与存款'
-    assert node_map['asset:item:1']['depth'] == 4
-    assert node_map['asset:item:1']['name'] == '活期存款'
-    assert node_map['asset:item:1']['category_path'] == '现金与存款 / 银行存款 / 活期存款'
+    assert node_map['asset:l2:7:现金与存款/银行存款']['depth'] == 3
+    assert node_map['asset:l2:7:现金与存款/银行存款']['name'] == '银行存款'
+    assert node_map['asset:l2:7:现金与存款/银行存款']['share_pct'] == 100.0
+    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['depth'] == 4
+    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['name'] == '活期存款'
+    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['category_path'] == '现金与存款 / 银行存款 / 活期存款'
+    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['share_pct'] == 80.0
+    assert node_map['asset:l3:7:现金与存款/银行存款/定期存款']['name'] == '定期存款'
+    assert node_map['asset:l3:7:现金与存款/银行存款/定期存款']['share_pct'] == 20.0
 
-    assert link_map[('member:7', 'liability:l1:消费负债')] == 35.0
-    assert link_map[('liability:l1:消费负债', 'liability:item:2')] == 35.0
-    assert link_map[('member:7', 'asset:l1:现金与存款')] == 120.0
-    assert link_map[('asset:l1:现金与存款', 'asset:item:1')] == 120.0
+    assert link_map[('member:7', 'liability:l2:7:消费负债/信用卡')] == 35.0
+    assert link_map[('liability:l2:7:消费负债/信用卡', 'liability:l3:7:消费负债/信用卡/已出账单')] == 35.0
+    assert link_map[('member:7', 'asset:l2:7:现金与存款/银行存款')] == 150.0
+    assert link_map[('asset:l2:7:现金与存款/银行存款', 'asset:l3:7:现金与存款/银行存款/活期存款')] == 120.0
+    assert link_map[('asset:l2:7:现金与存款/银行存款', 'asset:l3:7:现金与存款/银行存款/定期存款')] == 30.0
 
 
 

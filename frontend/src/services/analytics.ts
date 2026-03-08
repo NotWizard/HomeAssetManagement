@@ -37,6 +37,7 @@ export type SankeyData = {
     member_id?: number;
     member_name?: string;
     category_path?: string;
+    share_pct?: number | null;
   }>;
   links: Array<{ source: string; target: string; value: number }>;
 };

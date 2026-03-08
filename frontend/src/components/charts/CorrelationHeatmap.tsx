@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import { ECharts } from './ECharts';
 import type { CorrelationData } from '../../services/analytics';
 
 type Props = {
@@ -55,5 +55,5 @@ export function CorrelationHeatmap({ data }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 420 }} />;
+  return <ECharts option={option} style={{ height: 420 }} />;
 }

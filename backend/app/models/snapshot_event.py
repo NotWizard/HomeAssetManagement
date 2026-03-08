@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
 from app.core.database import Base
+from app.core.clock import utc_now_naive
 
 
 class SnapshotEvent(Base):
@@ -15,5 +16,5 @@ class SnapshotEvent(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     family_id: Mapped[int] = mapped_column(ForeignKey("family.id"), nullable=False, index=True)
     trigger_type: Mapped[str] = mapped_column(nullable=False)
-    snapshot_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive, index=True)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)

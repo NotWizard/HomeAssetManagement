@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
 from app.core.database import Base
+from app.core.clock import utc_now_naive
 
 
 class ImportLog(Base):
@@ -20,4 +21,4 @@ class ImportLog(Base):
     inserted_rows: Mapped[int] = mapped_column(default=0)
     failed_rows: Mapped[int] = mapped_column(default=0)
     error_report_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive, index=True)

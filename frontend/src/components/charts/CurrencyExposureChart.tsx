@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import { ECharts } from './ECharts';
 
 import type { CurrencySummary } from '../../services/analytics';
 import { formatCurrency } from '../../utils/format';
@@ -69,5 +69,5 @@ export function CurrencyExposureChart({ data, baseCurrency = 'CNY' }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 360 }} />;
+  return <ECharts option={option} style={{ height: 360 }} />;
 }

@@ -1,5 +1,4 @@
 from datetime import date
-from datetime import datetime
 from decimal import Decimal
 
 import httpx
@@ -12,6 +11,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.timezone import business_today
 from app.models.fx_rate_daily import FxRateDaily
+from app.core.clock import utc_now_naive
 from app.services.settings_service import SettingsService
 
 logger = get_logger(__name__)
@@ -67,14 +67,14 @@ class FXService:
                     rate=rate,
                     provider=provider_name,
                     is_estimated=False,
-                    fetched_at=datetime.utcnow(),
+                    fetched_at=utc_now_naive(),
                 )
                 session.add(existing)
             else:
                 existing.rate = rate
                 existing.provider = provider_name
                 existing.is_estimated = False
-                existing.fetched_at = datetime.utcnow()
+                existing.fetched_at = utc_now_naive()
             upserts += 1
 
         # ensure base currency itself exists
@@ -96,7 +96,7 @@ class FXService:
                     rate=Decimal("1"),
                     provider=provider_name,
                     is_estimated=False,
-                    fetched_at=datetime.utcnow(),
+                    fetched_at=utc_now_naive(),
                 )
             )
             upserts += 1

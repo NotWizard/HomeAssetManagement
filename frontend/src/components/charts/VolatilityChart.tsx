@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import { ECharts } from './ECharts';
 import type { VolatilityItem } from '../../services/analytics';
 
 type Props = {
@@ -34,5 +34,5 @@ export function VolatilityChart({ data }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 320 }} />;
+  return <ECharts option={option} style={{ height: 320 }} />;
 }

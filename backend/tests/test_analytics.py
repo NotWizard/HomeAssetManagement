@@ -1,6 +1,14 @@
+from datetime import UTC
+from datetime import date
+from datetime import datetime
+
 from app.analytics.currency_overview import build_currency_overview
 from app.analytics.correlation import compute_correlation
+from app.analytics.series_builder import build_daily_series
 from app.analytics.volatility import compute_volatility
+from app.core.database import SessionLocal
+from app.services.bootstrap import init_database
+from app.services.snapshot_service import SnapshotService
 
 
 def test_compute_volatility_returns_values_for_sufficient_samples():
@@ -125,3 +133,19 @@ def test_build_currency_overview_returns_zero_share_when_bucket_total_is_zero():
     assert result["currencies"][0]["liability_count"] == 1
     assert result["details"]["JPY"]["liability_breakdown"][0]["share_pct"] == 0.0
     assert result["details"]["JPY"]["items"][0]["share_pct"] == 0.0
+
+
+
+def test_build_daily_series_generated_at_uses_utc_z_suffix():
+    init_database()
+
+    with SessionLocal() as session:
+        SnapshotService.create_daily_snapshot(session, snapshot_date=date(2026, 3, 8))
+        session.commit()
+
+    with SessionLocal() as session:
+        result = build_daily_series(session, window=7)
+
+    assert result['generated_at'].endswith('Z')
+    parsed = datetime.fromisoformat(result['generated_at'].replace('Z', '+00:00'))
+    assert parsed.tzinfo is UTC

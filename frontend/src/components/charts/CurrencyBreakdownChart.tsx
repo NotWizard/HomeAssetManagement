@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import { ECharts } from './ECharts';
 
 import type { CurrencyBreakdownItem } from '../../services/analytics';
 import { formatCurrency, formatPercent } from '../../utils/format';
@@ -50,5 +50,5 @@ export function CurrencyBreakdownChart({ currency, items, emptyText }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 360 }} />;
+  return <ECharts option={option} style={{ height: 360 }} />;
 }

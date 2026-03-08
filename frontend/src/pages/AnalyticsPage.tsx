@@ -1,17 +1,12 @@
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Coins, Sparkles } from 'lucide-react';
 
-import { CorrelationHeatmap } from '../components/charts/CorrelationHeatmap';
-import { CurrencyBreakdownChart } from '../components/charts/CurrencyBreakdownChart';
-import { CurrencyExposureChart } from '../components/charts/CurrencyExposureChart';
-import { SankeyChart } from '../components/charts/SankeyChart';
-import { TrendChart } from '../components/charts/TrendChart';
-import { VolatilityChart } from '../components/charts/VolatilityChart';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Select } from '../components/ui/select';
+import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import {
   fetchCorrelation,
@@ -37,6 +32,20 @@ const WINDOW_OPTIONS = [
   { label: '180 天', value: 180 },
   { label: '365 天', value: 365 },
 ];
+
+
+const TrendChart = lazy(() => import('../components/charts/TrendChart').then((module) => ({ default: module.TrendChart })));
+const VolatilityChart = lazy(() => import('../components/charts/VolatilityChart').then((module) => ({ default: module.VolatilityChart })));
+const CorrelationHeatmap = lazy(() =>
+  import('../components/charts/CorrelationHeatmap').then((module) => ({ default: module.CorrelationHeatmap }))
+);
+const SankeyChart = lazy(() => import('../components/charts/SankeyChart').then((module) => ({ default: module.SankeyChart })));
+const CurrencyExposureChart = lazy(() =>
+  import('../components/charts/CurrencyExposureChart').then((module) => ({ default: module.CurrencyExposureChart }))
+);
+const CurrencyBreakdownChart = lazy(() =>
+  import('../components/charts/CurrencyBreakdownChart').then((module) => ({ default: module.CurrencyBreakdownChart }))
+);
 
 const CURRENCY_LABELS: Record<string, string> = {
   CNY: 'CNY（人民币）',
@@ -175,12 +184,14 @@ export function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               {(trendQuery.data?.dates.length ?? 0) > 0 ? (
-                <TrendChart
-                  dates={trendQuery.data?.dates ?? []}
-                  totalAsset={trendQuery.data?.total_asset ?? []}
-                  totalLiability={trendQuery.data?.total_liability ?? []}
-                  netAsset={trendQuery.data?.net_asset ?? []}
-                />
+                <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
+                  <TrendChart
+                    dates={trendQuery.data?.dates ?? []}
+                    totalAsset={trendQuery.data?.total_asset ?? []}
+                    totalLiability={trendQuery.data?.total_liability ?? []}
+                    netAsset={trendQuery.data?.net_asset ?? []}
+                  />
+                </Suspense>
               ) : (
                 <EmptyState icon={<Coins className="h-5 w-5 text-primary" />} text="暂无趋势数据，录入资产负债后即可查看。" />
               )}
@@ -194,7 +205,9 @@ export function AnalyticsPage() {
             </CardHeader>
             <CardContent>
               {(sankeyQuery.data?.nodes.length ?? 0) > 0 ? (
-                <SankeyChart data={sankeyQuery.data ?? { nodes: [], links: [] }} />
+                <Suspense fallback={<Skeleton className="h-[460px] w-full" />}>
+                  <SankeyChart data={sankeyQuery.data ?? { nodes: [], links: [] }} />
+                </Suspense>
               ) : (
                 <EmptyState icon={<Coins className="h-5 w-5 text-primary" />} text="暂无结构数据，录入资产负债后即可查看。" />
               )}
@@ -213,7 +226,9 @@ export function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 {(volatilityQuery.data ?? []).length > 0 ? (
-                  <VolatilityChart data={volatilityQuery.data ?? []} />
+                  <Suspense fallback={<Skeleton className="h-[320px] w-full" />}>
+                    <VolatilityChart data={volatilityQuery.data ?? []} />
+                  </Suspense>
                 ) : (
                   <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，暂时无法计算波动率。" />
                 )}
@@ -267,7 +282,9 @@ export function AnalyticsPage() {
               {(correlationQuery.data?.assets.length ?? 0) < 2 ? (
                 <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，无法计算相关性矩阵。" />
               ) : (
-                <CorrelationHeatmap data={correlationQuery.data!} />
+                <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
+                  <CorrelationHeatmap data={correlationQuery.data!} />
+                </Suspense>
               )}
             </CardContent>
           </Card>
@@ -323,10 +340,12 @@ export function AnalyticsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <CurrencyExposureChart
-                    data={currencySummaries}
-                    baseCurrency={settingsQuery.data?.base_currency ?? 'CNY'}
-                  />
+                  <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
+                    <CurrencyExposureChart
+                      data={currencySummaries}
+                      baseCurrency={settingsQuery.data?.base_currency ?? 'CNY'}
+                    />
+                  </Suspense>
                 </CardContent>
               </Card>
 
@@ -337,11 +356,13 @@ export function AnalyticsPage() {
                     <CardDescription>查看该币种下每项资产占总资产的比例。</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <CurrencyBreakdownChart
-                      currency={selectedSummary.currency}
-                      items={selectedDetail.asset_breakdown}
-                      emptyText="当前币种下暂无资产"
-                    />
+                    <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
+                      <CurrencyBreakdownChart
+                        currency={selectedSummary.currency}
+                        items={selectedDetail.asset_breakdown}
+                        emptyText="当前币种下暂无资产"
+                      />
+                    </Suspense>
                   </CardContent>
                 </Card>
 
@@ -351,11 +372,13 @@ export function AnalyticsPage() {
                     <CardDescription>查看该币种下每项负债占总负债的比例。</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <CurrencyBreakdownChart
-                      currency={selectedSummary.currency}
-                      items={selectedDetail.liability_breakdown}
-                      emptyText="当前币种下暂无负债"
-                    />
+                    <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
+                      <CurrencyBreakdownChart
+                        currency={selectedSummary.currency}
+                        items={selectedDetail.liability_breakdown}
+                        emptyText="当前币种下暂无负债"
+                      />
+                    </Suspense>
                   </CardContent>
                 </Card>
               </div>

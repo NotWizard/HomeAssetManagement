@@ -1,18 +1,17 @@
 from decimal import Decimal
 
-from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import AppError
+from app.core.timezone import business_today
 from app.models.holding_item import HoldingItem
 from app.models.member import Member
 from app.services.category_service import CategoryService
 from app.services.common import get_default_family
 from app.services.fx_service import FXService
-from app.services.snapshot_service import SnapshotService
 from app.services.settings_service import SettingsService
-from app.core.timezone import business_today
+from app.services.snapshot_service import SnapshotService
 
 
 class HoldingService:
@@ -117,6 +116,72 @@ class HoldingService:
         row.is_deleted = True
         session.flush()
         _refresh_snapshots(session, trigger_type="update", note=f"delete:{row.id}")
+
+    @staticmethod
+    def bulk_soft_delete(session: Session, payload: dict) -> dict:
+        mode = str(payload.get("mode") or "").strip()
+        family = get_default_family(session)
+
+        if mode == "ids":
+            raw_ids = payload.get("holding_ids") or []
+            holding_ids = sorted({int(item) for item in raw_ids if int(item) > 0})
+            if not holding_ids:
+                raise AppError(4001, "请至少选择一条资产/负债")
+            stmt = (
+                select(HoldingItem)
+                .where(
+                    HoldingItem.family_id == family.id,
+                    HoldingItem.is_deleted.is_(False),
+                    HoldingItem.id.in_(holding_ids),
+                )
+                .order_by(HoldingItem.id.asc())
+            )
+            rows = list(session.scalars(stmt))
+            if not rows:
+                raise AppError(4040, "未找到可删除的资产/负债")
+            deleted_ids = [row.id for row in rows]
+            for row in rows:
+                row.is_deleted = True
+            session.flush()
+            _refresh_snapshots(session, trigger_type="update", note=f"bulk-delete:ids:{len(deleted_ids)}")
+            return {
+                "deleted_count": len(deleted_ids),
+                "deleted_ids": deleted_ids,
+                "member_id": None,
+                "snapshot_refreshed": True,
+            }
+
+        if mode == "member":
+            member_id = payload.get("member_id")
+            if member_id is None:
+                raise AppError(4001, "请选择成员")
+            member_id = int(member_id)
+            _validate_member(session, member_id)
+            stmt = (
+                select(HoldingItem)
+                .where(
+                    HoldingItem.family_id == family.id,
+                    HoldingItem.member_id == member_id,
+                    HoldingItem.is_deleted.is_(False),
+                )
+                .order_by(HoldingItem.id.asc())
+            )
+            rows = list(session.scalars(stmt))
+            if not rows:
+                raise AppError(4040, "该成员暂无可删除的资产/负债")
+            deleted_ids = [row.id for row in rows]
+            for row in rows:
+                row.is_deleted = True
+            session.flush()
+            _refresh_snapshots(session, trigger_type="update", note=f"bulk-delete:member:{member_id}:{len(deleted_ids)}")
+            return {
+                "deleted_count": len(deleted_ids),
+                "deleted_ids": deleted_ids,
+                "member_id": member_id,
+                "snapshot_refreshed": True,
+            }
+
+        raise AppError(4001, "批量删除模式无效")
 
 
 def _refresh_snapshots(session: Session, trigger_type: str, note: str | None = None) -> None:

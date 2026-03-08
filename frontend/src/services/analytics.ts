@@ -27,7 +27,17 @@ export type CorrelationData = {
 };
 
 export type SankeyData = {
-  nodes: Array<{ id: string; name: string }>;
+  nodes: Array<{
+    id: string;
+    name: string;
+    depth: number;
+    node_type: 'member' | 'category' | 'holding';
+    holding_type?: 'asset' | 'liability';
+    amount?: number;
+    member_id?: number;
+    member_name?: string;
+    category_path?: string;
+  }>;
   links: Array<{ source: string; target: string; value: number }>;
 };
 

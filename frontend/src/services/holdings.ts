@@ -13,6 +13,23 @@ export type HoldingPayload = {
   target_ratio?: string | null;
 };
 
+export type HoldingBulkDeletePayload =
+  | {
+      mode: 'ids';
+      holding_ids: number[];
+    }
+  | {
+      mode: 'member';
+      member_id: number;
+    };
+
+export type HoldingBulkDeleteResult = {
+  deleted_count: number;
+  deleted_ids: number[];
+  member_id?: number | null;
+  snapshot_refreshed: boolean;
+};
+
 export function fetchHoldings() {
   return getJSON<Holding[]>('/holdings');
 }
@@ -27,4 +44,8 @@ export function updateHolding(id: number, payload: HoldingPayload) {
 
 export function deleteHolding(id: number) {
   return deleteJSON<boolean>(`/holdings/${id}`);
+}
+
+export function bulkDeleteHoldings(payload: HoldingBulkDeletePayload) {
+  return postJSON<HoldingBulkDeleteResult>('/holdings/bulk-delete', payload);
 }

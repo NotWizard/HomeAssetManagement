@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -13,7 +13,15 @@ import { Select } from '../components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Tooltip } from '../components/ui/tooltip';
 import { fetchCategories } from '../services/categories';
-import { createHolding, deleteHolding, fetchHoldings, updateHolding, type HoldingPayload } from '../services/holdings';
+import {
+  bulkDeleteHoldings,
+  createHolding,
+  deleteHolding,
+  fetchHoldings,
+  updateHolding,
+  type HoldingBulkDeletePayload,
+  type HoldingPayload,
+} from '../services/holdings';
 import { fetchMembers } from '../services/members';
 import type { CategoryNode, Holding } from '../types';
 import { formatCurrency } from '../utils/format';
@@ -34,6 +42,16 @@ type EntryFormState = {
   currency: string;
   amountOriginal: string;
   targetRatio: string;
+};
+
+type HoldingFilterType = 'all' | 'asset' | 'liability';
+
+type BulkDeleteSummary = {
+  count: number;
+  assetCount: number;
+  liabilityCount: number;
+  totalBase: number;
+  previewNames: string[];
 };
 
 const INITIAL_FORM: EntryFormState = {
@@ -96,6 +114,24 @@ function hasValidTwoDecimalAmount(value: string): boolean {
   return /^\d+(?:\.\d{1,2})?$/.test(value) && Number(value) > 0;
 }
 
+function summarizeHoldings(rows: Holding[]): BulkDeleteSummary {
+  const assetCount = rows.filter((row) => row.type === 'asset').length;
+  return {
+    count: rows.length,
+    assetCount,
+    liabilityCount: rows.length - assetCount,
+    totalBase: rows.reduce((sum, row) => sum + Number(row.amount_base ?? 0), 0),
+    previewNames: rows.slice(0, 5).map((row) => row.name),
+  };
+}
+
+function buildBulkErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return '批量删除失败，请稍后重试';
+}
+
 export function EntryPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -104,6 +140,14 @@ export function EntryPage() {
   const [editing, setEditing] = useState<Holding | null>(null);
   const [form, setForm] = useState<EntryFormState>(INITIAL_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [keyword, setKeyword] = useState('');
+  const [memberFilter, setMemberFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState<HoldingFilterType>('all');
+  const [selectedHoldingIds, setSelectedHoldingIds] = useState<number[]>([]);
+  const [selectedDeleteOpen, setSelectedDeleteOpen] = useState(false);
+  const [memberDeleteOpen, setMemberDeleteOpen] = useState(false);
+  const [memberDeleteId, setMemberDeleteId] = useState('');
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
   const membersQuery = useQuery({ queryKey: ['members'], queryFn: fetchMembers });
   const holdingsQuery = useQuery({ queryKey: ['holdings'], queryFn: fetchHoldings });
@@ -149,6 +193,21 @@ export function EntryPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (payload: HoldingBulkDeletePayload) => bulkDeleteHoldings(payload),
+    onSuccess: async () => {
+      setSelectedHoldingIds([]);
+      setSelectedDeleteOpen(false);
+      setMemberDeleteOpen(false);
+      setMemberDeleteId('');
+      setBulkDeleteError(null);
+      await refreshHoldingRelatedQueries();
+    },
+    onError: (mutationError) => {
+      setBulkDeleteError(buildBulkErrorMessage(mutationError));
+    },
+  });
+
   const allPathOptions = useMemo(() => {
     if (form.type === 'asset') {
       return buildPathOptions(assetCategoryQuery.data ?? []);
@@ -189,10 +248,69 @@ export function EntryPage() {
 
   const memberNameMap = useMemo(() => {
     const map = new Map<number, string>();
-    (membersQuery.data ?? []).forEach((m) => map.set(m.id, m.name));
+    (membersQuery.data ?? []).forEach((member) => map.set(member.id, member.name));
     return map;
   }, [membersQuery.data]);
+
+  const allHoldings = holdingsQuery.data ?? [];
   const hasMembers = (membersQuery.data ?? []).length > 0;
+
+  const filteredHoldings = useMemo(() => {
+    const normalizedKeyword = keyword.trim().toLowerCase();
+    return allHoldings.filter((row) => {
+      if (memberFilter !== 'all' && row.member_id !== Number(memberFilter)) {
+        return false;
+      }
+      if (typeFilter !== 'all' && row.type !== typeFilter) {
+        return false;
+      }
+      if (!normalizedKeyword) {
+        return true;
+      }
+      const memberName = memberNameMap.get(row.member_id) ?? '';
+      const searchText = [row.name, memberName, row.currency, row.type === 'asset' ? '资产' : '负债'].join(' ').toLowerCase();
+      return searchText.includes(normalizedKeyword);
+    });
+  }, [allHoldings, keyword, memberFilter, typeFilter, memberNameMap]);
+
+  const selectedIdSet = useMemo(() => new Set(selectedHoldingIds), [selectedHoldingIds]);
+
+  const selectedHoldings = useMemo(
+    () => allHoldings.filter((row) => selectedIdSet.has(row.id)),
+    [allHoldings, selectedIdSet]
+  );
+
+  const selectedSummary = useMemo(() => summarizeHoldings(selectedHoldings), [selectedHoldings]);
+  const memberDeleteTargetRows = useMemo(() => {
+    if (!memberDeleteId) {
+      return [];
+    }
+    return allHoldings.filter((row) => row.member_id === Number(memberDeleteId));
+  }, [allHoldings, memberDeleteId]);
+  const memberDeleteSummary = useMemo(() => summarizeHoldings(memberDeleteTargetRows), [memberDeleteTargetRows]);
+
+  const memberDeleteOptions = useMemo(
+    () =>
+      (membersQuery.data ?? []).map((member) => {
+        const count = allHoldings.filter((row) => row.member_id === member.id).length;
+        return {
+          label: `${member.name}（${count}条）`,
+          value: member.id,
+        };
+      }),
+    [allHoldings, membersQuery.data]
+  );
+
+  const allVisibleSelected = filteredHoldings.length > 0 && filteredHoldings.every((row) => selectedIdSet.has(row.id));
+
+  useEffect(() => {
+    setSelectedHoldingIds([]);
+  }, [keyword, memberFilter, typeFilter]);
+
+  useEffect(() => {
+    const validIds = new Set(allHoldings.map((row) => row.id));
+    setSelectedHoldingIds((current) => current.filter((id) => validIds.has(id)));
+  }, [allHoldings]);
 
   const openCreateDialog = () => {
     void assetCategoryQuery.refetch();
@@ -218,6 +336,25 @@ export function EntryPage() {
       targetRatio: row.target_ratio == null ? '' : String(row.target_ratio),
     });
     setOpen(true);
+  };
+
+  const openSelectedDeleteDialog = () => {
+    setBulkDeleteError(null);
+    setSelectedDeleteOpen(true);
+  };
+
+  const openMemberDeleteDialog = () => {
+    const defaultMemberId =
+      memberFilter !== 'all'
+        ? memberFilter
+        : String(
+            (membersQuery.data ?? []).find((member) => allHoldings.some((row) => row.member_id === member.id))?.id ??
+              (membersQuery.data ?? [])[0]?.id ??
+              ''
+          );
+    setMemberDeleteId(defaultMemberId);
+    setBulkDeleteError(null);
+    setMemberDeleteOpen(true);
   };
 
   const submitForm = () => {
@@ -252,7 +389,7 @@ export function EntryPage() {
       return;
     }
 
-    const selectedPath = pathOptions.find((p) => p.key === form.pathKey);
+    const selectedPath = pathOptions.find((option) => option.key === form.pathKey);
     if (!selectedPath) {
       setError('分类路径无效');
       return;
@@ -275,6 +412,52 @@ export function EntryPage() {
     } else {
       createHoldingMutation.mutate(payload);
     }
+  };
+
+  const toggleHoldingSelection = (holdingId: number, checked: boolean) => {
+    setSelectedHoldingIds((current) => {
+      if (checked) {
+        return current.includes(holdingId) ? current : [...current, holdingId];
+      }
+      return current.filter((id) => id !== holdingId);
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelectedHoldingIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        filteredHoldings.forEach((row) => next.add(row.id));
+      } else {
+        filteredHoldings.forEach((row) => next.delete(row.id));
+      }
+      return Array.from(next);
+    });
+  };
+
+  const submitDeleteSelected = () => {
+    if (selectedHoldings.length === 0) {
+      setBulkDeleteError('请至少勾选一条资产/负债');
+      return;
+    }
+    setBulkDeleteError(null);
+    bulkDeleteMutation.mutate({
+      mode: 'ids',
+      holding_ids: selectedHoldings.map((row) => row.id),
+    });
+  };
+
+  const submitDeleteByMember = () => {
+    if (!memberDeleteId) {
+      setBulkDeleteError('请选择成员');
+      return;
+    }
+    if (memberDeleteSummary.count === 0) {
+      setBulkDeleteError('该成员暂无可删除的资产/负债');
+      return;
+    }
+    setBulkDeleteError(null);
+    bulkDeleteMutation.mutate({ mode: 'member', member_id: Number(memberDeleteId) });
   };
 
   return (
@@ -307,10 +490,66 @@ export function EntryPage() {
           <CardTitle className="text-sm">录入列表</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div className="grid gap-3 md:grid-cols-3 xl:flex-1">
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">名称搜索</label>
+                <Input placeholder="搜索名称、成员、币种" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">成员筛选</label>
+                <Select
+                  value={memberFilter}
+                  onChange={(event) => setMemberFilter(event.target.value)}
+                  options={[
+                    { label: '全部成员', value: 'all' },
+                    ...(membersQuery.data ?? []).map((member) => ({ label: member.name, value: member.id })),
+                  ]}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">类型筛选</label>
+                <Select
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value as HoldingFilterType)}
+                  options={[
+                    { label: '全部类型', value: 'all' },
+                    { label: '资产', value: 'asset' },
+                    { label: '负债', value: 'liability' },
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <div className="inline-flex h-10 items-center rounded-lg border bg-secondary/25 px-3 text-sm text-muted-foreground">
+                当前筛选 {filteredHoldings.length} 条，已选 {selectedHoldingIds.length} 条
+              </div>
+              <Button variant="outline" onClick={openMemberDeleteDialog} disabled={allHoldings.length === 0 || bulkDeleteMutation.isPending}>
+                按成员删除
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={openSelectedDeleteDialog}
+                disabled={selectedHoldingIds.length === 0 || bulkDeleteMutation.isPending}
+              >
+                删除已选
+              </Button>
+            </div>
+          </div>
+
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12 px-3">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border"
+                      checked={allVisibleSelected}
+                      onChange={(event) => toggleSelectAllVisible(event.target.checked)}
+                      aria-label="全选当前筛选结果"
+                    />
+                  </TableHead>
                   <TableHead>名称</TableHead>
                   <TableHead>类型</TableHead>
                   <TableHead>成员</TableHead>
@@ -322,8 +561,17 @@ export function EntryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(holdingsQuery.data ?? []).map((row) => (
+                {filteredHoldings.map((row) => (
                   <TableRow key={row.id}>
+                    <TableCell className="w-12 px-3">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border"
+                        checked={selectedIdSet.has(row.id)}
+                        onChange={(event) => toggleHoldingSelection(row.id, event.target.checked)}
+                        aria-label={`选择 ${row.name}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell>
                       <Badge variant={row.type === 'asset' ? 'default' : 'secondary'}>{row.type === 'asset' ? '资产' : '负债'}</Badge>
@@ -345,10 +593,10 @@ export function EntryPage() {
                     </TableCell>
                   </TableRow>
                 ))}
-                {(holdingsQuery.data ?? []).length === 0 ? (
+                {filteredHoldings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground">
-                      暂无录入数据
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                      {allHoldings.length === 0 ? '暂无录入数据' : '当前筛选条件下暂无匹配数据'}
                     </TableCell>
                   </TableRow>
                 ) : null}
@@ -357,6 +605,110 @@ export function EntryPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={selectedDeleteOpen}
+        title="批量删除已选条目"
+        description="删除后将立即刷新录入列表、快照与分析看板数据。"
+        onClose={() => {
+          setSelectedDeleteOpen(false);
+          setBulkDeleteError(null);
+        }}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedDeleteOpen(false);
+                setBulkDeleteError(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button variant="destructive" onClick={submitDeleteSelected} disabled={bulkDeleteMutation.isPending || selectedSummary.count === 0}>
+              {bulkDeleteMutation.isPending ? '删除中...' : `删除已选（${selectedSummary.count}）`}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border bg-secondary/20 p-3">
+              <div className="text-xs text-muted-foreground">已选条目</div>
+              <div className="mt-1 text-lg font-semibold">{selectedSummary.count}</div>
+            </div>
+            <div className="rounded-lg border bg-secondary/20 p-3">
+              <div className="text-xs text-muted-foreground">资产 / 负债</div>
+              <div className="mt-1 text-lg font-semibold">{selectedSummary.assetCount} / {selectedSummary.liabilityCount}</div>
+            </div>
+            <div className="rounded-lg border bg-secondary/20 p-3">
+              <div className="text-xs text-muted-foreground">折算金额</div>
+              <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedSummary.totalBase)}</div>
+            </div>
+          </div>
+          <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+            此操作不可撤销，将删除当前已勾选的资产与负债，并立即重建最新快照。
+          </div>
+          {selectedSummary.previewNames.length > 0 ? (
+            <div className="text-sm text-muted-foreground">示例条目：{selectedSummary.previewNames.join('、')}</div>
+          ) : null}
+          {bulkDeleteError ? <p className="text-sm text-rose-600">{bulkDeleteError}</p> : null}
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={memberDeleteOpen}
+        title="按成员删除资产负债"
+        description="支持直接清空某个成员名下的全部资产和负债数据。"
+        onClose={() => {
+          setMemberDeleteOpen(false);
+          setBulkDeleteError(null);
+        }}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMemberDeleteOpen(false);
+                setBulkDeleteError(null);
+              }}
+            >
+              取消
+            </Button>
+            <Button variant="destructive" onClick={submitDeleteByMember} disabled={bulkDeleteMutation.isPending || memberDeleteSummary.count === 0}>
+              {bulkDeleteMutation.isPending ? '删除中...' : '删除该成员全部数据'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm text-muted-foreground">成员</label>
+            <Select value={memberDeleteId} onChange={(event) => setMemberDeleteId(event.target.value)} options={memberDeleteOptions} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border bg-secondary/20 p-3">
+              <div className="text-xs text-muted-foreground">待删除条目</div>
+              <div className="mt-1 text-lg font-semibold">{memberDeleteSummary.count}</div>
+            </div>
+            <div className="rounded-lg border bg-secondary/20 p-3">
+              <div className="text-xs text-muted-foreground">资产 / 负债</div>
+              <div className="mt-1 text-lg font-semibold">{memberDeleteSummary.assetCount} / {memberDeleteSummary.liabilityCount}</div>
+            </div>
+            <div className="rounded-lg border bg-secondary/20 p-3">
+              <div className="text-xs text-muted-foreground">折算金额</div>
+              <div className="mt-1 text-lg font-semibold">{formatCurrency(memberDeleteSummary.totalBase)}</div>
+            </div>
+          </div>
+          <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+            将删除该成员名下全部资产与负债。删除完成后，录入列表与分析数据会立即刷新。
+          </div>
+          {memberDeleteSummary.previewNames.length > 0 ? (
+            <div className="text-sm text-muted-foreground">示例条目：{memberDeleteSummary.previewNames.join('、')}</div>
+          ) : null}
+          {bulkDeleteError ? <p className="text-sm text-rose-600">{bulkDeleteError}</p> : null}
+        </div>
+      </Dialog>
 
       <Dialog
         open={open}

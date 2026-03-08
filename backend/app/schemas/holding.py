@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -23,6 +24,19 @@ class HoldingCreate(HoldingBase):
 
 class HoldingUpdate(HoldingBase):
     pass
+
+
+class HoldingBulkDelete(BaseModel):
+    mode: Literal["ids", "member"]
+    holding_ids: list[int] | None = None
+    member_id: int | None = None
+
+
+class HoldingBulkDeleteResult(BaseModel):
+    deleted_count: int
+    deleted_ids: list[int]
+    member_id: int | None = None
+    snapshot_refreshed: bool = True
 
 
 class HoldingOut(BaseModel):

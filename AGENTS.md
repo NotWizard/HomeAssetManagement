@@ -40,7 +40,7 @@ This repository is a local web monorepo with two apps:
 - Default branch is `main`; unless explicitly requested otherwise, branch from and merge back to `main`.
 - Follow concise conventional prefixes seen in history: `feat:`, `docs:` (and `fix:`, `chore:`, `test:` when appropriate).
 - Keep commit messages imperative and scoped to one logical change.
-- Git commit messages must be structured and clear: use a concise subject line, and when needed add a body that explains the background, key changes, and verification performed.
+- Git commit messages must be structured and clear, and both the subject line and body should be written bilingually in Chinese and English; when needed, add a body that explains the background, key changes, and verification performed.
 - PRs should include: summary, changed areas (`backend`/`frontend`), verification commands run, and screenshots for UI changes.
 
 ## Security & Configuration Tips

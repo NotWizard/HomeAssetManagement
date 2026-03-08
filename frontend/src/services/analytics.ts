@@ -35,6 +35,41 @@ export type RebalanceItem = {
   status: string;
 };
 
+export type CurrencySummary = {
+  currency: string;
+  total_asset: number;
+  total_liability: number;
+  net_asset: number;
+  total_asset_base: number;
+  total_liability_base: number;
+  net_asset_base: number;
+  asset_count: number;
+  liability_count: number;
+};
+
+export type CurrencyBreakdownItem = {
+  id: number;
+  name: string;
+  type: 'asset' | 'liability';
+  currency: string;
+  category_path: string;
+  amount_original: number;
+  amount_base: number;
+  share_pct: number;
+};
+
+export type CurrencyOverviewDetail = {
+  summary: CurrencySummary;
+  asset_breakdown: CurrencyBreakdownItem[];
+  liability_breakdown: CurrencyBreakdownItem[];
+  items: CurrencyBreakdownItem[];
+};
+
+export type CurrencyOverviewData = {
+  currencies: CurrencySummary[];
+  details: Record<string, CurrencyOverviewDetail>;
+};
+
 export function fetchTrend(window = 90) {
   return getJSON<TrendData>(`/analytics/trend?window=${window}`);
 }
@@ -53,4 +88,8 @@ export function fetchSankey() {
 
 export function fetchRebalance() {
   return getJSON<RebalanceItem[]>('/analytics/rebalance');
+}
+
+export function fetchCurrencyOverview() {
+  return getJSON<CurrencyOverviewData>('/analytics/currency-overview');
 }

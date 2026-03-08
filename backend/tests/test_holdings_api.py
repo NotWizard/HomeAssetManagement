@@ -1,9 +1,39 @@
 from fastapi.testclient import TestClient
 
+from app.core.database import SessionLocal
 from app.main import app
+from app.models.holding_item import HoldingItem
+from app.models.member import Member
+from app.models.snapshot_daily import SnapshotDaily
+from app.models.snapshot_event import SnapshotEvent
+from app.services.bootstrap import init_database
+
+
+def _reset_runtime_data() -> None:
+    init_database()
+    with SessionLocal() as session:
+        session.query(SnapshotEvent).delete()
+        session.query(SnapshotDaily).delete()
+        session.query(HoldingItem).delete()
+        session.query(Member).delete()
+        session.commit()
+
+
+def _find_category_path(tree: list[dict], path: tuple[str, str, str]) -> tuple[dict, dict, dict]:
+    for l1 in tree:
+        if l1["name"] != path[0]:
+            continue
+        for l2 in l1["children"]:
+            if l2["name"] != path[1]:
+                continue
+            for l3 in l2["children"]:
+                if l3["name"] == path[2]:
+                    return l1, l2, l3
+    raise AssertionError(f"分类路径不存在: {path}")
 
 
 def test_create_holding_via_api_creates_snapshot():
+    _reset_runtime_data()
     with TestClient(app) as client:
         member_resp = client.post("/api/v1/members", json={"name": "Bob"})
         assert member_resp.status_code == 200
@@ -34,3 +64,72 @@ def test_create_holding_via_api_creates_snapshot():
 
         snapshots = client.get("/api/v1/snapshots/events").json()["data"]
         assert len(snapshots) >= 1
+
+
+def test_currency_overview_api_returns_empty_payload_when_no_snapshot_exists():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        response = client.get("/api/v1/analytics/currency-overview")
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"currencies": [], "details": {}}
+
+
+def test_currency_overview_api_returns_currency_summary_and_category_paths():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Alice"})
+        assert member_resp.status_code == 200
+        member_id = member_resp.json()["data"]["id"]
+
+        asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
+        liability_tree = client.get("/api/v1/categories", params={"type": "liability"}).json()["data"]
+
+        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("权益投资", "股票", "A股"))
+        liability_l1, liability_l2, liability_l3 = _find_category_path(
+            liability_tree,
+            ("消费负债", "信用卡", "已出账单"),
+        )
+
+        create_asset = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "沪深300ETF",
+                "category_l1_id": asset_l1["id"],
+                "category_l2_id": asset_l2["id"],
+                "category_l3_id": asset_l3["id"],
+                "currency": "CNY",
+                "amount_original": "300",
+                "target_ratio": "20",
+            },
+        )
+        assert create_asset.status_code == 200
+
+        create_liability = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "liability",
+                "name": "信用卡账单",
+                "category_l1_id": liability_l1["id"],
+                "category_l2_id": liability_l2["id"],
+                "category_l3_id": liability_l3["id"],
+                "currency": "CNY",
+                "amount_original": "50",
+                "target_ratio": None,
+            },
+        )
+        assert create_liability.status_code == 200
+
+        response = client.get("/api/v1/analytics/currency-overview")
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["currencies"][0]["currency"] == "CNY"
+    assert payload["currencies"][0]["total_asset"] == 300.0
+    assert payload["currencies"][0]["total_liability"] == 50.0
+    assert payload["currencies"][0]["net_asset"] == 250.0
+    assert payload["details"]["CNY"]["items"][0]["category_path"] == "权益投资 / 股票 / A股"
+    assert payload["details"]["CNY"]["items"][1]["category_path"] == "消费负债 / 信用卡 / 已出账单"

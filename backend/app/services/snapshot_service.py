@@ -18,9 +18,13 @@ from app.utils.serialization import decimal_to_float
 
 class SnapshotService:
     @staticmethod
+    def build_current_payload(session: Session) -> dict:
+        return _build_snapshot_payload(session)
+
+    @staticmethod
     def create_event_snapshot(session: Session, trigger_type: str, note: str | None = None) -> SnapshotEvent:
         family = get_default_family(session)
-        payload = _build_snapshot_payload(session)
+        payload = SnapshotService.build_current_payload(session)
         payload["note"] = note
 
         row = SnapshotEvent(
@@ -40,7 +44,7 @@ class SnapshotService:
     ) -> SnapshotDaily:
         family = get_default_family(session)
         snapshot_date = snapshot_date or business_today(session)
-        payload = _build_snapshot_payload(session)
+        payload = SnapshotService.build_current_payload(session)
 
         row = session.scalar(
             select(SnapshotDaily).where(

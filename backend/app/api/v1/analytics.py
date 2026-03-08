@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analytics.correlation import compute_correlation
+from app.analytics.currency_overview import build_currency_overview
 from app.analytics.rebalance import compute_rebalance_items
 from app.analytics.sankey_builder import build_sankey
 from app.analytics.series_builder import build_daily_series
@@ -16,6 +17,7 @@ from app.core.response import ok
 from app.models.member import Member
 from app.models.snapshot_daily import SnapshotDaily
 from app.services.settings_service import SettingsService
+from app.services.snapshot_service import SnapshotService
 
 router = APIRouter()
 
@@ -63,3 +65,11 @@ def get_rebalance(db: Session = Depends(get_db)):
         threshold_pct=settings.rebalance_threshold_pct,
     )
     return ok(data)
+
+
+@router.get("/currency-overview")
+def get_currency_overview(db: Session = Depends(get_db)):
+    payload = SnapshotService.build_current_payload(db)
+    if not payload.get("holdings"):
+        return ok({"currencies": [], "details": {}})
+    return ok(build_currency_overview(payload.get("holdings", [])))

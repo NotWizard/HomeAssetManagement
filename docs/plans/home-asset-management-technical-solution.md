@@ -241,6 +241,7 @@ HomeAssetManagement/
 - `GET /analytics/correlation?window=90`
 - `GET /analytics/sankey`
 - `GET /analytics/rebalance`
+- `GET /analytics/currency-overview`
 
 ### 快照
 - `GET /snapshots/events`
@@ -288,6 +289,7 @@ HomeAssetManagement/
 - `/members`
 - `/import`
 - `/analytics`
+  - 页面内二级视角：`整体概览`、`风险与配置`、`币种总览`
 - `/settings`
 
 ## 6.2 状态管理
@@ -295,7 +297,7 @@ HomeAssetManagement/
 - 服务端状态：`TanStack Query`
   - 优点：请求缓存、并发请求、失败重试、自动失效重取。
 - 客户端轻状态：`Zustand`
-  - 页面筛选器、表格列配置、图表时间窗口。
+  - 页面筛选器、表格列配置、图表时间窗口、分析视角与选中币种。
 
 ## 6.3 表单与校验
 

@@ -1,6 +1,5 @@
 import json
 from datetime import date
-from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import and_
@@ -11,6 +10,7 @@ from app.models.category import Category
 from app.models.holding_item import HoldingItem
 from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
+from app.core.clock import utc_now_naive
 from app.core.timezone import business_today
 from app.services.common import get_default_family
 from app.utils.serialization import decimal_to_float
@@ -26,7 +26,7 @@ class SnapshotService:
         row = SnapshotEvent(
             family_id=family.id,
             trigger_type=trigger_type,
-            snapshot_at=datetime.utcnow(),
+            snapshot_at=utc_now_naive(),
             payload_json=json.dumps(payload, ensure_ascii=False),
         )
         session.add(row)

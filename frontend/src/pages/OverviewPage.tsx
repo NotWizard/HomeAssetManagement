@@ -1,8 +1,7 @@
-import { type ReactNode, useMemo } from 'react';
+import { type ReactNode, Suspense, lazy, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownRight, ArrowUpRight, CalendarDays, Globe, Wallet } from 'lucide-react';
 
-import { TrendChart } from '../components/charts/TrendChart';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
@@ -11,6 +10,8 @@ import { fetchRebalance, fetchTrend } from '../services/analytics';
 import { fetchHoldings } from '../services/holdings';
 import { fetchSettings } from '../services/settings';
 import { formatCurrency, formatPercent } from '../utils/format';
+
+const TrendChart = lazy(() => import('../components/charts/TrendChart').then((module) => ({ default: module.TrendChart })));
 
 function calcChangePct(current: number, previous: number | null): number | null {
   if (previous == null || previous === 0) {
@@ -137,12 +138,14 @@ export function OverviewPage() {
           </CardHeader>
           <CardContent>
             {trendQuery.data ? (
-              <TrendChart
-                dates={trendQuery.data.dates}
-                totalAsset={trendQuery.data.total_asset}
-                totalLiability={trendQuery.data.total_liability}
-                netAsset={trendQuery.data.net_asset}
-              />
+              <Suspense fallback={<Skeleton className="h-72 w-full" />}>
+                <TrendChart
+                  dates={trendQuery.data.dates}
+                  totalAsset={trendQuery.data.total_asset}
+                  totalLiability={trendQuery.data.total_liability}
+                  netAsset={trendQuery.data.net_asset}
+                />
+              </Suspense>
             ) : (
               <Skeleton className="h-72 w-full" />
             )}

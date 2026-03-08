@@ -13,6 +13,9 @@ from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import format_utc_iso_z
+from app.core.clock import normalize_utc_naive
+from app.core.clock import utc_now_naive
 from app.core.exceptions import AppError
 from app.models.category import Category
 from app.models.holding_item import HoldingItem
@@ -85,8 +88,8 @@ class MigrationService:
                 file_paths["family.json"],
                 {
                     "name": family.name,
-                    "created_at": family.created_at.isoformat(),
-                    "updated_at": family.updated_at.isoformat(),
+                    "created_at": format_utc_iso_z(family.created_at),
+                    "updated_at": format_utc_iso_z(family.updated_at),
                 },
             )
             _write_json_file(
@@ -105,8 +108,8 @@ class MigrationService:
                     {
                         "id": member.id,
                         "name": member.name,
-                        "created_at": member.created_at.isoformat(),
-                        "updated_at": member.updated_at.isoformat(),
+                        "created_at": format_utc_iso_z(member.created_at),
+                        "updated_at": format_utc_iso_z(member.updated_at),
                     }
                     for member in members
                 ],
@@ -128,8 +131,8 @@ class MigrationService:
                         ),
                         "source": row.source,
                         "is_deleted": bool(row.is_deleted),
-                        "created_at": row.created_at.isoformat(),
-                        "updated_at": row.updated_at.isoformat(),
+                        "created_at": format_utc_iso_z(row.created_at),
+                        "updated_at": format_utc_iso_z(row.updated_at),
                         "category_l1_name": category_name(row.category_l1_id),
                         "category_l2_name": category_name(row.category_l2_id),
                         "category_l3_name": category_name(row.category_l3_id),
@@ -142,7 +145,7 @@ class MigrationService:
                 (
                     {
                         "snapshot_date": row.snapshot_date.isoformat(),
-                        "created_at": row.created_at.isoformat(),
+                        "created_at": format_utc_iso_z(row.created_at),
                         "payload": json.loads(row.payload_json),
                     }
                     for row in snapshot_rows
@@ -186,7 +189,7 @@ class MigrationService:
                 "package_type": PACKAGE_TYPE,
                 "schema_version": SCHEMA_VERSION,
                 "minimum_supported_version": SCHEMA_VERSION,
-                "exported_at": datetime.utcnow().isoformat() + "Z",
+                "exported_at": format_utc_iso_z(),
                 "domains": [
                     {
                         "name": domain_name,
@@ -200,7 +203,7 @@ class MigrationService:
             }
             _write_json_file(export_dir / "manifest.json", manifest)
 
-            filename = f"ham-migration-{datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%S')}.zip"
+            filename = f"ham-migration-{utc_now_naive().strftime('%Y-%m-%dT%H-%M-%S')}.zip"
             archive_path = export_dir / filename
             with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 for file_path in sorted(export_dir.iterdir()):
@@ -435,8 +438,8 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
                 id=int(member_payload["id"]),
                 family_id=family.id,
                 name=str(member_payload["name"]).strip(),
-                created_at=_parse_datetime(member_payload.get("created_at")) or datetime.utcnow(),
-                updated_at=_parse_datetime(member_payload.get("updated_at")) or datetime.utcnow(),
+                created_at=_parse_datetime(member_payload.get("created_at")) or utc_now_naive(),
+                updated_at=_parse_datetime(member_payload.get("updated_at")) or utc_now_naive(),
             )
         )
     session.flush()
@@ -470,8 +473,8 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
                 ),
                 source=str(row.get("source") or "manual"),
                 is_deleted=False,
-                created_at=_parse_datetime(row.get("created_at")) or datetime.utcnow(),
-                updated_at=_parse_datetime(row.get("updated_at")) or datetime.utcnow(),
+                created_at=_parse_datetime(row.get("created_at")) or utc_now_naive(),
+                updated_at=_parse_datetime(row.get("updated_at")) or utc_now_naive(),
             )
         )
         holdings_count += 1
@@ -484,7 +487,7 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
                 family_id=family.id,
                 snapshot_date=_parse_date(snapshot_payload["snapshot_date"]),
                 payload_json=json.dumps(snapshot_payload["payload"], ensure_ascii=False),
-                created_at=_parse_datetime(snapshot_payload.get("created_at")) or datetime.utcnow(),
+                created_at=_parse_datetime(snapshot_payload.get("created_at")) or utc_now_naive(),
             )
         )
         snapshots_count += 1
@@ -552,7 +555,7 @@ def _parse_datetime(value: Any) -> datetime | None:
     text = str(value)
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
-    return datetime.fromisoformat(text)
+    return normalize_utc_naive(datetime.fromisoformat(text))
 
 
 def _parse_date(value: Any) -> date:

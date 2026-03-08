@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import { ECharts } from './ECharts';
 import type { SankeyData } from '../../services/analytics';
 
 type Props = {
@@ -22,5 +22,5 @@ export function SankeyChart({ data }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 460 }} />;
+  return <ECharts option={option} style={{ height: 460 }} />;
 }

@@ -1,17 +1,22 @@
+import { Suspense, lazy } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Sparkles } from 'lucide-react';
 
-import { CorrelationHeatmap } from '../components/charts/CorrelationHeatmap';
-import { SankeyChart } from '../components/charts/SankeyChart';
-import { TrendChart } from '../components/charts/TrendChart';
-import { VolatilityChart } from '../components/charts/VolatilityChart';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select } from '../components/ui/select';
+import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { fetchCorrelation, fetchRebalance, fetchSankey, fetchTrend, fetchVolatility } from '../services/analytics';
 import { useUIStore } from '../store/uiStore';
 import { formatPercent } from '../utils/format';
+
+const TrendChart = lazy(() => import('../components/charts/TrendChart').then((module) => ({ default: module.TrendChart })));
+const VolatilityChart = lazy(() => import('../components/charts/VolatilityChart').then((module) => ({ default: module.VolatilityChart })));
+const CorrelationHeatmap = lazy(() =>
+  import('../components/charts/CorrelationHeatmap').then((module) => ({ default: module.CorrelationHeatmap }))
+);
+const SankeyChart = lazy(() => import('../components/charts/SankeyChart').then((module) => ({ default: module.SankeyChart })));
 
 export function AnalyticsPage() {
   const window = useUIStore((state) => state.analyticsWindow);
@@ -48,12 +53,14 @@ export function AnalyticsPage() {
           <CardTitle className="text-sm">总资产趋势</CardTitle>
         </CardHeader>
         <CardContent>
-          <TrendChart
-            dates={trendQuery.data?.dates ?? []}
-            totalAsset={trendQuery.data?.total_asset ?? []}
-            totalLiability={trendQuery.data?.total_liability ?? []}
-            netAsset={trendQuery.data?.net_asset ?? []}
-          />
+          <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
+            <TrendChart
+              dates={trendQuery.data?.dates ?? []}
+              totalAsset={trendQuery.data?.total_asset ?? []}
+              totalLiability={trendQuery.data?.total_liability ?? []}
+              netAsset={trendQuery.data?.net_asset ?? []}
+            />
+          </Suspense>
         </CardContent>
       </Card>
 
@@ -63,7 +70,9 @@ export function AnalyticsPage() {
             <CardTitle className="text-sm">资产波动率</CardTitle>
           </CardHeader>
           <CardContent>
-            <VolatilityChart data={volatilityQuery.data ?? []} />
+            <Suspense fallback={<Skeleton className="h-[320px] w-full" />}>
+              <VolatilityChart data={volatilityQuery.data ?? []} />
+            </Suspense>
           </CardContent>
         </Card>
 
@@ -119,7 +128,9 @@ export function AnalyticsPage() {
                 数据样本不足，无法计算相关性矩阵
               </div>
             ) : (
-              <CorrelationHeatmap data={correlationQuery.data!} />
+              <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
+                <CorrelationHeatmap data={correlationQuery.data!} />
+              </Suspense>
             )}
           </CardContent>
         </Card>
@@ -129,7 +140,9 @@ export function AnalyticsPage() {
             <CardTitle className="text-sm">家庭资产负债桑基图</CardTitle>
           </CardHeader>
           <CardContent>
-            <SankeyChart data={sankeyQuery.data ?? { nodes: [], links: [] }} />
+            <Suspense fallback={<Skeleton className="h-[460px] w-full" />}>
+              <SankeyChart data={sankeyQuery.data ?? { nodes: [], links: [] }} />
+            </Suspense>
           </CardContent>
         </Card>
       </div>

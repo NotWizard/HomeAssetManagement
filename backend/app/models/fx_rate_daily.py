@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 
 from app.core.database import Base
+from app.core.clock import utc_now_naive
 
 
 class FxRateDaily(Base):
@@ -28,4 +29,4 @@ class FxRateDaily(Base):
     rate: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
     is_estimated: Mapped[bool] = mapped_column(default=False)
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)

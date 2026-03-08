@@ -1,6 +1,5 @@
 import csv
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
@@ -16,6 +15,7 @@ from app.models.member import Member
 from app.services.category_service import CategoryService
 from app.services.common import get_default_family
 from app.services.holding_service import HoldingService
+from app.core.clock import utc_now_naive
 from app.services.snapshot_service import SnapshotService
 
 
@@ -76,7 +76,7 @@ class ImportService:
             inserted_rows=inserted,
             failed_rows=failed,
             error_report_path=None,
-            created_at=datetime.utcnow(),
+            created_at=utc_now_naive(),
         )
         session.add(import_log)
         session.flush()

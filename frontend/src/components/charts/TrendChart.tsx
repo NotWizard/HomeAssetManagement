@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import { ECharts } from './ECharts';
 
 type Props = {
   dates: string[];
@@ -53,5 +53,5 @@ export function TrendChart({ dates, totalAsset, totalLiability, netAsset }: Prop
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 360 }} />;
+  return <ECharts option={option} style={{ height: 360 }} />;
 }

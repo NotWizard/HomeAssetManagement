@@ -1,10 +1,9 @@
 import json
 from datetime import date
-from datetime import datetime
-
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import format_utc_iso_z
 from app.models.snapshot_daily import SnapshotDaily
 
 
@@ -49,5 +48,5 @@ def build_daily_series(session: Session, window: int = 90) -> dict:
         "total_liability": total_liability,
         "net_asset": net_asset,
         "asset_series": per_asset,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": format_utc_iso_z(),
     }

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
+import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
 import { exportMigrationPackage, importMigrationPackage } from '../services/migration';
 import { fetchSettings, updateSettings } from '../services/settings';
 import type { MigrationImportResult, SettingsUpdatePayload } from '../types';
@@ -90,12 +91,7 @@ export function SettingsPage() {
       setMigrationInputKey((prev) => prev + 1);
       await queryClient.invalidateQueries({ queryKey: ['settings'] });
       await queryClient.invalidateQueries({ queryKey: ['members'] });
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] });
-      await queryClient.invalidateQueries({ queryKey: ['trend'] });
-      await queryClient.invalidateQueries({ queryKey: ['rebalance'] });
-      await queryClient.invalidateQueries({ queryKey: ['volatility'] });
-      await queryClient.invalidateQueries({ queryKey: ['correlation'] });
-      await queryClient.invalidateQueries({ queryKey: ['sankey'] });
+      await invalidateHoldingRelatedQueries(queryClient);
     },
     onError: (e) => {
       setMigrationMessage(null);

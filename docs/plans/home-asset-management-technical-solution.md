@@ -1,7 +1,7 @@
-# 家庭资产管理系统 V1 技术方案（本地 Web）
+# 家庭资产管理系统 V1 技术方案（本地桌面优先）
 
 - 对应 PRD：`docs/plans/home-asset-management-prd.md`
-- 目标形态：本地 Web（单机、localhost、无登录）
+- 目标形态：本地桌面应用优先（Electron 打包分发，单机、localhost、无登录），开发阶段保留本地 Web 调试模式
 
 ## 1. 技术决策结论
 
@@ -21,10 +21,11 @@
 
 ## 2. 总体架构
 
-采用“前后端分离 + 单体后端分层”架构。
+采用“Electron 桌面壳 + 本地 FastAPI sidecar + React 前端 + 单体后端分层”的本地优先架构。
 
 ### 2.1 架构分层
 
+- **Desktop Shell（Electron）**：窗口管理、启动页、运行时配置注入、本地后端拉起与错误兜底。
 - **UI 层（React）**：页面渲染、交互、图表展示、输入校验。
 - **API 层（FastAPI）**：请求鉴权（V1 可无登录）、参数校验、响应封装、错误码。
 - **Domain 层（Service）**：成员管理、资产负债、CSV 导入、汇率、快照、再平衡。
@@ -34,11 +35,15 @@
 
 ### 2.2 运行方式
 
-- 本机运行两个进程：
-  - `frontend`：Vite Dev Server（开发）/静态文件服务（生产本地）
+- 开发模式运行两个进程：
+  - `frontend`：Vite Dev Server
   - `backend`：Uvicorn + FastAPI
+- 桌面分发模式运行一个桌面主进程 + 一个本地后端 sidecar：
+  - `desktop`：Electron 主进程、预加载桥、加载页 / 错误页
+  - `backend`：PyInstaller `onedir` 产出的本地可执行程序
 - 默认只绑定：`127.0.0.1`
-- 数据文件：`backend/data/app.db`
+- 开发模式数据文件：`backend/data/app.db`
+- 桌面模式数据文件：用户系统 `Application Support` 目录下的 SQLite
 
 ---
 
@@ -121,6 +126,16 @@ HomeAssetManagement/
       types/
       utils/
     package.json
+  desktop/
+    src/
+      main.ts
+      preload.ts
+      startup-page.ts
+    scripts/
+      build-backend.mjs
+      stage-resources.mjs
+    tests/
+    forge.config.ts
   docs/plans/
 ```
 
@@ -285,19 +300,20 @@ HomeAssetManagement/
 ## 6.1 页面与路由
 
 - `/`（总览）
+- `/analytics`
 - `/entry`
 - `/members`
 - `/import`
-- `/analytics`
-  - 页面内二级视角：`整体概览`、`风险与配置`、`币种总览`
 - `/settings`
+
+左侧导航顺序固定为：`总览 -> 分析看板 -> 资产负债录入 -> 成员管理 -> CSV导入 -> 设置`。
 
 ## 6.2 状态管理
 
 - 服务端状态：`TanStack Query`
   - 优点：请求缓存、并发请求、失败重试、自动失效重取。
 - 客户端轻状态：`Zustand`
-  - 页面筛选器、表格列配置、图表时间窗口、分析视角与选中币种。
+  - 页面筛选器、图表时间区间、分析视角与选中币种。
 
 ## 6.3 表单与校验
 
@@ -339,6 +355,8 @@ HomeAssetManagement/
 - 导入页面展示可下载错误报告。
 - 左侧导航与右侧顶部栏均采用 `sticky` 行为，滚动时保持可见。
 - 成员管理从资产录入页抽离为独立菜单页，录入页仅做成员选择与缺省引导。
+- 分析看板的日期区间筛选采用卡片式时间组件，顶部区间摘要与下方开始/结束日期卡片都应支持整块点击触发原生日期选择器。
+- 侧边栏底部不再显示“本地模式 / 无登录”辅助文案，避免重复噪音。
 
 ---
 
@@ -447,6 +465,8 @@ V1 固定使用 `frankfurter`：
 2. CSV 导入（<=5000 行）可在可接受时间内完成。
 3. 图表接口采用按需计算 + 可选结果缓存（window 维度缓存）。
 4. 分析计算在后端完成，前端仅渲染，降低浏览器负担。
+5. 桌面后端采用 `PyInstaller onedir`，降低 `onefile` 解包带来的冷启动开销。
+6. Electron 主进程在等待本地后端健康检查时先展示品牌化加载页，避免首启无反馈。
 
 ---
 
@@ -484,11 +504,14 @@ V1 固定使用 `frankfurter`：
 - 后端：`uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`
 - 前端：`vite --host 127.0.0.1 --port 5173`
 
-## 13.2 本地生产模式（建议）
+## 13.2 桌面生产模式（当前主分发方式）
 
 1. 前端打包为静态文件。
-2. 后端可挂载静态目录并统一由 FastAPI 提供访问（简化双进程）。
-3. 数据库文件与日志文件放入 `backend/data`、`backend/logs`。
+2. 后端通过 `PyInstaller onedir` 生成本地 sidecar 可执行程序。
+3. Electron 主进程拉起本地后端，等待健康检查通过后再切换到正式页面。
+4. FastAPI 在桌面模式下托管前端静态资源，并通过运行时注入或同源回退解析 API 地址。
+5. 安装包由 `Electron Forge` 产出，当前以 macOS `DMG/ZIP` 为主。
+6. 当前尚未接入代码签名与 notarization，首次打开仍可能需要按手册在系统设置中手动放行。
 
 ---
 

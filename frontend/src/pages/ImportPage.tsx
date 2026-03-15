@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
 import { commitImport, fetchImportLogs, previewImport, type ImportPreview } from '../services/imports';
 
 export function ImportPage() {
@@ -32,9 +33,7 @@ export function ImportPage() {
     onSuccess: async () => {
       setError(null);
       await queryClient.invalidateQueries({ queryKey: ['import-logs'] });
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] });
-      await queryClient.invalidateQueries({ queryKey: ['trend'] });
-      await queryClient.invalidateQueries({ queryKey: ['rebalance'] });
+      await invalidateHoldingRelatedQueries(queryClient);
     },
     onError: (e) => setError(String(e)),
   });

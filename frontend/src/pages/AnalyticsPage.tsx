@@ -1,11 +1,11 @@
 import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CalendarDays, Coins, Sparkles } from 'lucide-react';
+import { AlertTriangle, Coins, Sparkles } from 'lucide-react';
 
+import { AnalyticsDateRangePicker } from '../components/analytics/AnalyticsDateRangePicker';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -52,13 +52,6 @@ const CURRENCY_LABELS: Record<string, string> = {
   CHF: 'CHF（瑞士法郎）',
   SGD: 'SGD（新加坡元）',
 };
-
-function formatDateRangeLabel(startDate: string, endDate: string): string {
-  if (!startDate || !endDate) {
-    return '请选择日期区间';
-  }
-  return `${startDate} 至 ${endDate}`;
-}
 
 export function AnalyticsPage() {
   const analyticsDateRange = useUIStore((state) => state.analyticsDateRange);
@@ -168,31 +161,12 @@ export function AnalyticsPage() {
             </div>
           )
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 lg:w-auto">
-            <label className="space-y-1 text-sm">
-              <span className="flex items-center gap-1 text-muted-foreground">
-                <CalendarDays className="h-4 w-4" />
-                开始日期
-              </span>
-              <Input
-                type="date"
-                className="min-w-[168px]"
-                value={analyticsDateRange.startDate}
-                max={analyticsDateRange.endDate}
-                onChange={(event) => handleStartDateChange(event.target.value)}
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="text-muted-foreground">结束日期</span>
-              <Input
-                type="date"
-                className="min-w-[168px]"
-                value={analyticsDateRange.endDate}
-                min={analyticsDateRange.startDate}
-                onChange={(event) => handleEndDateChange(event.target.value)}
-              />
-            </label>
-          </div>
+          <AnalyticsDateRangePicker
+            startDate={analyticsDateRange.startDate}
+            endDate={analyticsDateRange.endDate}
+            onStartDateChange={handleStartDateChange}
+            onEndDateChange={handleEndDateChange}
+          />
         )}
       </div>
 
@@ -211,9 +185,6 @@ export function AnalyticsPage() {
             ))}
           </div>
           <p className="mt-3 text-sm text-muted-foreground">{currentView.description}</p>
-          {analyticsView !== 'currency' ? (
-            <p className="mt-2 text-xs text-muted-foreground">当前区间：{formatDateRangeLabel(analyticsDateRange.startDate, analyticsDateRange.endDate)}</p>
-          ) : null}
         </CardContent>
       </Card>
 

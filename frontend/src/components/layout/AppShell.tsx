@@ -14,10 +14,10 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { key: 'overview', label: '总览', icon: <Home className="h-4 w-4" />, path: '/' },
+  { key: 'analytics', label: '分析看板', icon: <ChartSpline className="h-4 w-4" />, path: '/analytics' },
   { key: 'entry', label: '资产负债录入', icon: <Database className="h-4 w-4" />, path: '/entry' },
   { key: 'members', label: '成员管理', icon: <UsersRound className="h-4 w-4" />, path: '/members' },
-  { key: 'import', label: 'CSV 导入', icon: <Import className="h-4 w-4" />, path: '/import' },
-  { key: 'analytics', label: '分析看板', icon: <ChartSpline className="h-4 w-4" />, path: '/analytics' },
+  { key: 'import', label: 'CSV导入', icon: <Import className="h-4 w-4" />, path: '/import' },
   { key: 'settings', label: '设置', icon: <Settings2 className="h-4 w-4" />, path: '/settings' },
 ];
 
@@ -64,7 +64,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           );
         })}
       </nav>
-      <div className="mt-auto p-3 text-xs text-muted-foreground">本地模式 / 无登录</div>
     </div>
   );
 

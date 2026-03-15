@@ -13,6 +13,7 @@ import { Select } from '../components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Tooltip } from '../components/ui/tooltip';
 import { fetchCategories } from '../services/categories';
+import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
 import {
   bulkDeleteHoldings,
   createHolding,
@@ -154,25 +155,13 @@ export function EntryPage() {
   const assetCategoryQuery = useQuery({ queryKey: ['categories', 'asset'], queryFn: () => fetchCategories('asset') });
   const liabilityCategoryQuery = useQuery({ queryKey: ['categories', 'liability'], queryFn: () => fetchCategories('liability') });
 
-  const refreshHoldingRelatedQueries = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['holdings'] }),
-      queryClient.invalidateQueries({ queryKey: ['trend'] }),
-      queryClient.invalidateQueries({ queryKey: ['rebalance'] }),
-      queryClient.invalidateQueries({ queryKey: ['sankey'] }),
-      queryClient.invalidateQueries({ queryKey: ['volatility'] }),
-      queryClient.invalidateQueries({ queryKey: ['correlation'] }),
-      queryClient.invalidateQueries({ queryKey: ['currency-overview'] }),
-    ]);
-  };
-
   const createHoldingMutation = useMutation({
     mutationFn: createHolding,
     onSuccess: async () => {
       setOpen(false);
       setForm(INITIAL_FORM);
       setEditing(null);
-      await refreshHoldingRelatedQueries();
+      await invalidateHoldingRelatedQueries(queryClient);
     },
   });
 
@@ -182,14 +171,14 @@ export function EntryPage() {
       setOpen(false);
       setForm(INITIAL_FORM);
       setEditing(null);
-      await refreshHoldingRelatedQueries();
+      await invalidateHoldingRelatedQueries(queryClient);
     },
   });
 
   const deleteHoldingMutation = useMutation({
     mutationFn: deleteHolding,
     onSuccess: async () => {
-      await refreshHoldingRelatedQueries();
+      await invalidateHoldingRelatedQueries(queryClient);
     },
   });
 
@@ -201,7 +190,7 @@ export function EntryPage() {
       setMemberDeleteOpen(false);
       setMemberDeleteId('');
       setBulkDeleteError(null);
-      await refreshHoldingRelatedQueries();
+      await invalidateHoldingRelatedQueries(queryClient);
     },
     onError: (mutationError) => {
       setBulkDeleteError(buildBulkErrorMessage(mutationError));

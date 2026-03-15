@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     fx_fallback_url: str = "https://api.exchangerate.host"
 
     storage_dir: str = "backend/data"
+    frontend_dist_dir: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="HAM_")
 

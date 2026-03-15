@@ -1,6 +1,5 @@
 import type { ApiResponse, MigrationImportResult } from '../types';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1';
+import { getApiBaseUrl } from '../config/runtime';
 
 function resolveFilename(response: Response) {
   const disposition = response.headers.get('content-disposition') ?? '';
@@ -18,7 +17,7 @@ async function parseApiError(response: Response) {
 }
 
 export async function exportMigrationPackage() {
-  const response = await fetch(`${API_BASE}/migration/export`, {
+  const response = await fetch(`${getApiBaseUrl()}/migration/export`, {
     method: 'POST',
   });
 
@@ -44,7 +43,7 @@ export async function importMigrationPackage(file: File) {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_BASE}/migration/import`, {
+  const response = await fetch(`${getApiBaseUrl()}/migration/import`, {
     method: 'POST',
     body: formData,
   });

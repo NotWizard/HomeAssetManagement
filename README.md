@@ -217,6 +217,31 @@ npm --prefix frontend run preview
 npm --prefix frontend run typecheck
 ```
 
+### 桌面版打包（macOS）
+
+桌面版当前采用 `Electron + FastAPI sidecar` 方案，面向非技术用户分发时建议使用桌面安装包，而不是让用户手工启动前后端命令。
+
+首次准备桌面打包环境：
+
+```bash
+source .venv/bin/activate
+pip install -r backend/requirements-desktop.txt
+npm --prefix desktop install
+```
+
+生成桌面安装包：
+
+```bash
+npm --prefix desktop run make
+```
+
+说明：
+
+- 前端会先执行生产构建
+- 后端会先通过 `PyInstaller` 生成 `backend/dist-desktop/ham-backend/ham-backend`
+- Electron Forge 会读取 `desktop/.stage/` 中整理后的资源并产出 macOS 安装包
+- 当前阶段未接入代码签名与 notarization，首次在用户机器打开时，可能需要按手册到系统设置中手动放行
+
 ## API 概览
 
 后端统一挂载在 `/api/v1` 下，当前主要路由分组如下：

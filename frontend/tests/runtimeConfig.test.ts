@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import test from 'node:test';
+
+const FRONTEND_ROOT = process.cwd();
+
+test('桌面运行时配置可以覆盖 Vite 环境变量中的 API 地址', async () => {
+  const runtimeModule = await import('../src/config/runtime.ts');
+
+  assert.equal(
+    runtimeModule.resolveApiBaseUrl(
+      { apiBaseUrl: 'http://127.0.0.1:9527/api/v1' },
+      'http://127.0.0.1:8000/api/v1'
+    ),
+    'http://127.0.0.1:9527/api/v1'
+  );
+});
+
+test('缺少运行时配置时会回退到默认 API 地址', async () => {
+  const runtimeModule = await import('../src/config/runtime.ts');
+
+  assert.equal(
+    runtimeModule.resolveApiBaseUrl(undefined, undefined),
+    'http://127.0.0.1:8000/api/v1'
+  );
+});
+
+test('桌面版同源托管时会优先回退到当前窗口 origin 下的 API 地址', async () => {
+  const runtimeModule = await import('../src/config/runtime.ts');
+
+  assert.equal(
+    runtimeModule.resolveApiBaseUrl(
+      undefined,
+      undefined,
+      'http://127.0.0.1:18991'
+    ),
+    'http://127.0.0.1:18991/api/v1'
+  );
+});
+
+test('服务层统一通过运行时配置模块解析 API 地址', () => {
+  const apiClientSource = readFileSync(resolve(FRONTEND_ROOT, 'src/services/apiClient.ts'), 'utf8');
+  const migrationSource = readFileSync(resolve(FRONTEND_ROOT, 'src/services/migration.ts'), 'utf8');
+
+  assert.match(apiClientSource, /getApiBaseUrl\(\)/);
+  assert.match(migrationSource, /getApiBaseUrl\(\)/);
+});

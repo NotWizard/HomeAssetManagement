@@ -41,13 +41,17 @@ def build_daily_series(
         net_asset.append(float(totals.get("net_asset", 0.0)))
 
         seen_assets: set[str] = set()
+        day_asset_totals: dict[str, float] = {}
         for item in payload.get("holdings", []):
             if item.get("type") != "asset":
                 continue
             name = item.get("name") or f"asset_{item.get('id')}"
             seen_assets.add(name)
+            day_asset_totals[name] = day_asset_totals.get(name, 0.0) + float(item.get("amount_base", 0.0))
+
+        for name, amount_base in day_asset_totals.items():
             per_asset.setdefault(name, [None] * index)
-            per_asset[name].append(float(item.get("amount_base", 0.0)))
+            per_asset[name].append(amount_base)
 
         for name, values in per_asset.items():
             if name not in seen_assets and len(values) == index:

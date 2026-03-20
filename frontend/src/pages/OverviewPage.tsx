@@ -1,6 +1,6 @@
 import { type ReactNode, Suspense, lazy, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownRight, ArrowUpRight, Globe, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Globe, Wallet } from 'lucide-react';
 
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -31,8 +31,9 @@ function formatDelta(value: number | null): string {
 export function OverviewPage() {
   const trendQuery = useQuery({ queryKey: ['trend', 'overview'], queryFn: () => fetchTrend(90) });
   const holdingsQuery = useQuery({ queryKey: ['holdings', 'overview'], queryFn: fetchHoldings });
-  const rebalanceQuery = useQuery({ queryKey: ['rebalance', 'overview'], queryFn: fetchRebalance });
+  const rebalanceQuery = useQuery({ queryKey: ['rebalance', 'overview'], queryFn: () => fetchRebalance() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'overview'], queryFn: fetchSettings });
+  const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 
   const latest = useMemo(() => {
     if (!trendQuery.data || trendQuery.data.net_asset.length === 0) {
@@ -78,6 +79,13 @@ export function OverviewPage() {
   }, [holdingsQuery.data]);
 
   const loading = trendQuery.isLoading || holdingsQuery.isLoading;
+  const hasError = trendQuery.isError || holdingsQuery.isError || settingsQuery.isError || rebalanceQuery.isError;
+  const errorMessage =
+    (trendQuery.error instanceof Error && trendQuery.error.message) ||
+    (holdingsQuery.error instanceof Error && holdingsQuery.error.message) ||
+    (settingsQuery.error instanceof Error && settingsQuery.error.message) ||
+    (rebalanceQuery.error instanceof Error && rebalanceQuery.error.message) ||
+    '请求失败';
 
   return (
     <div className="space-y-5">
@@ -92,10 +100,22 @@ export function OverviewPage() {
         </div>
       </div>
 
+      {hasError ? (
+        <Card className="border-rose-200 bg-rose-50/50">
+          <CardContent className="flex items-start gap-2 p-4 text-sm text-rose-700">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium">数据加载失败</p>
+              <p className="mt-1 text-xs text-rose-700/90">{errorMessage}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="净资产"
-          value={formatCurrency(latest.netAsset)}
+          value={formatCurrency(latest.netAsset, baseCurrency)}
           delta={formatDelta(latest.netAssetDelta)}
           positive={(latest.netAssetDelta ?? 0) >= 0}
           icon={<Wallet className="h-4 w-4" />}
@@ -103,7 +123,7 @@ export function OverviewPage() {
         />
         <MetricCard
           title="总资产"
-          value={formatCurrency(latest.totalAsset)}
+          value={formatCurrency(latest.totalAsset, baseCurrency)}
           delta={formatDelta(latest.totalAssetDelta)}
           positive={(latest.totalAssetDelta ?? 0) >= 0}
           icon={<ArrowUpRight className="h-4 w-4" />}
@@ -111,7 +131,7 @@ export function OverviewPage() {
         />
         <MetricCard
           title="总负债"
-          value={formatCurrency(latest.totalLiability)}
+          value={formatCurrency(latest.totalLiability, baseCurrency)}
           delta={formatDelta(latest.totalLiabilityDelta)}
           positive={(latest.totalLiabilityDelta ?? 0) <= 0}
           icon={<ArrowDownRight className="h-4 w-4" />}
@@ -133,7 +153,11 @@ export function OverviewPage() {
             <CardTitle className="text-sm">资产总览趋势</CardTitle>
           </CardHeader>
           <CardContent>
-            {trendQuery.data ? (
+            {trendQuery.isError ? (
+              <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
+                趋势数据加载失败：{errorMessage}
+              </div>
+            ) : trendQuery.data ? (
               <Suspense fallback={<Skeleton className="h-72 w-full" />}>
                 <TrendChart
                   dates={trendQuery.data.dates}
@@ -168,7 +192,7 @@ export function OverviewPage() {
                         <p className="font-medium">{item.name}</p>
                         <p className="text-xs text-muted-foreground">{item.currency}</p>
                       </TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.amount_base)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(item.amount_base, baseCurrency)}</TableCell>
                     </TableRow>
                   ))
                 ) : (

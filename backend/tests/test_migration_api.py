@@ -42,11 +42,15 @@ def _seed_exportable_data(client: TestClient) -> dict:
         '/api/v1/settings',
         json={
             'base_currency': 'CNY',
-            'timezone': 'Asia/Tokyo',
             'rebalance_threshold_pct': 7,
         },
     )
     assert settings_resp.status_code == 200
+    with SessionLocal() as session:
+        settings = session.scalar(select(SettingsModel).limit(1))
+        assert settings is not None
+        settings.timezone = 'Asia/Tokyo'
+        session.commit()
 
     alice_resp = client.post('/api/v1/members', json={'name': 'Alice'})
     bob_resp = client.post('/api/v1/members', json={'name': 'Bob'})
@@ -210,7 +214,6 @@ def test_import_migration_replaces_existing_data():
             '/api/v1/settings',
             json={
                 'base_currency': 'CNY',
-                'timezone': 'UTC',
                 'rebalance_threshold_pct': 9,
             },
         )

@@ -1,4 +1,4 @@
-# Home Asset Management V1 Implementation Plan
+# Household Balance Sheet V1 Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
@@ -14,7 +14,7 @@
 
 **Files:**
 - Create: `backend/`, `frontend/` base structure and config files
-- Modify: `docs/plans/home-asset-management-technical-solution.md`
+- Modify: `docs/plans/household-balance-sheet-technical-solution.md`
 - Test: `backend/tests/test_smoke.py`
 
 **Step 1: Write the failing test**
@@ -130,7 +130,7 @@
 
 **Files:**
 - Create: `README.md`, `backend/README.md`, `frontend/README.md`
-- Modify: `docs/plans/home-asset-management-technical-solution.md`
+- Modify: `docs/plans/household-balance-sheet-technical-solution.md`
 
 **Step 1: Run full verification**
 - `pytest backend/tests -q`

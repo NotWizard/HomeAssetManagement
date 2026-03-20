@@ -1,1 +1,1 @@
-"""Home Asset Management backend package."""
+"""Household Balance Sheet backend package."""

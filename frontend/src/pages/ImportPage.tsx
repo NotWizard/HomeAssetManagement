@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
-import { commitImport, fetchImportLogs, previewImport, type ImportPreview } from '../services/imports';
+import { commitImport, downloadImportErrors, fetchImportLogs, previewImport, type ImportPreview } from '../services/imports';
 
 export function ImportPage() {
   const queryClient = useQueryClient();
@@ -16,6 +16,8 @@ export function ImportPage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [downloadingImportId, setDownloadingImportId] = useState<number | null>(null);
 
   const logsQuery = useQuery({ queryKey: ['import-logs'], queryFn: fetchImportLogs });
 
@@ -37,6 +39,18 @@ export function ImportPage() {
     },
     onError: (e) => setError(String(e)),
   });
+
+  const handleDownloadErrors = async (importId: number) => {
+    try {
+      setDownloadError(null);
+      setDownloadingImportId(importId);
+      await downloadImportErrors(importId);
+    } catch (e) {
+      setDownloadError(e instanceof Error ? e.message : '下载失败');
+    } finally {
+      setDownloadingImportId(null);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -75,12 +89,18 @@ export function ImportPage() {
               <FileUp className="mr-2 h-4 w-4" />
               预检
             </Button>
-            <Button onClick={() => file && commitMutation.mutate(file)} disabled={!file || commitMutation.isPending}>
+            <Button
+              onClick={() => file && commitMutation.mutate(file)}
+              disabled={!file || !preview || commitMutation.isPending}
+            >
               提交导入
             </Button>
           </div>
 
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+          {!preview && file ? (
+            <p className="text-sm text-muted-foreground">请先点击“预检”，确认导入影响后再提交。</p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -136,6 +156,7 @@ export function ImportPage() {
                   <TableHead>新增</TableHead>
                   <TableHead>更新</TableHead>
                   <TableHead>失败</TableHead>
+                  <TableHead className="text-right">错误明细</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -147,11 +168,25 @@ export function ImportPage() {
                     <TableCell>{row.inserted_rows}</TableCell>
                     <TableCell>{row.updated_rows}</TableCell>
                     <TableCell>{row.failed_rows}</TableCell>
+                    <TableCell className="text-right">
+                      {row.failed_rows > 0 && row.error_report_path ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownloadErrors(row.id)}
+                          disabled={downloadingImportId === row.id}
+                        >
+                          {downloadingImportId === row.id ? '下载中...' : '下载'}
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {(logsQuery.data ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
                       暂无导入记录
                     </TableCell>
                   </TableRow>
@@ -159,6 +194,7 @@ export function ImportPage() {
               </TableBody>
             </Table>
           </div>
+          {downloadError ? <p className="mt-3 text-sm text-rose-600">{downloadError}</p> : null}
         </CardContent>
       </Card>
     </div>

@@ -14,11 +14,11 @@ const extraResource = [frontendDistDir, backendBundleDir].filter((resourcePath) 
 
 const config: ForgeConfig = {
   packagerConfig: {
-    appBundleId: 'com.homeassetmanagement.desktop',
+    appBundleId: 'com.householdbalancesheet.desktop',
     appCategoryType: 'public.app-category.finance',
     asar: true,
     extraResource,
-    name: 'HomeAssetManagement',
+    name: 'HouseholdBalanceSheet',
   },
   makers: [
     {

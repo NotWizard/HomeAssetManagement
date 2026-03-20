@@ -99,6 +99,16 @@ function buildAnalyticsQuery(filters: number | AnalyticsDateRange): string {
   return params.toString();
 }
 
+function buildDateRangeQuery(filters?: AnalyticsDateRange): string {
+  if (!filters?.startDate || !filters?.endDate) {
+    return '';
+  }
+  const params = new URLSearchParams();
+  params.set('start_date', filters.startDate);
+  params.set('end_date', filters.endDate);
+  return params.toString();
+}
+
 export function fetchTrend(filters: number | AnalyticsDateRange = 90) {
   return getJSON<TrendData>(`/analytics/trend?${buildAnalyticsQuery(filters)}`);
 }
@@ -111,12 +121,14 @@ export function fetchCorrelation(filters: number | AnalyticsDateRange = 90) {
   return getJSON<CorrelationData>(`/analytics/correlation?${buildAnalyticsQuery(filters)}`);
 }
 
-export function fetchSankey() {
-  return getJSON<SankeyData>('/analytics/sankey');
+export function fetchSankey(filters?: AnalyticsDateRange) {
+  const query = buildDateRangeQuery(filters);
+  return getJSON<SankeyData>(query ? `/analytics/sankey?${query}` : '/analytics/sankey');
 }
 
-export function fetchRebalance() {
-  return getJSON<RebalanceItem[]>('/analytics/rebalance');
+export function fetchRebalance(filters?: AnalyticsDateRange) {
+  const query = buildDateRangeQuery(filters);
+  return getJSON<RebalanceItem[]>(query ? `/analytics/rebalance?${query}` : '/analytics/rebalance');
 }
 
 export function fetchCurrencyOverview() {

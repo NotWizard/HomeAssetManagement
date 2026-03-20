@@ -1,9 +1,14 @@
+from datetime import date
+from decimal import Decimal
+
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal
+from app.models.fx_rate_daily import FxRateDaily
 from app.main import app
 from app.models.holding_item import HoldingItem
 from app.models.member import Member
+from app.models.settings import SettingsModel
 from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
 from app.services.bootstrap import init_database
@@ -14,8 +19,10 @@ def _reset_runtime_data() -> None:
     with SessionLocal() as session:
         session.query(SnapshotEvent).delete()
         session.query(SnapshotDaily).delete()
+        session.query(FxRateDaily).delete()
         session.query(HoldingItem).delete()
         session.query(Member).delete()
+        session.query(SettingsModel).delete()
         session.commit()
 
 
@@ -64,6 +71,104 @@ def test_create_holding_via_api_creates_snapshot():
 
         snapshots = client.get("/api/v1/snapshots/events").json()["data"]
         assert len(snapshots) >= 1
+
+
+def test_create_holding_uses_correct_fx_direction_for_foreign_currency():
+    _reset_runtime_data()
+    with SessionLocal() as session:
+        session.add(
+            FxRateDaily(
+                rate_date=date.today(),
+                base_currency="CNY",
+                quote_currency="USD",
+                rate=Decimal("0.14"),
+                provider="test",
+                is_estimated=False,
+            )
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Bob"})
+        member_id = member_resp.json()["data"]["id"]
+
+        category_resp = client.get("/api/v1/categories", params={"type": "asset"})
+        tree = category_resp.json()["data"]
+        l1, l2, l3 = tree[0], tree[0]["children"][0], tree[0]["children"][0]["children"][0]
+
+        create_resp = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "US ETF",
+                "category_l1_id": l1["id"],
+                "category_l2_id": l2["id"],
+                "category_l3_id": l3["id"],
+                "currency": "USD",
+                "amount_original": "100",
+                "target_ratio": "10",
+            },
+        )
+
+    assert create_resp.status_code == 200
+    assert round(create_resp.json()["data"]["amount_base"], 2) == 714.29
+
+
+def test_update_settings_revalues_existing_holdings_and_daily_snapshot():
+    _reset_runtime_data()
+    with SessionLocal() as session:
+        session.add(
+            FxRateDaily(
+                rate_date=date.today(),
+                base_currency="USD",
+                quote_currency="CNY",
+                rate=Decimal("7"),
+                provider="test",
+                is_estimated=False,
+            )
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Carol"})
+        member_id = member_resp.json()["data"]["id"]
+
+        category_resp = client.get("/api/v1/categories", params={"type": "asset"})
+        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金与存款", "银行存款", "活期存款"))
+
+        create_resp = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "家庭备用金",
+                "category_l1_id": asset_l1["id"],
+                "category_l2_id": asset_l2["id"],
+                "category_l3_id": asset_l3["id"],
+                "currency": "CNY",
+                "amount_original": "700",
+                "target_ratio": "10",
+            },
+        )
+        assert create_resp.status_code == 200
+
+        update_resp = client.put(
+            "/api/v1/settings",
+            json={
+                "base_currency": "USD",
+                "rebalance_threshold_pct": 5,
+            },
+        )
+        holdings_resp = client.get("/api/v1/holdings")
+        trend_resp = client.get("/api/v1/analytics/trend", params={"window": 30})
+
+    assert update_resp.status_code == 200
+    assert holdings_resp.status_code == 200
+    assert trend_resp.status_code == 200
+    assert update_resp.json()["data"]["base_currency"] == "USD"
+    assert holdings_resp.json()["data"][0]["amount_base"] == 100.0
+    assert trend_resp.json()["data"]["total_asset"][-1] == 100.0
 
 
 def test_delete_holding_updates_daily_analytics_snapshot_immediately():

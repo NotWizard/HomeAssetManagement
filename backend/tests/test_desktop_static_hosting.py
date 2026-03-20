@@ -12,9 +12,9 @@ import app.main as app_main_module
 def load_app(monkeypatch):
     def _load(frontend_dist_dir: Path | None = None):
         if frontend_dist_dir is None:
-            monkeypatch.delenv("HAM_FRONTEND_DIST_DIR", raising=False)
+            monkeypatch.delenv("HBS_FRONTEND_DIST_DIR", raising=False)
         else:
-            monkeypatch.setenv("HAM_FRONTEND_DIST_DIR", str(frontend_dist_dir))
+            monkeypatch.setenv("HBS_FRONTEND_DIST_DIR", str(frontend_dist_dir))
 
         config_module.get_settings.cache_clear()
         importlib.reload(config_module)
@@ -23,7 +23,7 @@ def load_app(monkeypatch):
 
     yield _load
 
-    monkeypatch.delenv("HAM_FRONTEND_DIST_DIR", raising=False)
+    monkeypatch.delenv("HBS_FRONTEND_DIST_DIR", raising=False)
     config_module.get_settings.cache_clear()
     importlib.reload(config_module)
     importlib.reload(app_main_module)

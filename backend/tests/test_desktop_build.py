@@ -7,7 +7,7 @@ from build_desktop import build_pyinstaller_args
 
 
 def test_build_output_paths_match_desktop_bundle_layout():
-    project_root = Path("/tmp/home-asset-management")
+    project_root = Path("/tmp/household-balance-sheet")
 
     paths = build_output_paths(project_root)
 
@@ -23,7 +23,7 @@ def test_build_output_paths_match_desktop_bundle_layout():
 
 
 def test_pyinstaller_args_target_onedir_binary_for_desktop_bundle():
-    project_root = Path("/tmp/home-asset-management")
+    project_root = Path("/tmp/household-balance-sheet")
 
     args = build_pyinstaller_args(project_root)
 
@@ -43,7 +43,7 @@ def test_pyinstaller_args_target_onedir_binary_for_desktop_bundle():
 
 
 def test_pyinstaller_environment_uses_workspace_local_cache_dir():
-    project_root = Path("/tmp/home-asset-management")
+    project_root = Path("/tmp/household-balance-sheet")
 
     env = build_pyinstaller_environment(project_root)
 

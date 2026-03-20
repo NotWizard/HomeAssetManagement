@@ -1,10 +1,10 @@
-import type { HamRuntimeConfig } from '../config/runtime';
+import type { HbsRuntimeConfig } from '../config/runtime';
 
 declare global {
-  var __HAM_RUNTIME_CONFIG__: HamRuntimeConfig | undefined;
+  var __HBS_RUNTIME_CONFIG__: HbsRuntimeConfig | undefined;
 
   interface Window {
-    __HAM_RUNTIME_CONFIG__?: HamRuntimeConfig;
+    __HBS_RUNTIME_CONFIG__?: HbsRuntimeConfig;
   }
 }
 

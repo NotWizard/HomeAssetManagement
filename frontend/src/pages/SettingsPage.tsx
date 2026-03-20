@@ -28,10 +28,12 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const timezoneDisplay = settingsQuery.data?.timezone
+    ? settingsQuery.data.timezone
+    : `${browserTimezone}（本机默认，未从服务端读取到）`;
 
   const [form, setForm] = useState<SettingsUpdatePayload>({
     base_currency: 'CNY',
-    timezone: browserTimezone,
     rebalance_threshold_pct: 5,
   });
   const [error, setError] = useState<string | null>(null);
@@ -52,11 +54,10 @@ export function SettingsPage() {
     if (settingsQuery.data) {
       setForm({
         base_currency: settingsQuery.data.base_currency,
-        timezone: browserTimezone || settingsQuery.data.timezone,
         rebalance_threshold_pct: settingsQuery.data.rebalance_threshold_pct,
       });
     }
-  }, [settingsQuery.data, browserTimezone]);
+  }, [settingsQuery.data]);
 
   const mutation = useMutation({
     mutationFn: updateSettings,
@@ -104,10 +105,6 @@ export function SettingsPage() {
       setError('基准币种不能为空');
       return;
     }
-    if (!form.timezone.trim()) {
-      setError('时区不能为空');
-      return;
-    }
     if (form.rebalance_threshold_pct <= 0 || form.rebalance_threshold_pct >= 100) {
       setError('再平衡阈值应在 0 到 100 之间');
       return;
@@ -148,8 +145,8 @@ export function SettingsPage() {
               />
             </Field>
             <Field label="时区">
-              <Input value={form.timezone} disabled readOnly />
-              <p className="text-xs text-muted-foreground">默认读取本机时区，不支持手动修改</p>
+              <Input value={timezoneDisplay} disabled readOnly />
+              <p className="text-xs text-muted-foreground">优先显示服务端时区；未读取到时回退为本机时区，不支持手动修改</p>
             </Field>
             <Field label="再平衡阈值(%)">
               <Input

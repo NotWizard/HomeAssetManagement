@@ -24,6 +24,7 @@ import {
   type HoldingPayload,
 } from '../services/holdings';
 import { fetchMembers } from '../services/members';
+import { fetchSettings } from '../services/settings';
 import type { CategoryNode, Holding } from '../types';
 import { formatCurrency } from '../utils/format';
 
@@ -141,6 +142,7 @@ export function EntryPage() {
   const [editing, setEditing] = useState<Holding | null>(null);
   const [form, setForm] = useState<EntryFormState>(INITIAL_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
   const [memberFilter, setMemberFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState<HoldingFilterType>('all');
@@ -154,6 +156,8 @@ export function EntryPage() {
   const holdingsQuery = useQuery({ queryKey: ['holdings'], queryFn: fetchHoldings });
   const assetCategoryQuery = useQuery({ queryKey: ['categories', 'asset'], queryFn: () => fetchCategories('asset') });
   const liabilityCategoryQuery = useQuery({ queryKey: ['categories', 'liability'], queryFn: () => fetchCategories('liability') });
+  const settingsQuery = useQuery({ queryKey: ['settings', 'entry'], queryFn: fetchSettings });
+  const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 
   const createHoldingMutation = useMutation({
     mutationFn: createHolding,
@@ -161,7 +165,11 @@ export function EntryPage() {
       setOpen(false);
       setForm(INITIAL_FORM);
       setEditing(null);
+      setError(null);
       await invalidateHoldingRelatedQueries(queryClient);
+    },
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : '保存失败，请稍后重试');
     },
   });
 
@@ -171,14 +179,22 @@ export function EntryPage() {
       setOpen(false);
       setForm(INITIAL_FORM);
       setEditing(null);
+      setError(null);
       await invalidateHoldingRelatedQueries(queryClient);
+    },
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : '保存失败，请稍后重试');
     },
   });
 
   const deleteHoldingMutation = useMutation({
     mutationFn: deleteHolding,
     onSuccess: async () => {
+      setActionError(null);
       await invalidateHoldingRelatedQueries(queryClient);
+    },
+    onError: (e) => {
+      setActionError(e instanceof Error ? e.message : '删除失败，请稍后重试');
     },
   });
 
@@ -479,6 +495,11 @@ export function EntryPage() {
           <CardTitle className="text-sm">录入列表</CardTitle>
         </CardHeader>
         <CardContent>
+          {actionError ? (
+            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+              {actionError}
+            </div>
+          ) : null}
           <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div className="grid gap-3 md:grid-cols-3 xl:flex-1">
               <div>
@@ -568,14 +589,19 @@ export function EntryPage() {
                     <TableCell>{memberNameMap.get(row.member_id) ?? row.member_id}</TableCell>
                     <TableCell>{row.currency}</TableCell>
                     <TableCell className="text-right">{formatCurrency(row.amount_original, row.currency)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(row.amount_base)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(row.amount_base, baseCurrency)}</TableCell>
                     <TableCell className="text-right">{row.target_ratio == null ? '-' : `${row.target_ratio}%`}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="icon" onClick={() => openEditDialog(row)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteHoldingMutation.mutate(row.id)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteHoldingMutation.mutate(row.id)}
+                          disabled={deleteHoldingMutation.isPending}
+                        >
                           <Trash2 className="h-4 w-4 text-rose-500" />
                         </Button>
                       </div>
@@ -632,7 +658,7 @@ export function EntryPage() {
             </div>
             <div className="rounded-lg border bg-secondary/20 p-3">
               <div className="text-xs text-muted-foreground">折算金额</div>
-              <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedSummary.totalBase)}</div>
+              <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedSummary.totalBase, baseCurrency)}</div>
             </div>
           </div>
           <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
@@ -686,7 +712,7 @@ export function EntryPage() {
             </div>
             <div className="rounded-lg border bg-secondary/20 p-3">
               <div className="text-xs text-muted-foreground">折算金额</div>
-              <div className="mt-1 text-lg font-semibold">{formatCurrency(memberDeleteSummary.totalBase)}</div>
+              <div className="mt-1 text-lg font-semibold">{formatCurrency(memberDeleteSummary.totalBase, baseCurrency)}</div>
             </div>
           </div>
           <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">

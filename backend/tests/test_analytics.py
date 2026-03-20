@@ -250,6 +250,49 @@ def test_build_daily_series_generated_at_uses_utc_z_suffix():
     assert parsed.tzinfo is UTC
 
 
+def test_build_daily_series_aggregates_duplicate_asset_names_within_same_day():
+    _reset_daily_snapshots()
+
+    payload = {
+        "totals": {
+            "total_asset": 300.0,
+            "total_liability": 0.0,
+            "net_asset": 300.0,
+        },
+        "holdings": [
+            {
+                "id": 1,
+                "name": "沪深300ETF",
+                "type": "asset",
+                "amount_base": 100.0,
+            },
+            {
+                "id": 2,
+                "name": "沪深300ETF",
+                "type": "asset",
+                "amount_base": 200.0,
+            },
+        ],
+    }
+
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        session.add(
+            SnapshotDaily(
+                family_id=family.id,
+                snapshot_date=date(2026, 3, 20),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+        session.commit()
+
+    with SessionLocal() as session:
+        result = build_daily_series(session, window=7)
+
+    assert result["dates"] == ["2026-03-20"]
+    assert result["asset_series"] == {"沪深300ETF": [300.0]}
+
+
 def test_trend_api_supports_date_range_filters():
     _reset_daily_snapshots()
 

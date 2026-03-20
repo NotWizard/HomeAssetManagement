@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <WalletCards className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-sm font-semibold tracking-wide">家庭资产管理系统</p>
+          <p className="text-sm font-semibold tracking-wide">家庭资产负债表</p>
         </div>
       </div>
       <nav className="space-y-1.5 p-3">

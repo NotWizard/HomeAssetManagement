@@ -35,8 +35,8 @@ export function buildDesktopPaths(options: DesktopPathOptions): DesktopPaths {
     ? join(
         resolveResourcesPath(options),
         'backend',
-        'ham-backend',
-        options.platform === 'win32' ? 'ham-backend.exe' : 'ham-backend'
+        'hbs-backend',
+        options.platform === 'win32' ? 'hbs-backend.exe' : 'hbs-backend'
       )
     : join(options.projectRoot, 'backend', 'desktop_server.py');
 
@@ -60,15 +60,15 @@ export function buildBackendEnvironment(
   options: BackendEnvironmentOptions
 ): Record<string, string> {
   const env: Record<string, string> = {
-    HAM_APP_ENV: 'desktop',
-    HAM_APP_HOST: '127.0.0.1',
-    HAM_APP_PORT: String(options.port),
-    HAM_DATABASE_URL: options.databaseUrl,
-    HAM_STORAGE_DIR: options.storageDir,
+    HBS_APP_ENV: 'desktop',
+    HBS_APP_HOST: '127.0.0.1',
+    HBS_APP_PORT: String(options.port),
+    HBS_DATABASE_URL: options.databaseUrl,
+    HBS_STORAGE_DIR: options.storageDir,
   };
 
   if (options.frontendDistDir) {
-    env.HAM_FRONTEND_DIST_DIR = options.frontendDistDir;
+    env.HBS_FRONTEND_DIST_DIR = options.frontendDistDir;
   }
 
   return env;

@@ -63,7 +63,12 @@ class ImportService:
                 _update_existing(session, row.payload)
                 updated += 1
             else:
-                HoldingService.create_holding(session, row.payload, source="csv")
+                HoldingService.create_holding(
+                    session,
+                    row.payload,
+                    source="csv",
+                    refresh_snapshots=False,
+                )
                 inserted += 1
 
         total = len(parsed)
@@ -86,6 +91,7 @@ class ImportService:
             import_log.error_report_path = str(path)
 
         SnapshotService.create_event_snapshot(session, trigger_type="import", note=filename)
+        SnapshotService.create_daily_snapshot(session)
 
         return {
             "import_id": import_log.id,
@@ -144,11 +150,16 @@ def _build_payload(session: Session, raw: dict[str, str]) -> dict:
 
     family = get_default_family(session)
     member_name = raw["member"].strip()
-    member = session.scalar(
-        select(Member).where(Member.family_id == family.id, Member.name == member_name).limit(1)
+    members = list(
+        session.scalars(
+            select(Member).where(Member.family_id == family.id, Member.name == member_name).limit(2)
+        )
     )
-    if member is None:
+    if not members:
         raise ValueError(f"成员不存在: {member_name}")
+    if len(members) > 1:
+        raise ValueError(f"成员名称不唯一: {member_name}")
+    member = members[0]
 
     l1, l2, l3 = CategoryService.resolve_path_by_name(
         session,
@@ -208,9 +219,9 @@ def _update_existing(session: Session, payload: dict) -> None:
         )
     )
     if existing is None:
-        HoldingService.create_holding(session, payload, source="csv")
+        HoldingService.create_holding(session, payload, source="csv", refresh_snapshots=False)
     else:
-        HoldingService.update_holding(session, existing.id, payload)
+        HoldingService.update_holding(session, existing.id, payload, refresh_snapshots=False)
 
 
 

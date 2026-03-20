@@ -12,7 +12,6 @@ from app.core.logging import get_logger
 from app.core.timezone import business_today
 from app.models.fx_rate_daily import FxRateDaily
 from app.core.clock import utc_now_naive
-from app.services.settings_service import SettingsService
 
 logger = get_logger(__name__)
 
@@ -24,6 +23,8 @@ class FXService:
         rate_date: date | None = None,
         base_currency: str | None = None,
     ) -> int:
+        from app.services.settings_service import SettingsService
+
         if rate_date is None:
             rate_date = business_today(session)
 
@@ -111,6 +112,8 @@ class FXService:
         base_currency: str | None = None,
         as_of: date | None = None,
     ) -> tuple[Decimal, bool]:
+        from app.services.settings_service import SettingsService
+
         settings = SettingsService.get_settings(session)
         base = (base_currency or settings.base_currency).upper()
         quote = quote_currency.upper()
@@ -165,6 +168,8 @@ class FXService:
 
     @staticmethod
     def list_rates(session: Session, on_date: date | None = None) -> list[FxRateDaily]:
+        from app.services.settings_service import SettingsService
+
         target_date = on_date or business_today(session)
         settings = SettingsService.get_settings(session)
         base = settings.base_currency.upper()
@@ -200,9 +205,7 @@ def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:
     rates = data.get("rates", {})
     if not isinstance(rates, dict) or not rates:
         raise ValueError("frankfurter rates is empty")
-    parsed = {k.upper(): Decimal(str(v)) for k, v in rates.items()}
-    parsed[base] = Decimal("1")
-    return parsed
+    return {k.upper(): Decimal(str(v)) for k, v in rates.items()}
 
 
 def _fetch_exchangerate_host(rate_date: date, base: str) -> dict[str, Decimal]:
@@ -214,6 +217,4 @@ def _fetch_exchangerate_host(rate_date: date, base: str) -> dict[str, Decimal]:
     rates = data.get("rates", {})
     if not isinstance(rates, dict) or not rates:
         raise ValueError("exchangerate.host rates is empty")
-    parsed = {k.upper(): Decimal(str(v)) for k, v in rates.items()}
-    parsed[base] = Decimal("1")
-    return parsed
+    return {k.upper(): Decimal(str(v)) for k, v in rates.items()}

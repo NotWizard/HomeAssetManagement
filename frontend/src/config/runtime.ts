@@ -1,4 +1,4 @@
-export type HamRuntimeConfig = {
+export type HbsRuntimeConfig = {
   apiBaseUrl?: string;
 };
 
@@ -17,16 +17,16 @@ function resolveBrowserOrigin(): string | undefined {
   return undefined;
 }
 
-function readRuntimeConfig(): HamRuntimeConfig | undefined {
+function readRuntimeConfig(): HbsRuntimeConfig | undefined {
   const runtimeHost = globalThis as typeof globalThis & {
-    __HAM_RUNTIME_CONFIG__?: HamRuntimeConfig;
+    __HBS_RUNTIME_CONFIG__?: HbsRuntimeConfig;
   };
 
-  return runtimeHost.__HAM_RUNTIME_CONFIG__;
+  return runtimeHost.__HBS_RUNTIME_CONFIG__;
 }
 
 export function resolveApiBaseUrl(
-  runtimeConfig?: HamRuntimeConfig,
+  runtimeConfig?: HbsRuntimeConfig,
   viteApiBaseUrl?: string,
   currentOrigin?: string
 ): string {

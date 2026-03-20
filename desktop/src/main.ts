@@ -1,5 +1,9 @@
-import { app, BrowserWindow } from 'electron';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { app, BrowserWindow, ipcMain } from 'electron';
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+} from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
@@ -12,7 +16,9 @@ import {
   buildBackendEnvironment,
   buildDesktopPaths,
 } from './config.js';
+import { createBackendController, type BackendProcess } from './backend-controller.js';
 import { createBootstrapController } from './bootstrap-controller.js';
+import { resolvePythonExecutable } from './python-executable.js';
 import { createErrorPage, createLoadingPage } from './startup-page.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -20,10 +26,8 @@ const projectRoot = resolve(currentDir, '..', '..');
 const BACKEND_READY_TIMEOUT_MS = 15_000;
 const BACKEND_READY_POLL_INTERVAL_MS = 150;
 
-let backendProcess: ChildProcessWithoutNullStreams | null = null;
-let backendPort: number | null = null;
 let mainWindow: BrowserWindow | null = null;
-let backendReadyPromise: Promise<void> | null = null;
+let windowPort: number | null = null;
 
 function createPageUrl(content: string): string {
   return `data:text/html;charset=UTF-8,${encodeURIComponent(content)}`;
@@ -52,13 +56,9 @@ async function findAvailablePort(): Promise<number> {
   });
 }
 
-function resolvePythonExecutable(): string {
-  const venvPython =
-    process.platform === 'win32'
-      ? join(projectRoot, '.venv', 'Scripts', 'python.exe')
-      : join(projectRoot, '.venv', 'bin', 'python');
-
-  return existsSync(venvPython) ? venvPython : 'python3';
+function isCommandAvailable(command: string): boolean {
+  const result = spawnSync(command, ['--version'], { stdio: 'ignore' });
+  return !result.error;
 }
 
 function resolveDesktopPaths() {
@@ -99,31 +99,40 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
     });
   }
 
-  return spawn(resolvePythonExecutable(), [desktopPaths.backendEntry], {
+  const python = resolvePythonExecutable({
+    projectRoot,
+    platform: process.platform,
+    existsSync,
+    isCommandAvailable,
+  });
+  return spawn(python, [desktopPaths.backendEntry], {
     cwd: projectRoot,
     env,
     stdio: 'pipe',
   });
 }
 
-function wireBackendLogs(processRef: ChildProcessWithoutNullStreams): void {
-  processRef.stdout.on('data', (chunk) => {
-    process.stdout.write(`[ham-backend] ${chunk}`);
+function wireBackendLogs(processRef: BackendProcess): void {
+  processRef.stdout?.on('data', (chunk) => {
+    process.stdout.write(`[hbs-backend] ${chunk}`);
   });
-  processRef.stderr.on('data', (chunk) => {
-    process.stderr.write(`[ham-backend] ${chunk}`);
+  processRef.stderr?.on('data', (chunk) => {
+    process.stderr.write(`[hbs-backend] ${chunk}`);
   });
 }
 
-async function waitForBackendReady(port: number): Promise<void> {
+async function waitForBackendReady(
+  port: number,
+  processRef: BackendProcess
+): Promise<void> {
   const healthUrl = `${buildAppUrl(port)}/health`;
   const attempts = Math.ceil(
     BACKEND_READY_TIMEOUT_MS / BACKEND_READY_POLL_INTERVAL_MS
   );
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (backendProcess?.exitCode !== null) {
-      throw new Error(`后端进程提前退出，退出码: ${backendProcess?.exitCode ?? 'unknown'}`);
+    if (processRef.exitCode !== null) {
+      throw new Error(`后端进程提前退出，退出码: ${processRef.exitCode ?? 'unknown'}`);
     }
 
     try {
@@ -142,11 +151,12 @@ async function waitForBackendReady(port: number): Promise<void> {
 }
 
 function buildWindowArguments(): string[] {
-  if (backendPort === null) {
+  const port = backendController.getPort();
+  if (port === null) {
     return [];
   }
 
-  return [`--ham-api-base-url=${buildApiBaseUrl(backendPort)}`];
+  return [`--hbs-api-base-url=${buildApiBaseUrl(port)}`];
 }
 
 function isWindowAvailable(window: BrowserWindow | null): window is BrowserWindow {
@@ -163,8 +173,16 @@ function focusWindow(window: BrowserWindow): void {
 }
 
 function ensureMainWindow(): BrowserWindow {
-  if (isWindowAvailable(mainWindow)) {
+  const currentPort = backendController.getPort();
+  if (isWindowAvailable(mainWindow) && windowPort === currentPort) {
     return mainWindow;
+  }
+
+  if (isWindowAvailable(mainWindow) && windowPort !== currentPort) {
+    // Port changed (e.g. retry after failed startup). Recreate window to refresh runtime args.
+    mainWindow.destroy();
+    mainWindow = null;
+    windowPort = null;
   }
 
   const window = new BrowserWindow({
@@ -173,7 +191,7 @@ function ensureMainWindow(): BrowserWindow {
     minWidth: 1200,
     minHeight: 760,
     autoHideMenuBar: true,
-    title: 'Home Asset Management',
+    title: '家庭资产负债表',
     backgroundColor: '#ffffff',
     webPreferences: {
       preload: join(currentDir, 'preload.js'),
@@ -186,56 +204,38 @@ function ensureMainWindow(): BrowserWindow {
   window.on('closed', () => {
     if (mainWindow === window) {
       mainWindow = null;
+      windowPort = null;
     }
   });
 
   mainWindow = window;
+  windowPort = currentPort ?? null;
   return window;
 }
 
-async function ensureBackendReady(): Promise<number> {
-  if (backendPort === null) {
-    backendPort = await findAvailablePort();
-  }
+const backendController = createBackendController({
+  buildApiBaseUrl,
+  buildAppUrl,
+  findAvailablePort,
+  spawnBackend,
+  waitForBackendReady,
+  wireBackendLogs,
+});
 
-  if (backendProcess && backendProcess.exitCode !== null) {
-    backendProcess = null;
-    backendReadyPromise = null;
-  }
-
-  if (!backendProcess) {
-    backendProcess = spawnBackend(backendPort);
-    wireBackendLogs(backendProcess);
-    backendReadyPromise = waitForBackendReady(backendPort)
-      .catch((error) => {
-        stopBackend();
-        throw error;
-      })
-      .finally(() => {
-        backendReadyPromise = null;
-      });
-  }
-
-  if (backendReadyPromise) {
-    await backendReadyPromise;
-  }
-
-  return backendPort;
-}
-
-function stopBackend(): void {
-  if (!backendProcess || backendProcess.killed) {
-    backendProcess = null;
-    backendReadyPromise = null;
+backendController.onUnexpectedExit((message) => {
+  if (!isWindowAvailable(mainWindow)) {
     return;
   }
 
-  backendProcess.kill();
-  backendProcess = null;
-  backendReadyPromise = null;
-}
+  mainWindow
+    .loadURL(createPageUrl(createErrorPage(message)))
+    .catch(() => undefined);
+});
 
 const bootstrapController = createBootstrapController({
+  prepare: async () => {
+    await backendController.preparePort();
+  },
   ensureWindow() {
     const window = ensureMainWindow();
 
@@ -255,14 +255,19 @@ const bootstrapController = createBootstrapController({
     };
   },
   startBackend: async () => {
-    const port = await ensureBackendReady();
-    return { appUrl: buildAppUrl(port) };
+    const result = await backendController.ensureReady();
+    return { appUrl: result.appUrl };
   },
 });
 
 function bootstrap(): Promise<void> {
   return bootstrapController.bootstrap();
 }
+
+ipcMain.handle('hbs:retry-bootstrap', async () => {
+  backendController.stopAndResetPort();
+  await bootstrap();
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -292,7 +297,7 @@ app.on('activate', async () => {
 });
 
 app.on('before-quit', () => {
-  stopBackend();
+  backendController.stopAndResetPort();
 });
 
 app.on('window-all-closed', () => {

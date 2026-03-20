@@ -48,7 +48,6 @@ export type Settings = {
 
 export type SettingsUpdatePayload = {
   base_currency: string;
-  timezone: string;
   rebalance_threshold_pct: number;
 };
 

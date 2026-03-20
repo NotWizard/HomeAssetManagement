@@ -97,13 +97,13 @@ export function AnalyticsPage() {
     enabled: analyticsView === 'risk',
   });
   const sankeyQuery = useQuery({
-    queryKey: ['sankey'],
-    queryFn: fetchSankey,
+    queryKey: ['sankey', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryFn: () => fetchSankey(analyticsDateRange),
     enabled: analyticsView === 'overview',
   });
   const rebalanceQuery = useQuery({
-    queryKey: ['rebalance'],
-    queryFn: fetchRebalance,
+    queryKey: ['rebalance', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryFn: () => fetchRebalance(analyticsDateRange),
     enabled: analyticsView === 'risk',
   });
   const currencyOverviewQuery = useQuery({
@@ -196,7 +196,9 @@ export function AnalyticsPage() {
               <CardDescription>从时间维度查看总资产、总负债与净资产的变化。</CardDescription>
             </CardHeader>
             <CardContent>
-              {(trendQuery.data?.dates.length ?? 0) > 0 ? (
+              {trendQuery.isError ? (
+                <ErrorState text={`趋势数据加载失败：${formatError(trendQuery.error)}`} />
+              ) : (trendQuery.data?.dates.length ?? 0) > 0 ? (
                 <Suspense fallback={<Skeleton className="h-[360px] w-full" />}>
                   <TrendChart
                     dates={trendQuery.data?.dates ?? []}
@@ -217,7 +219,9 @@ export function AnalyticsPage() {
               <CardDescription>查看资产与负债在家庭结构中的分布流向。</CardDescription>
             </CardHeader>
             <CardContent>
-              {(sankeyQuery.data?.nodes.length ?? 0) > 0 ? (
+              {sankeyQuery.isError ? (
+                <ErrorState text={`结构数据加载失败：${formatError(sankeyQuery.error)}`} />
+              ) : (sankeyQuery.data?.nodes.length ?? 0) > 0 ? (
                 <Suspense fallback={<Skeleton className="h-[460px] w-full" />}>
                   <SankeyChart data={sankeyQuery.data ?? { nodes: [], links: [] }} />
                 </Suspense>
@@ -237,8 +241,10 @@ export function AnalyticsPage() {
                 <CardTitle className="text-sm">资产波动率</CardTitle>
                 <CardDescription>帮助识别当前组合中波动更高的资产项。</CardDescription>
               </CardHeader>
-              <CardContent>
-                {(volatilityQuery.data ?? []).length > 0 ? (
+            <CardContent>
+                {volatilityQuery.isError ? (
+                  <ErrorState text={`波动率数据加载失败：${formatError(volatilityQuery.error)}`} />
+                ) : (volatilityQuery.data ?? []).length > 0 ? (
                   <Suspense fallback={<Skeleton className="h-[320px] w-full" />}>
                     <VolatilityChart data={volatilityQuery.data ?? []} />
                   </Suspense>
@@ -254,7 +260,9 @@ export function AnalyticsPage() {
                 <CardDescription>查看哪些资产当前偏离了设定的目标占比。</CardDescription>
               </CardHeader>
               <CardContent>
-                {(rebalanceQuery.data ?? []).length === 0 ? (
+                {rebalanceQuery.isError ? (
+                  <ErrorState text={`再平衡提醒加载失败：${formatError(rebalanceQuery.error)}`} />
+                ) : (rebalanceQuery.data ?? []).length === 0 ? (
                   <EmptyState icon={<Sparkles className="h-5 w-5 text-primary" />} text="当前配置在阈值范围内。" />
                 ) : (
                   <Table>
@@ -291,8 +299,10 @@ export function AnalyticsPage() {
               <CardTitle className="text-sm">相关性矩阵</CardTitle>
               <CardDescription>观察资产之间的联动程度，辅助分散配置决策。</CardDescription>
             </CardHeader>
-            <CardContent>
-              {(correlationQuery.data?.assets.length ?? 0) < 2 ? (
+          <CardContent>
+              {correlationQuery.isError ? (
+                <ErrorState text={`相关性矩阵加载失败：${formatError(correlationQuery.error)}`} />
+              ) : (correlationQuery.data?.assets.length ?? 0) < 2 ? (
                 <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，无法计算相关性矩阵。" />
               ) : (
                 <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
@@ -306,7 +316,13 @@ export function AnalyticsPage() {
 
       {analyticsView === 'currency' ? (
         <div className="space-y-4">
-          {currencyOverviewQuery.isLoading ? (
+          {currencyOverviewQuery.isError ? (
+            <Card>
+              <CardContent className="p-8">
+                <ErrorState text={`币种汇总加载失败：${formatError(currencyOverviewQuery.error)}`} />
+              </CardContent>
+            </Card>
+          ) : currencyOverviewQuery.isLoading ? (
             <Card>
               <CardContent className="p-8 text-center text-sm text-muted-foreground">正在加载币种汇总...</CardContent>
             </Card>
@@ -471,6 +487,18 @@ function EmptyState({ icon, text }: { icon: ReactNode; text: string }) {
       {text}
     </div>
   );
+}
+
+function ErrorState({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-6 text-center text-sm text-rose-700">
+      {text}
+    </div>
+  );
+}
+
+function formatError(error: unknown) {
+  return error instanceof Error ? error.message : '请求失败';
 }
 
 function formatCurrencyLabel(currency: string) {

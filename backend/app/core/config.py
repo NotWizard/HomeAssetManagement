@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Home Asset Management"
+    app_name: str = "Household Balance Sheet"
     app_env: str = "dev"
     app_host: str = "127.0.0.1"
     app_port: int = 8000
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     storage_dir: str = "backend/data"
     frontend_dist_dir: str | None = None
 
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="HAM_")
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="HBS_")
 
     def ensure_storage_dirs(self) -> None:
         Path(self.storage_dir).mkdir(parents=True, exist_ok=True)

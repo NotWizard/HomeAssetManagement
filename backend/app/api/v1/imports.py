@@ -2,13 +2,13 @@ from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi import Depends
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.exceptions import AppError
 from app.core.response import ok
 from app.models.import_log import ImportLog
 from app.services.import_service import ImportService
@@ -54,10 +54,10 @@ def list_import_logs(limit: int = Query(default=100, ge=1, le=500), db: Session 
 def download_import_errors(import_id: int, db: Session = Depends(get_db)):
     row = db.get(ImportLog, import_id)
     if row is None or not row.error_report_path:
-        raise HTTPException(status_code=404, detail="错误报告不存在")
+        raise AppError(4040, "错误报告不存在")
 
     file_path = Path(row.error_report_path)
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="错误报告文件不存在")
+        raise AppError(4040, "错误报告文件不存在")
 
     return FileResponse(path=file_path, filename=file_path.name, media_type="text/csv")

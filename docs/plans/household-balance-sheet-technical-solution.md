@@ -1,6 +1,6 @@
-# 家庭资产管理系统 V1 技术方案（本地桌面优先）
+# 家庭资产负债表 V1 技术方案（本地桌面优先）
 
-- 对应 PRD：`docs/plans/home-asset-management-prd.md`
+- 对应 PRD：`docs/plans/household-balance-sheet-prd.md`
 - 目标形态：本地桌面应用优先（Electron 打包分发，单机、localhost、无登录），开发阶段保留本地 Web 调试模式
 
 ## 1. 技术决策结论
@@ -50,7 +50,7 @@
 ## 3. 工程目录建议
 
 ```text
-HomeAssetManagement/
+HouseholdBalanceSheet/
   backend/
     app/
       api/v1/
@@ -550,7 +550,7 @@ V1 固定使用 `frankfurter`：
 ## 16. 结论
 
 你的判断是正确的：
-- **后端用 Python（FastAPI）+ 前端用 React** 是这个本地家庭资产管理系统的最优平衡方案。
+- **后端用 Python（FastAPI）+ 前端用 React** 是这个本地家庭资产负债表的最优平衡方案。
 - **Tailwind CSS + shadcn/ui + ECharts** 可以完整承载当前风格化界面与图表展示。
 - 分析计算维持后端手写数学实现，可控且依赖更轻量。
 

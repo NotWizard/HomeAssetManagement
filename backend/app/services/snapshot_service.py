@@ -13,6 +13,8 @@ from app.models.snapshot_event import SnapshotEvent
 from app.core.clock import utc_now_naive
 from app.core.timezone import business_today
 from app.services.common import get_default_family
+from app.services.fx_service import FXService
+from app.utils.fx import convert_to_base_amount
 from app.utils.serialization import decimal_to_float
 
 
@@ -106,6 +108,40 @@ class SnapshotService:
             for row in rows
         ]
 
+    @staticmethod
+    def revalue_all_snapshots(session: Session, base_currency: str) -> None:
+        rate_cache: dict[tuple[date, str], Decimal] = {}
+
+        daily_rows = list(session.scalars(select(SnapshotDaily).order_by(SnapshotDaily.snapshot_date.asc())))
+        for row in daily_rows:
+            payload = json.loads(row.payload_json)
+            row.payload_json = json.dumps(
+                _revalue_snapshot_payload(
+                    session,
+                    payload,
+                    base_currency=base_currency,
+                    as_of=row.snapshot_date,
+                    rate_cache=rate_cache,
+                ),
+                ensure_ascii=False,
+            )
+
+        event_rows = list(session.scalars(select(SnapshotEvent).order_by(SnapshotEvent.snapshot_at.asc())))
+        for row in event_rows:
+            payload = json.loads(row.payload_json)
+            row.payload_json = json.dumps(
+                _revalue_snapshot_payload(
+                    session,
+                    payload,
+                    base_currency=base_currency,
+                    as_of=row.snapshot_at.date(),
+                    rate_cache=rate_cache,
+                ),
+                ensure_ascii=False,
+            )
+
+        session.flush()
+
 
 def _build_snapshot_payload(session: Session) -> dict:
     holdings = list(
@@ -158,3 +194,45 @@ def _build_snapshot_payload(session: Session) -> dict:
         },
         "holdings": items,
     }
+
+
+def _revalue_snapshot_payload(
+    session: Session,
+    payload: dict,
+    base_currency: str,
+    as_of: date,
+    rate_cache: dict[tuple[date, str], Decimal],
+) -> dict:
+    holdings = payload.get("holdings", [])
+    total_asset = Decimal("0")
+    total_liability = Decimal("0")
+
+    for item in holdings:
+        currency = str(item.get("currency") or base_currency).upper()
+        amount_original = Decimal(str(item.get("amount_original", item.get("amount_base", 0)) or 0))
+
+        if currency == base_currency:
+            amount_base = amount_original
+        else:
+            cache_key = (as_of, currency)
+            if cache_key not in rate_cache:
+                rate_cache[cache_key], _ = FXService.resolve_rate(
+                    session,
+                    quote_currency=currency,
+                    base_currency=base_currency,
+                    as_of=as_of,
+                )
+            amount_base = convert_to_base_amount(amount_original, rate_cache[cache_key])
+
+        item["amount_base"] = decimal_to_float(amount_base)
+        if item.get("type") == "asset":
+            total_asset += amount_base
+        else:
+            total_liability += amount_base
+
+    payload["totals"] = {
+        "total_asset": decimal_to_float(total_asset),
+        "total_liability": decimal_to_float(total_liability),
+        "net_asset": decimal_to_float(total_asset - total_liability),
+    }
+    return payload

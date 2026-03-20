@@ -276,8 +276,8 @@ Run backend and frontend locally, then verify:
 ### Task 6: 验证与文档回填
 
 **Files:**
-- Modify: `docs/plans/home-asset-management-prd.md`（如需同步分析看板描述）
-- Modify: `docs/plans/home-asset-management-technical-solution.md`（如需同步新增接口）
+- Modify: `docs/plans/household-balance-sheet-prd.md`（如需同步分析看板描述）
+- Modify: `docs/plans/household-balance-sheet-technical-solution.md`（如需同步新增接口）
 - Verify: `backend/tests/test_analytics.py`
 - Verify: `backend/tests/test_holdings_api.py`
 

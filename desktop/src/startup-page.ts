@@ -9,14 +9,14 @@ function escapeHtml(value: string): string {
 
 function createBrandMark(): string {
   return [
-    '<svg viewBox="0 0 64 64" role="img" aria-label="家庭资产管理系统">',
+    '<svg viewBox="0 0 64 64" role="img" aria-label="家庭资产负债表">',
     '<defs>',
-    '<linearGradient id="ham-gradient" x1="10%" y1="10%" x2="90%" y2="90%">',
+    '<linearGradient id="hbs-gradient" x1="10%" y1="10%" x2="90%" y2="90%">',
     '<stop offset="0%" stop-color="#2563eb" />',
     '<stop offset="100%" stop-color="#0f766e" />',
     '</linearGradient>',
     '</defs>',
-    '<rect x="6" y="6" width="52" height="52" rx="16" fill="url(#ham-gradient)" />',
+    '<rect x="6" y="6" width="52" height="52" rx="16" fill="url(#hbs-gradient)" />',
     '<path d="M20 31.5 32 20l12 11.5v12.5a2 2 0 0 1-2 2h-5.5V37h-9v9H22a2 2 0 0 1-2-2Z" fill="#f8fafc" />',
     '<path d="M26 46V34h12v12" fill="none" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round" />',
     '<circle cx="46" cy="18" r="7" fill="#facc15" />',
@@ -38,6 +38,7 @@ function createShell(options: {
   footerNote: string;
   steps: string[];
   tone: 'loading' | 'error';
+  actions?: string;
   script?: string;
 }): string {
   const toneClass = options.tone === 'loading' ? 'tone-loading' : 'tone-error';
@@ -58,7 +59,7 @@ function createShell(options: {
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<title>Home Asset Management</title>',
+    '<title>家庭资产负债表</title>',
     '<style>',
     ':root {',
     '  --bg-top: #f4efe5;',
@@ -191,6 +192,35 @@ function createShell(options: {
     '.footer-note {',
     '  color: var(--muted);',
     '  font-size: 15px;',
+    '}',
+    '.actions {',
+    '  display: flex;',
+    '  flex-wrap: wrap;',
+    '  gap: 12px;',
+    '  margin-top: 24px;',
+    '}',
+    '.action-button {',
+    '  appearance: none;',
+    '  border: 1px solid rgba(19, 34, 56, 0.12);',
+    '  border-radius: 999px;',
+    '  background: rgba(255, 255, 255, 0.78);',
+    '  color: var(--ink);',
+    '  cursor: pointer;',
+    '  font: inherit;',
+    '  font-size: 15px;',
+    '  font-weight: 600;',
+    '  padding: 12px 20px;',
+    '  transition: transform .2s ease, border-color .2s ease, background .2s ease;',
+    '}',
+    '.action-button:hover {',
+    '  transform: translateY(-1px);',
+    '  border-color: rgba(34, 87, 212, 0.24);',
+    '  background: rgba(255, 255, 255, 0.92);',
+    '}',
+    '.action-button:disabled {',
+    '  cursor: wait;',
+    '  opacity: 0.72;',
+    '  transform: none;',
     '}',
     '.panel {',
     '  position: relative;',
@@ -332,6 +362,7 @@ function createShell(options: {
     `<h1>${options.title}</h1>`,
     `<p class="description">${options.description}</p>`,
     `<ol class="steps">${stepsMarkup}</ol>`,
+    options.actions ?? '',
     `<p class="footer-note">${options.footerNote}</p>`,
     '</section>',
     '<aside class="panel">',
@@ -339,7 +370,7 @@ function createShell(options: {
     `<div class="brand-mark">${createBrandMark()}</div>`,
     '<div class="brand-copy">',
     '<small>Desktop Workspace</small>',
-    '<strong>Home Asset Management</strong>',
+    '<strong>家庭资产负债表</strong>',
     '</div>',
     '</div>',
     `<div class="status-chip">${options.statusLabel}</div>`,
@@ -383,7 +414,7 @@ export function createLoadingPage(): string {
 
   return createShell({
     eyebrow: 'Local-first personal finance workspace',
-    title: '正在启动 Home Asset Management',
+    title: '正在启动 家庭资产负债表',
     description:
       '我们正在唤醒本地服务、载入资产数据，并为你准备桌面工作台。整个过程只发生在你的设备内。',
     statusLabel: '本地私有模式',
@@ -401,19 +432,43 @@ export function createLoadingPage(): string {
 }
 
 export function createErrorPage(message: string): string {
+  const script = [
+    '<script>',
+    'const retryButton = document.querySelector("[data-retry-bootstrap]");',
+    'retryButton?.addEventListener("click", async () => {',
+    '  retryButton.setAttribute("disabled", "true");',
+    '  retryButton.textContent = "正在重试...";',
+    '  try {',
+    '    const retry = window.__HBS_DESKTOP__?.retryBootstrap;',
+    '    if (typeof retry === "function") {',
+    '      await retry();',
+    '      return;',
+    '    }',
+    '  } catch (_error) {',
+    '    // Keep the same error page visible and let the user try again.',
+    '  }',
+    '  retryButton.removeAttribute("disabled");',
+    '  retryButton.textContent = "重新尝试启动";',
+    '});',
+    '</script>',
+  ].join('');
+
   return createShell({
     eyebrow: 'Launch issue detected',
     title: '应用启动失败',
     description:
       '桌面工作台还没有顺利完成初始化。别担心，这通常是一次性的启动阻塞，我们先给你最直接的处理建议。',
     statusLabel: '需要人工确认',
-    statusTitle: '建议先重新打开应用',
+    statusTitle: '可以先在应用内重试启动',
     statusBody:
-      '如果重试后仍失败，再根据手册检查系统是否阻止了应用运行，或把下面的错误信息发给我们继续排查。',
+      '如果应用内重试后仍失败，再根据手册检查系统是否阻止了应用运行，或把下面的错误信息发给我们继续排查。',
     sideTitle: '错误详情',
     sideBody: escapeHtml(message),
-    footerNote: '请先退出应用后重新打开；如果是首次安装且系统提示应用被阻止，再到系统设置里允许运行。',
-    steps: ['退出后重新打开', '如系统拦截则去设置允许', '仍有问题时反馈错误详情'],
+    footerNote: '如果应用内重试仍失败，再退出应用后重新打开；若首次安装被系统拦截，请到系统设置里允许运行。',
+    steps: ['先尝试应用内重试', '如系统拦截则去设置允许', '仍有问题时反馈错误详情'],
     tone: 'error',
+    actions:
+      '<div class="actions"><button type="button" class="action-button" data-retry-bootstrap>重新尝试启动</button></div>',
+    script,
   });
 }

@@ -55,7 +55,7 @@ This repository is a local-first monorepo with three app layers:
 
 ## Security & Configuration Tips
 - Run services on localhost (`127.0.0.1`) only.
-- Configure via `.env` using `HAM_` prefixes (see `backend/app/core/config.py`).
+- Configure via `.env` using `HBS_` prefixes (see `backend/app/core/config.py`).
 - Do not commit local configuration files (`.env`, `.env.*`) or local artifacts (`.venv`, `node_modules`, SQLite DB files, import error CSVs, `frontend/tsconfig.tsbuildinfo`, `desktop/out`, `desktop/.stage`, `backend/dist-desktop`, `backend/build-desktop`, `backend/.pyinstaller`).
 
 ## Agent-Specific Instructions

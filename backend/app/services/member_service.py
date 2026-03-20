@@ -23,7 +23,9 @@ class MemberService:
     @staticmethod
     def create_member(session: Session, name: str) -> Member:
         family = get_default_family(session)
-        member = Member(family_id=family.id, name=name.strip())
+        normalized_name = _normalize_member_name(name)
+        _ensure_member_name_available(session, family.id, normalized_name)
+        member = Member(family_id=family.id, name=normalized_name)
         session.add(member)
         session.flush()
         return member
@@ -33,7 +35,14 @@ class MemberService:
         member = session.get(Member, member_id)
         if member is None:
             raise AppError(4040, "成员不存在")
-        member.name = name.strip()
+        normalized_name = _normalize_member_name(name)
+        _ensure_member_name_available(
+            session,
+            member.family_id,
+            normalized_name,
+            exclude_member_id=member.id,
+        )
+        member.name = normalized_name
         session.flush()
         return member
 
@@ -59,3 +68,28 @@ class MemberService:
         )
         session.delete(member)
         session.flush()
+
+
+def _normalize_member_name(name: str) -> str:
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise AppError(4001, "成员名称不能为空")
+    return normalized_name
+
+
+def _ensure_member_name_available(
+    session: Session,
+    family_id: int,
+    normalized_name: str,
+    exclude_member_id: int | None = None,
+) -> None:
+    stmt = select(Member).where(
+        Member.family_id == family_id,
+        Member.name == normalized_name,
+    )
+    if exclude_member_id is not None:
+        stmt = stmt.where(Member.id != exclude_member_id)
+
+    existing = session.scalar(stmt.limit(1))
+    if existing is not None:
+        raise AppError(4090, "成员名称已存在")

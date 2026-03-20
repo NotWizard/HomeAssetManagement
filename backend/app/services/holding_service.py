@@ -12,6 +12,7 @@ from app.services.common import get_default_family
 from app.services.fx_service import FXService
 from app.services.settings_service import SettingsService
 from app.services.snapshot_service import SnapshotService
+from app.utils.fx import convert_to_base_amount
 
 
 class HoldingService:
@@ -37,7 +38,12 @@ class HoldingService:
         return list(session.scalars(stmt))
 
     @staticmethod
-    def create_holding(session: Session, payload: dict, source: str = "manual") -> HoldingItem:
+    def create_holding(
+        session: Session,
+        payload: dict,
+        source: str = "manual",
+        refresh_snapshots: bool = True,
+    ) -> HoldingItem:
         family = get_default_family(session)
         _validate_member(session, payload["member_id"])
         _validate_holding_payload(session, payload)
@@ -51,7 +57,7 @@ class HoldingService:
         )
 
         amount_original = Decimal(str(payload["amount_original"]))
-        amount_base = amount_original * rate
+        amount_base = convert_to_base_amount(amount_original, rate)
 
         row = HoldingItem(
             family_id=family.id,
@@ -69,11 +75,17 @@ class HoldingService:
         )
         session.add(row)
         session.flush()
-        _refresh_snapshots(session, trigger_type="create", note=f"holding:{row.id}")
+        if refresh_snapshots:
+            _refresh_snapshots(session, trigger_type="create", note=f"holding:{row.id}")
         return row
 
     @staticmethod
-    def update_holding(session: Session, holding_id: int, payload: dict) -> HoldingItem:
+    def update_holding(
+        session: Session,
+        holding_id: int,
+        payload: dict,
+        refresh_snapshots: bool = True,
+    ) -> HoldingItem:
         row = session.get(HoldingItem, holding_id)
         if row is None or row.is_deleted:
             raise AppError(4040, "资产/负债不存在")
@@ -90,7 +102,7 @@ class HoldingService:
         )
 
         amount_original = Decimal(str(payload["amount_original"]))
-        amount_base = amount_original * rate
+        amount_base = convert_to_base_amount(amount_original, rate)
 
         row.member_id = payload["member_id"]
         row.type = payload["type"]
@@ -105,7 +117,8 @@ class HoldingService:
         row.source = payload.get("source", row.source)
 
         session.flush()
-        _refresh_snapshots(session, trigger_type="update", note=f"holding:{row.id}")
+        if refresh_snapshots:
+            _refresh_snapshots(session, trigger_type="update", note=f"holding:{row.id}")
         return row
 
     @staticmethod

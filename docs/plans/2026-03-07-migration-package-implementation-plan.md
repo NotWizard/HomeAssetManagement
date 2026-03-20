@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 为当前家庭资产管理系统增加可长期演进的迁移包导出/导入能力，支持将 `family`、`settings`、`members`、`holdings`、`daily_snapshots` 打包导出，并在新环境中以“先清空再恢复”的方式原子导入。
+**Goal:** 为当前家庭资产负债表增加可长期演进的迁移包导出/导入能力，支持将 `family`、`settings`、`members`、`holdings`、`daily_snapshots` 打包导出，并在新环境中以“先清空再恢复”的方式原子导入。
 
 **Architecture:** 后端新增独立 `migration` 资源域与 `MigrationService`，采用 ZIP 迁移包 + `manifest.json` + 小域 JSON / 大域 NDJSON 的格式。导出走服务端打包下载，导入先进行完整校验，再在单事务中清空旧数据并恢复；前端在设置页新增“数据迁移 / 备份”卡片承载导入导出交互。
 
@@ -36,7 +36,7 @@ def test_export_migration_returns_zip_with_required_entries(client):
 
 **Step 2: 运行单测并确认红灯**
 
-Run: `source /Users/mac/Downloads/Projects/AICode/HomeAssetManagement/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py::test_export_migration_returns_zip_with_required_entries -q`
+Run: `source /Users/mac/Downloads/Projects/AICode/HouseholdBalanceSheet/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py::test_export_migration_returns_zip_with_required_entries -q`
 
 Expected: FAIL，报错为路由不存在或断言失败。
 
@@ -58,7 +58,7 @@ def test_import_migration_rolls_back_on_invalid_package(client):
 
 **Step 4: 运行单测并确认红灯**
 
-Run: `source /Users/mac/Downloads/Projects/AICode/HomeAssetManagement/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py -q`
+Run: `source /Users/mac/Downloads/Projects/AICode/HouseholdBalanceSheet/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py -q`
 
 Expected: FAIL，提示缺少 `migration` 路由/服务实现。
 
@@ -100,7 +100,7 @@ class MigrationService:
 
 **Step 2: 跑导出测试，确认绿灯**
 
-Run: `source /Users/mac/Downloads/Projects/AICode/HomeAssetManagement/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py::test_export_migration_returns_zip_with_required_entries -q`
+Run: `source /Users/mac/Downloads/Projects/AICode/HouseholdBalanceSheet/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py::test_export_migration_returns_zip_with_required_entries -q`
 
 Expected: PASS
 
@@ -124,7 +124,7 @@ class MigrationService:
 
 **Step 4: 跑导入测试，确认绿灯**
 
-Run: `source /Users/mac/Downloads/Projects/AICode/HomeAssetManagement/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py -q`
+Run: `source /Users/mac/Downloads/Projects/AICode/HouseholdBalanceSheet/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py -q`
 
 Expected: PASS
 
@@ -184,7 +184,7 @@ export type MigrationImportResult = {
 
 **Step 4: 跑后端测试，确认前端改动未破坏已有逻辑**
 
-Run: `source /Users/mac/Downloads/Projects/AICode/HomeAssetManagement/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py -q`
+Run: `source /Users/mac/Downloads/Projects/AICode/HouseholdBalanceSheet/.venv/bin/activate && python -m pytest backend/tests/test_migration_api.py -q`
 
 Expected: PASS
 
@@ -204,7 +204,7 @@ git commit -m "feat: add migration controls to settings page"
 
 **Step 1: 运行后端测试集**
 
-Run: `source /Users/mac/Downloads/Projects/AICode/HomeAssetManagement/.venv/bin/activate && python -m pytest backend/tests -q`
+Run: `source /Users/mac/Downloads/Projects/AICode/HouseholdBalanceSheet/.venv/bin/activate && python -m pytest backend/tests -q`
 
 Expected: PASS
 

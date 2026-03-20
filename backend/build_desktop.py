@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import os
 
-DESKTOP_EXECUTABLE_NAME = "ham-backend"
+DESKTOP_EXECUTABLE_NAME = "hbs-backend"
 
 
 def build_executable_filename() -> str:

@@ -60,3 +60,4 @@ This repository is a local-first monorepo with three app layers:
 
 ## Agent-Specific Instructions
 - All conversation, status updates, and final responses for this repository must be in Chinese.
+- Any feature change, bug fix, or code modification in this repository must be done in a newly created git worktree first; do not edit directly in the primary workspace.

@@ -56,6 +56,13 @@ type BulkDeleteSummary = {
   previewNames: string[];
 };
 
+type TargetRatioStatus = {
+  label: '未达标' | '已达标' | '已超出';
+  detail: string;
+  badgeClassName: string;
+  detailClassName: string;
+};
+
 const INITIAL_FORM: EntryFormState = {
   memberId: '',
   type: 'asset',
@@ -67,6 +74,7 @@ const INITIAL_FORM: EntryFormState = {
 };
 
 const AMOUNT_PATTERN = /^\d*(?:\.\d{0,2})?$/;
+const TARGET_RATIO_EPSILON = 0.0001;
 
 const LEGACY_CATEGORY_PATH_LABEL = '默认一级 / 默认二级 / 默认三级';
 
@@ -132,6 +140,61 @@ function buildBulkErrorMessage(error: unknown): string {
     return error.message;
   }
   return '批量删除失败，请稍后重试';
+}
+
+function sumAssetTargetRatio(rows: Holding[]): number {
+  return rows.reduce((sum, row) => {
+    if (row.type !== 'asset' || row.target_ratio == null) {
+      return sum;
+    }
+    return sum + Number(row.target_ratio);
+  }, 0);
+}
+
+function formatTargetRatio(value: number, fractionDigits = 1): string {
+  return `${value.toFixed(fractionDigits)}%`;
+}
+
+function formatTargetRatioSummary(value: number): string {
+  const roundedOneDecimal = Math.round((value + Number.EPSILON) * 10) / 10;
+  if (roundedOneDecimal === 100 && Math.abs(value - 100) > TARGET_RATIO_EPSILON) {
+    return formatTargetRatio(value, 2);
+  }
+  return formatTargetRatio(roundedOneDecimal);
+}
+
+function formatTargetRatioDelta(value: number): string {
+  const normalized = Math.abs(value);
+  if (normalized > TARGET_RATIO_EPSILON && normalized < 0.1) {
+    return formatTargetRatio(normalized, 2);
+  }
+  return formatTargetRatio(normalized);
+}
+
+function buildTargetRatioStatus(totalRatio: number): TargetRatioStatus {
+  const delta = 100 - totalRatio;
+  if (Math.abs(delta) <= TARGET_RATIO_EPSILON) {
+    return {
+      label: '已达标',
+      detail: '已达到 100.0%',
+      badgeClassName: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      detailClassName: 'text-emerald-700',
+    };
+  }
+  if (delta > 0) {
+    return {
+      label: '未达标',
+      detail: `还差 ${formatTargetRatioDelta(delta)}`,
+      badgeClassName: 'border-amber-200 bg-amber-50 text-amber-700',
+      detailClassName: 'text-amber-700',
+    };
+  }
+  return {
+    label: '已超出',
+    detail: `超出 ${formatTargetRatioDelta(delta)}`,
+    badgeClassName: 'border-rose-200 bg-rose-50 text-rose-700',
+    detailClassName: 'text-rose-700',
+  };
 }
 
 export function EntryPage() {
@@ -259,6 +322,7 @@ export function EntryPage() {
 
   const allHoldings = holdingsQuery.data ?? [];
   const hasMembers = (membersQuery.data ?? []).length > 0;
+  const hasLoadedHoldings = holdingsQuery.data != null;
 
   const filteredHoldings = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
@@ -277,6 +341,11 @@ export function EntryPage() {
       return searchText.includes(normalizedKeyword);
     });
   }, [allHoldings, keyword, memberFilter, typeFilter, memberNameMap]);
+
+  const totalAssetTargetRatio = useMemo(() => sumAssetTargetRatio(allHoldings), [allHoldings]);
+  const filteredAssetTargetRatio = useMemo(() => sumAssetTargetRatio(filteredHoldings), [filteredHoldings]);
+  const targetRatioStatus = useMemo(() => buildTargetRatioStatus(totalAssetTargetRatio), [totalAssetTargetRatio]);
+  const hasAssetHoldings = useMemo(() => allHoldings.some((row) => row.type === 'asset'), [allHoldings]);
 
   const selectedIdSet = useMemo(() => new Set(selectedHoldingIds), [selectedHoldingIds]);
 
@@ -498,6 +567,43 @@ export function EntryPage() {
           {actionError ? (
             <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
               {actionError}
+            </div>
+          ) : null}
+          {hasLoadedHoldings && hasAssetHoldings ? (
+            <div className="mb-4 rounded-2xl border border-border/60 bg-muted/15 px-3 py-3 sm:px-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-xs font-medium tracking-[0.14em] text-muted-foreground">目标占比状态</div>
+                <div
+                  className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold ${targetRatioStatus.badgeClassName}`}
+                >
+                  {targetRatioStatus.label}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-border/70 bg-background/90 px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm text-muted-foreground">当前资产合计</div>
+                      <div className="mt-1 text-[2rem] font-semibold leading-none tracking-tight">
+                        {formatTargetRatioSummary(totalAssetTargetRatio)}
+                      </div>
+                    </div>
+                    <div className={`pt-0.5 text-xs font-semibold ${targetRatioStatus.detailClassName}`}>{targetRatioStatus.detail}</div>
+                  </div>
+                  <div className="mt-1.5 text-xs text-muted-foreground">
+                    全部资产目标占比求和，当前筛选资产 {formatTargetRatioSummary(filteredAssetTargetRatio)}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-emerald-100/80 bg-emerald-50/40 px-3 py-2.5">
+                  <div className="text-sm text-muted-foreground">目标占比</div>
+                  <div className="mt-1 flex items-start justify-between gap-3">
+                    <div className="text-[2rem] font-semibold leading-none tracking-tight">100.0%</div>
+                    <div className="pt-0.5 text-xs font-medium text-muted-foreground">全部资产配平基准</div>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
           <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">

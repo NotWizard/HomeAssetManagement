@@ -4,6 +4,18 @@
 
 项目当前以 `Electron` 桌面应用为主要交付形态，适合交给非技术用户直接安装使用；开发阶段仍保留 `FastAPI + React + Vite` 的本地 Web 模式。
 
+## 普通用户快速开始
+
+如果你只是想使用这个软件，不需要关心 Python、Node.js、前后端服务，也不需要手工执行任何启动命令。
+
+直接前往 GitHub Releases 下载桌面客户端即可：
+
+- Releases 页面：`https://github.com/NotWizard/HomeAssetManagement/releases`
+- Apple Silicon（M1 / M2 / M3 / M4）优先下载 `HouseholdBalanceSheet-<version>-macos-arm64.dmg`
+- Intel Mac 优先下载 `HouseholdBalanceSheet-<version>-macos-x64.dmg`
+
+安装后直接打开 `家庭资产负债表.app` 使用即可。应用会在启动时自动准备本地服务，并在后续检测到新版本发布时提示下载和安装更新。
+
 ## 核心定位
 
 家庭资产负债表解决的不是“交易执行”，而是“家庭资产台账管理”。
@@ -87,6 +99,7 @@
 推荐直接使用桌面安装包。
 
 1. 获取与你的 Mac 芯片匹配的 `DMG` 安装包
+   - 推荐直接从 Releases 页面下载：`https://github.com/NotWizard/HomeAssetManagement/releases`
    - Apple Silicon（M1 / M2 / M3 / M4）使用 `HouseholdBalanceSheet-<version>-macos-arm64.dmg`
    - Intel Mac 使用 `HouseholdBalanceSheet-<version>-macos-x64.dmg`
 2. 双击打开 `家庭资产负债表`
@@ -100,9 +113,18 @@
 - 到 `分析看板` 观察趋势、结构和风险变化
 - 到 `设置` 导出迁移包，定期备份
 
+桌面版当前还支持基础更新提示流程：
+
+- 首次启动后会检查 GitHub 上是否有新版本发布
+- 后续会每隔 12 小时再次检查一次
+- 如果检测到新版本，左下角会出现“有可用更新”入口
+- 用户确认后可下载新版本，并在下载完成后发起安装
+
 ### 面向开发者
 
 项目也支持本地 Web 开发模式，适合调试接口和前端页面。
+
+如果你只是普通使用者，可以跳过下面所有内容，不需要通过代码启动任何服务。
 
 开发模式默认地址：
 
@@ -110,7 +132,9 @@
 - 后端：`http://127.0.0.1:8000`
 - API Base：`http://127.0.0.1:8000/api/v1`
 
-## 部署与构建
+## 开发与构建
+
+以下内容主要面向开发者和打包维护者。普通用户只需要下载桌面客户端，不需要执行这些命令。
 
 ### 本地开发启动
 

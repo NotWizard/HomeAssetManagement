@@ -5,6 +5,11 @@ export type AnalyticsDateRange = {
   endDate: string;
 };
 
+export type AnalyticsDateBounds = {
+  start_date: string;
+  end_date: string;
+};
+
 export type TrendData = {
   dates: string[];
   total_asset: number[];
@@ -111,6 +116,10 @@ function buildDateRangeQuery(filters?: AnalyticsDateRange): string {
 
 export function fetchTrend(filters: number | AnalyticsDateRange = 90) {
   return getJSON<TrendData>(`/analytics/trend?${buildAnalyticsQuery(filters)}`);
+}
+
+export function fetchAnalyticsDateBounds() {
+  return getJSON<AnalyticsDateBounds>('/analytics/date-bounds');
 }
 
 export function fetchVolatility(filters: number | AnalyticsDateRange = 90) {

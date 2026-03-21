@@ -3,6 +3,7 @@ from datetime import UTC
 from datetime import date
 from datetime import datetime
 
+import app.api.v1.analytics as analytics_api
 from fastapi.testclient import TestClient
 
 from app.analytics.currency_overview import build_currency_overview
@@ -334,3 +335,156 @@ def test_trend_api_supports_date_range_filters():
     assert payload['total_asset'] == [200.0, 300.0]
     assert payload['total_liability'] == [10.0, 20.0]
     assert payload['asset_series']['现金'] == [200.0, 300.0]
+
+
+def test_date_bounds_api_returns_earliest_snapshot_to_today(monkeypatch):
+    _reset_daily_snapshots()
+
+    monkeypatch.setattr(analytics_api, 'business_today', lambda session=None: date(2026, 3, 21))
+
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        session.add_all(
+            [
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 1),
+                    payload_json=json.dumps(_snapshot_payload(100.0, 0.0), ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 20),
+                    payload_json=json.dumps(_snapshot_payload(200.0, 10.0), ensure_ascii=False),
+                ),
+            ]
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        response = client.get('/api/v1/analytics/date-bounds')
+
+    assert response.status_code == 200
+    assert response.json()['data'] == {
+        'start_date': '2026-03-01',
+        'end_date': '2026-03-21',
+    }
+
+
+def test_sankey_api_uses_latest_snapshot_within_selected_range():
+    _reset_daily_snapshots()
+
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        session.add_all(
+            [
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 1),
+                    payload_json=json.dumps(_snapshot_payload(100.0, 0.0, holding_name='旧资产'), ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 2),
+                    payload_json=json.dumps(_snapshot_payload(200.0, 0.0, holding_name='区间资产'), ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 3),
+                    payload_json=json.dumps(_snapshot_payload(300.0, 0.0, holding_name='最新资产'), ensure_ascii=False),
+                ),
+            ]
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        response = client.get(
+            '/api/v1/analytics/sankey',
+            params={
+                'start_date': '2026-03-01',
+                'end_date': '2026-03-02',
+            },
+        )
+
+    assert response.status_code == 200
+    holding_amounts = {
+        node['amount']
+        for node in response.json()['data']['nodes']
+        if node.get('node_type') == 'holding'
+    }
+    assert holding_amounts == {200.0}
+
+
+def test_rebalance_api_uses_latest_snapshot_within_selected_range():
+    _reset_daily_snapshots()
+
+    in_range_payload = {
+        'totals': {
+            'total_asset': 100.0,
+            'total_liability': 0.0,
+            'net_asset': 100.0,
+        },
+        'holdings': [
+            {
+                'id': 1,
+                'name': '区间资产',
+                'type': 'asset',
+                'amount_base': 100.0,
+                'target_ratio': 10.0,
+            }
+        ],
+    }
+    out_of_range_payload = {
+        'totals': {
+            'total_asset': 100.0,
+            'total_liability': 0.0,
+            'net_asset': 100.0,
+        },
+        'holdings': [
+            {
+                'id': 2,
+                'name': '最新资产',
+                'type': 'asset',
+                'amount_base': 100.0,
+                'target_ratio': 90.0,
+            }
+        ],
+    }
+
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        session.add_all(
+            [
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 2),
+                    payload_json=json.dumps(in_range_payload, ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 3),
+                    payload_json=json.dumps(out_of_range_payload, ensure_ascii=False),
+                ),
+            ]
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        response = client.get(
+            '/api/v1/analytics/rebalance',
+            params={
+                'start_date': '2026-03-01',
+                'end_date': '2026-03-02',
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()['data'] == [
+        {
+            'id': 1,
+            'name': '区间资产',
+            'target_ratio': 10.0,
+            'current_ratio': 100.0,
+            'deviation': 90.0,
+            'status': '超配',
+        }
+    ]

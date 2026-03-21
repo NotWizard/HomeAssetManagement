@@ -104,6 +104,26 @@ test('分析页时间区间筛选需要作用于桑基图与再平衡请求', ()
   assert.match(analyticsSource, /queryKey:\s*\[\s*'rebalance',\s*analyticsDateRange\.startDate,\s*analyticsDateRange\.endDate\s*\]/);
 });
 
+test('分析页应从后端读取时间边界，并将默认时间初始化为全部时间', () => {
+  const analyticsPageSource = readFrontendFile('src/pages/AnalyticsPage.tsx');
+  const analyticsServiceSource = readFrontendFile('src/services/analytics.ts');
+  const uiStoreSource = readFrontendFile('src/store/uiStore.ts');
+
+  assert.match(analyticsServiceSource, /export type AnalyticsDateBounds = \{/);
+  assert.match(analyticsServiceSource, /fetchAnalyticsDateBounds/);
+  assert.match(analyticsServiceSource, /\/analytics\/date-bounds/);
+
+  assert.match(analyticsPageSource, /queryKey:\s*\[\s*'analytics-date-bounds'\s*\]/);
+  assert.match(analyticsPageSource, /fetchAnalyticsDateBounds/);
+  assert.match(analyticsPageSource, /analyticsDateRangeInitialized/);
+  assert.match(analyticsPageSource, /analyticsDateBoundsQuery\.data\?\.start_date/);
+  assert.match(analyticsPageSource, /analyticsDateBoundsQuery\.data\?\.end_date/);
+
+  assert.match(uiStoreSource, /analyticsDateRangeInitialized:\s*boolean/);
+  assert.match(uiStoreSource, /startDate:\s*''/);
+  assert.match(uiStoreSource, /endDate:\s*''/);
+});
+
 test('导入页提交按钮必须依赖预检结果，并提供错误明细下载入口', () => {
   const importSource = readFrontendFile('src/pages/ImportPage.tsx');
   const importsService = readFrontendFile('src/services/imports.ts');

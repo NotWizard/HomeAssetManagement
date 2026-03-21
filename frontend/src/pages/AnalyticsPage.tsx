@@ -10,6 +10,7 @@ import { Select } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import {
+  fetchAnalyticsDateBounds,
   fetchCorrelation,
   fetchCurrencyOverview,
   fetchRebalance,
@@ -54,12 +55,42 @@ const CURRENCY_LABELS: Record<string, string> = {
 };
 
 export function AnalyticsPage() {
-  const analyticsDateRange = useUIStore((state) => state.analyticsDateRange);
+  const storedAnalyticsDateRange = useUIStore((state) => state.analyticsDateRange);
+  const analyticsDateRangeInitialized = useUIStore((state) => state.analyticsDateRangeInitialized);
   const analyticsView = useUIStore((state) => state.analyticsView);
   const selectedCurrency = useUIStore((state) => state.selectedAnalyticsCurrency);
   const setAnalyticsDateRange = useUIStore((state) => state.setAnalyticsDateRange);
   const setAnalyticsView = useUIStore((state) => state.setAnalyticsView);
   const setSelectedAnalyticsCurrency = useUIStore((state) => state.setSelectedAnalyticsCurrency);
+
+  const analyticsDateBoundsQuery = useQuery({
+    queryKey: ['analytics-date-bounds'],
+    queryFn: fetchAnalyticsDateBounds,
+    enabled: analyticsView !== 'currency',
+  });
+
+  const analyticsDateRange =
+    analyticsDateRangeInitialized || !analyticsDateBoundsQuery.data
+      ? storedAnalyticsDateRange
+      : {
+          startDate: analyticsDateBoundsQuery.data?.start_date ?? '',
+          endDate: analyticsDateBoundsQuery.data?.end_date ?? '',
+        };
+  const analyticsDateRangeReady = Boolean(analyticsDateRange.startDate && analyticsDateRange.endDate);
+
+  useEffect(() => {
+    if (analyticsDateRangeInitialized || !analyticsDateBoundsQuery.data) {
+      return;
+    }
+    setAnalyticsDateRange({
+      startDate: analyticsDateBoundsQuery.data.start_date,
+      endDate: analyticsDateBoundsQuery.data.end_date,
+    });
+  }, [analyticsDateBoundsQuery.data, analyticsDateRangeInitialized, setAnalyticsDateRange]);
+
+  const handleRangeChange = (nextRange: { startDate: string; endDate: string }) => {
+    setAnalyticsDateRange(nextRange);
+  };
 
   const handleStartDateChange = (startDate: string) => {
     if (!startDate) {
@@ -67,7 +98,7 @@ export function AnalyticsPage() {
     }
     setAnalyticsDateRange({
       startDate,
-      endDate: startDate > analyticsDateRange.endDate ? startDate : analyticsDateRange.endDate,
+      endDate: !analyticsDateRange.endDate || startDate > analyticsDateRange.endDate ? startDate : analyticsDateRange.endDate,
     });
   };
 
@@ -76,7 +107,7 @@ export function AnalyticsPage() {
       return;
     }
     setAnalyticsDateRange({
-      startDate: endDate < analyticsDateRange.startDate ? endDate : analyticsDateRange.startDate,
+      startDate: !analyticsDateRange.startDate || endDate < analyticsDateRange.startDate ? endDate : analyticsDateRange.startDate,
       endDate,
     });
   };
@@ -84,27 +115,27 @@ export function AnalyticsPage() {
   const trendQuery = useQuery({
     queryKey: ['trend', analyticsDateRange.startDate, analyticsDateRange.endDate],
     queryFn: () => fetchTrend(analyticsDateRange),
-    enabled: analyticsView === 'overview',
+    enabled: analyticsView === 'overview' && analyticsDateRangeReady,
   });
   const volatilityQuery = useQuery({
     queryKey: ['volatility', analyticsDateRange.startDate, analyticsDateRange.endDate],
     queryFn: () => fetchVolatility(analyticsDateRange),
-    enabled: analyticsView === 'risk',
+    enabled: analyticsView === 'risk' && analyticsDateRangeReady,
   });
   const correlationQuery = useQuery({
     queryKey: ['correlation', analyticsDateRange.startDate, analyticsDateRange.endDate],
     queryFn: () => fetchCorrelation(analyticsDateRange),
-    enabled: analyticsView === 'risk',
+    enabled: analyticsView === 'risk' && analyticsDateRangeReady,
   });
   const sankeyQuery = useQuery({
     queryKey: ['sankey', analyticsDateRange.startDate, analyticsDateRange.endDate],
     queryFn: () => fetchSankey(analyticsDateRange),
-    enabled: analyticsView === 'overview',
+    enabled: analyticsView === 'overview' && analyticsDateRangeReady,
   });
   const rebalanceQuery = useQuery({
     queryKey: ['rebalance', analyticsDateRange.startDate, analyticsDateRange.endDate],
     queryFn: () => fetchRebalance(analyticsDateRange),
-    enabled: analyticsView === 'risk',
+    enabled: analyticsView === 'risk' && analyticsDateRangeReady,
   });
   const currencyOverviewQuery = useQuery({
     queryKey: ['currency-overview'],
@@ -191,8 +222,11 @@ export function AnalyticsPage() {
               <AnalyticsDateRangePicker
                 startDate={analyticsDateRange.startDate}
                 endDate={analyticsDateRange.endDate}
+                minDate={analyticsDateBoundsQuery.data?.start_date ?? analyticsDateRange.startDate}
+                maxDate={analyticsDateBoundsQuery.data?.end_date ?? analyticsDateRange.endDate}
                 onStartDateChange={handleStartDateChange}
                 onEndDateChange={handleEndDateChange}
+                onRangeChange={handleRangeChange}
               />
             )}
           </div>

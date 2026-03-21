@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import and_
 from sqlalchemy import select
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models.category import Category
@@ -107,6 +108,31 @@ class SnapshotService:
             }
             for row in rows
         ]
+
+    @staticmethod
+    def get_earliest_daily_snapshot_date(session: Session) -> date | None:
+        family = get_default_family(session)
+        return session.scalar(
+            select(SnapshotDaily.snapshot_date)
+            .where(SnapshotDaily.family_id == family.id)
+            .order_by(SnapshotDaily.snapshot_date.asc())
+            .limit(1)
+        )
+
+    @staticmethod
+    def get_latest_daily_snapshot(
+        session: Session,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> SnapshotDaily | None:
+        family = get_default_family(session)
+        stmt = select(SnapshotDaily).where(SnapshotDaily.family_id == family.id)
+        if start_date is not None:
+            stmt = stmt.where(SnapshotDaily.snapshot_date >= start_date)
+        if end_date is not None:
+            stmt = stmt.where(SnapshotDaily.snapshot_date <= end_date)
+        stmt = stmt.order_by(desc(SnapshotDaily.snapshot_date)).limit(1)
+        return session.scalar(stmt)
 
     @staticmethod
     def revalue_all_snapshots(session: Session, base_currency: str) -> None:

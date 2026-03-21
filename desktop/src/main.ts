@@ -20,6 +20,10 @@ import { createBackendController, type BackendProcess } from './backend-controll
 import { createBootstrapController } from './bootstrap-controller.js';
 import { resolvePythonExecutable } from './python-executable.js';
 import { createErrorPage, createLoadingPage } from './startup-page.js';
+import {
+  UPDATE_IPC_CHANNELS,
+  createUpdateController,
+} from './update-controller.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(currentDir, '..', '..');
@@ -28,6 +32,15 @@ const BACKEND_READY_POLL_INTERVAL_MS = 150;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
+const updateController = createUpdateController({
+  appVersion: app.getVersion(),
+  arch: process.arch === 'arm64' ? 'arm64' : 'x64',
+  isPackaged: app.isPackaged,
+  userDataDir: app.getPath('userData'),
+  onRequestQuit: () => {
+    app.quit();
+  },
+});
 
 function createPageUrl(content: string): string {
   return `data:text/html;charset=UTF-8,${encodeURIComponent(content)}`;
@@ -165,6 +178,17 @@ function isWindowAvailable(window: BrowserWindow | null): window is BrowserWindo
   return window !== null && !window.isDestroyed();
 }
 
+function broadcastUpdateState(): void {
+  if (!isWindowAvailable(mainWindow)) {
+    return;
+  }
+
+  mainWindow.webContents.send(
+    UPDATE_IPC_CHANNELS.changed,
+    updateController.getState()
+  );
+}
+
 function focusWindow(window: BrowserWindow): void {
   if (window.isMinimized()) {
     window.restore();
@@ -271,11 +295,26 @@ ipcMain.handle('hbs:retry-bootstrap', async () => {
   backendController.stopAndResetPort();
   await bootstrap();
 });
+ipcMain.handle(UPDATE_IPC_CHANNELS.getState, async () => updateController.getState());
+ipcMain.handle(UPDATE_IPC_CHANNELS.check, async () => updateController.checkForUpdates());
+ipcMain.handle(UPDATE_IPC_CHANNELS.download, async () => updateController.downloadUpdate());
+ipcMain.handle(UPDATE_IPC_CHANNELS.install, async () => updateController.installUpdate());
+
+updateController.subscribe(() => {
+  broadcastUpdateState();
+});
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.whenReady().then(bootstrap);
+  app.whenReady().then(async () => {
+    const updateStartup = updateController.start().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[hbs-update] ${message}\n`);
+    });
+    await bootstrap();
+    await updateStartup;
+  });
 
   app.on('second-instance', async () => {
     if (!mainWindow) {
@@ -300,6 +339,7 @@ app.on('activate', async () => {
 });
 
 app.on('before-quit', () => {
+  updateController.stop();
   backendController.stopAndResetPort();
 });
 

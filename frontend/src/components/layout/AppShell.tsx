@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '../ui/button';
 import { cn } from '../../lib/cn';
+import { DesktopUpdateNotice } from './DesktopUpdateNotice';
 
 type NavItem = {
   key: string;
@@ -64,6 +65,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           );
         })}
       </nav>
+      <div className="mt-auto border-t border-slate-200/70 p-3">
+        <DesktopUpdateNotice />
+      </div>
     </div>
   );
 

@@ -11,6 +11,24 @@ export type HbsDesktopBinaryResponse = {
   body: ArrayBuffer;
 };
 
+export type HbsDesktopUpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+export type HbsDesktopUpdateState = {
+  status: HbsDesktopUpdateStatus;
+  latestVersion?: string | null;
+  currentVersion?: string | null;
+  downloadedFilePath?: string | null;
+  downloadedAt?: string | null;
+  progress?: number | null;
+  errorMessage?: string | null;
+};
+
 export type HbsDesktopBridge = {
   isDesktop: boolean;
   requestJson: (path: string, init?: RequestInit) => Promise<unknown>;
@@ -20,6 +38,11 @@ export type HbsDesktopBridge = {
   ) => Promise<HbsDesktopBinaryResponse>;
   postForm: (path: string, entries: DesktopFormDataEntry[]) => Promise<unknown>;
   retryBootstrap: () => Promise<unknown>;
+  getUpdateState: () => Promise<unknown>;
+  checkForUpdates: () => Promise<unknown>;
+  downloadUpdate: () => Promise<unknown>;
+  installUpdate: () => Promise<unknown>;
+  onUpdateStateChanged: (listener: (state: unknown) => void) => (() => void);
 };
 
 export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000/api/v1';

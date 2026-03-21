@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const API_BASE_ARG_PREFIX = '--hbs-api-base-url=';
 const RETRY_BOOTSTRAP_CHANNEL = 'hbs:retry-bootstrap';
+const UPDATE_STATE_CHANNEL = 'hbs:update:changed';
+const UPDATE_GET_STATE_CHANNEL = 'hbs:update:get-state';
+const UPDATE_CHECK_CHANNEL = 'hbs:update:check';
+const UPDATE_DOWNLOAD_CHANNEL = 'hbs:update:download';
+const UPDATE_INSTALL_CHANNEL = 'hbs:update:install';
 
 type JsonRequestInit = {
   method?: string;
@@ -18,6 +23,7 @@ type BinaryResponse = {
 
 type FormEntryValue = string | Blob;
 type FormEntries = Array<[string, FormEntryValue]>;
+type UpdateListener = (state: unknown) => void;
 
 function resolveApiBaseUrl(): string | undefined {
   const argument = process.argv.find((value) => value.startsWith(API_BASE_ARG_PREFIX));
@@ -94,4 +100,17 @@ contextBridge.exposeInMainWorld('__HBS_DESKTOP__', {
     return response.json();
   },
   retryBootstrap: () => ipcRenderer.invoke(RETRY_BOOTSTRAP_CHANNEL),
+  getUpdateState: () => ipcRenderer.invoke(UPDATE_GET_STATE_CHANNEL),
+  checkForUpdates: () => ipcRenderer.invoke(UPDATE_CHECK_CHANNEL),
+  downloadUpdate: () => ipcRenderer.invoke(UPDATE_DOWNLOAD_CHANNEL),
+  installUpdate: () => ipcRenderer.invoke(UPDATE_INSTALL_CHANNEL),
+  onUpdateStateChanged: (listener: UpdateListener) => {
+    const wrapped = (_event: unknown, payload: unknown) => {
+      listener(payload);
+    };
+    ipcRenderer.on(UPDATE_STATE_CHANNEL, wrapped);
+    return () => {
+      ipcRenderer.removeListener(UPDATE_STATE_CHANNEL, wrapped);
+    };
+  },
 });

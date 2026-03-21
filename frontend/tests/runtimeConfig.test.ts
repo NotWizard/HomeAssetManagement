@@ -57,3 +57,13 @@ test('运行时配置模块可以识别桌面 bridge', async () => {
     true
   );
 });
+
+test('桌面 bridge 类型应包含更新流程能力', () => {
+  const runtimeSource = readFileSync(resolve(FRONTEND_ROOT, 'src/config/runtime.ts'), 'utf8');
+
+  assert.match(runtimeSource, /getUpdateState:\s*\(\)\s*=>\s*Promise<unknown>/);
+  assert.match(runtimeSource, /checkForUpdates:\s*\(\)\s*=>\s*Promise<unknown>/);
+  assert.match(runtimeSource, /downloadUpdate:\s*\(\)\s*=>\s*Promise<unknown>/);
+  assert.match(runtimeSource, /installUpdate:\s*\(\)\s*=>\s*Promise<unknown>/);
+  assert.match(runtimeSource, /onUpdateStateChanged:\s*\(listener:\s*\(state:\s*unknown\)\s*=>\s*void\)\s*=>\s*\(\(\)\s*=>\s*void\)/);
+});

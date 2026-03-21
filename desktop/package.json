@@ -14,7 +14,7 @@
     "make:dmg:arm64": "node ./scripts/make-macos-release.mjs --arch=arm64",
     "make:dmg:x64": "node ./scripts/make-macos-release.mjs --arch=x64",
     "typecheck": "tsc --pretty false --noEmit",
-    "dev": "npm run build && electron-forge start",
+    "dev": "npm run build:frontend && npm run build && electron-forge start",
     "package": "npm run build:frontend && npm run build:backend && npm run build && npm run stage:resources && electron-forge package",
     "make": "npm run build:frontend && npm run build:backend && npm run build && npm run stage:resources && electron-forge make"
   },

@@ -120,8 +120,6 @@ export function AnalyticsPage() {
   const currencySummaries = currencyOverviewQuery.data?.currencies ?? [];
   const selectedSummary = selectedCurrency ? currencyOverviewQuery.data?.details[selectedCurrency]?.summary : undefined;
   const selectedDetail = selectedCurrency ? currencyOverviewQuery.data?.details[selectedCurrency] : undefined;
-  const currentView = VIEW_OPTIONS.find((item) => item.value === analyticsView) ?? VIEW_OPTIONS[0];
-
   useEffect(() => {
     if (analyticsView !== 'currency') {
       return;
@@ -139,52 +137,65 @@ export function AnalyticsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">分析看板</h2>
-          <p className="text-sm text-muted-foreground">从整体概览、风险配置和币种总览三个视角查看家庭资产负债</p>
-        </div>
-        {analyticsView === 'currency' ? (
-          currencySummaries.length > 0 ? (
-            <Select
-              className="w-56"
-              value={selectedCurrency}
-              onChange={(event) => setSelectedAnalyticsCurrency(String(event.target.value))}
-              options={currencySummaries.map((item) => ({
-                value: item.currency,
-                label: formatCurrencyLabel(item.currency),
-              }))}
-            />
-          ) : (
-            <div className="inline-flex h-10 items-center rounded-lg border bg-card px-3 text-sm text-muted-foreground">
-              暂无可选币种
-            </div>
-          )
-        ) : (
-          <AnalyticsDateRangePicker
-            startDate={analyticsDateRange.startDate}
-            endDate={analyticsDateRange.endDate}
-            onStartDateChange={handleStartDateChange}
-            onEndDateChange={handleEndDateChange}
-          />
-        )}
+      <div>
+        <h2 className="text-xl font-semibold">分析看板</h2>
+        <p className="text-sm text-muted-foreground">从整体概览、风险配置和币种总览三个视角查看家庭资产负债</p>
       </div>
 
-      <Card className="border-dashed bg-secondary/25">
-        <CardContent className="p-3">
-          <div className="flex flex-wrap gap-2">
-            {VIEW_OPTIONS.map((item) => (
-              <Button
-                key={item.value}
-                variant={analyticsView === item.value ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setAnalyticsView(item.value)}
-              >
-                {item.label}
-              </Button>
-            ))}
+      <Card className="border-slate-200/70 bg-[linear-gradient(135deg,rgba(248,250,252,0.96),rgba(255,255,255,0.98))] shadow-[0_24px_60px_-38px_rgba(15,23,42,0.28)]">
+        <CardContent className="flex flex-col gap-3 p-4 lg:p-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="inline-flex w-fit flex-wrap items-center gap-1 rounded-[20px] bg-slate-100/88 p-1.5">
+              {VIEW_OPTIONS.map((item) => (
+                <Button
+                  key={item.value}
+                  variant={analyticsView === item.value ? 'default' : 'ghost'}
+                  size="sm"
+                  className={
+                    analyticsView === item.value
+                      ? 'rounded-2xl px-4 shadow-[0_12px_24px_-18px_rgba(79,70,229,0.95)]'
+                      : 'rounded-2xl px-4 text-slate-600 hover:bg-white hover:text-slate-900'
+                  }
+                  onClick={() => setAnalyticsView(item.value)}
+                >
+                  {item.label}
+                </Button>
+              ))}
+            </div>
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">{currentView.description}</p>
+
+          <div className="min-w-0 xl:ml-6 xl:flex xl:flex-shrink-0 xl:justify-end">
+            {analyticsView === 'currency' ? (
+              currencySummaries.length > 0 ? (
+                <div className="flex flex-col gap-3 rounded-[22px] bg-slate-100/85 p-2.5 sm:flex-row sm:items-center">
+                  <div className="min-w-0 px-2 py-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">筛选币种</p>
+                    <p className="mt-1 text-xs text-slate-500">切换后方卡片与图表会同步更新。</p>
+                  </div>
+                  <Select
+                    className="h-11 rounded-2xl border-0 bg-white text-sm font-medium shadow-[0_14px_28px_-24px_rgba(15,23,42,0.45)] sm:ml-auto sm:w-[220px]"
+                    value={selectedCurrency}
+                    onChange={(event) => setSelectedAnalyticsCurrency(String(event.target.value))}
+                    options={currencySummaries.map((item) => ({
+                      value: item.currency,
+                      label: formatCurrencyLabel(item.currency),
+                    }))}
+                  />
+                </div>
+              ) : (
+                <div className="inline-flex h-11 w-full items-center rounded-2xl bg-slate-100/85 px-4 text-sm text-muted-foreground">
+                  暂无可选币种
+                </div>
+              )
+            ) : (
+              <AnalyticsDateRangePicker
+                startDate={analyticsDateRange.startDate}
+                endDate={analyticsDateRange.endDate}
+                onStartDateChange={handleStartDateChange}
+                onEndDateChange={handleEndDateChange}
+              />
+            )}
+          </div>
         </CardContent>
       </Card>
 

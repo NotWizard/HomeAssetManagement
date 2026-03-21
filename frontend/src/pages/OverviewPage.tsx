@@ -34,6 +34,14 @@ export function OverviewPage() {
   const rebalanceQuery = useQuery({ queryKey: ['rebalance', 'overview'], queryFn: () => fetchRebalance() });
   const settingsQuery = useQuery({ queryKey: ['settings', 'overview'], queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
+  const trendUnavailable = trendQuery.isError && !trendQuery.data;
+  const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;
+  const settingsUnavailable = settingsQuery.isError && !settingsQuery.data;
+  const rebalanceUnavailable = rebalanceQuery.isError && !rebalanceQuery.data;
+  const summaryUnavailable = trendUnavailable || settingsUnavailable;
+  const hasQueryWarning = trendQuery.isError || holdingsQuery.isError || settingsQuery.isError || rebalanceQuery.isError;
+  const baseCurrencyBadge = settingsQuery.data?.base_currency ?? (settingsUnavailable ? '读取失败' : '--');
+  const fxProviderBadge = settingsQuery.data?.fx_provider ?? (settingsUnavailable ? '读取失败' : '--');
 
   const latest = useMemo(() => {
     if (!trendQuery.data || trendQuery.data.net_asset.length === 0) {
@@ -78,14 +86,19 @@ export function OverviewPage() {
       .slice(0, 5);
   }, [holdingsQuery.data]);
 
-  const loading = trendQuery.isLoading || holdingsQuery.isLoading;
-  const hasError = trendQuery.isError || holdingsQuery.isError || settingsQuery.isError || rebalanceQuery.isError;
-  const errorMessage =
-    (trendQuery.error instanceof Error && trendQuery.error.message) ||
-    (holdingsQuery.error instanceof Error && holdingsQuery.error.message) ||
-    (settingsQuery.error instanceof Error && settingsQuery.error.message) ||
-    (rebalanceQuery.error instanceof Error && rebalanceQuery.error.message) ||
-    '请求失败';
+  const summaryLoading = trendQuery.isLoading || settingsQuery.isLoading;
+  const trendErrorMessage = trendQuery.isError ? (trendQuery.error instanceof Error && trendQuery.error.message) || '请求失败' : null;
+  const holdingsErrorMessage = holdingsQuery.isError
+    ? (holdingsQuery.error instanceof Error && holdingsQuery.error.message) || '请求失败'
+    : null;
+  const settingsErrorMessage = settingsQuery.isError
+    ? (settingsQuery.error instanceof Error && settingsQuery.error.message) || '请求失败'
+    : null;
+  const rebalanceErrorMessage = rebalanceQuery.isError
+    ? (rebalanceQuery.error instanceof Error && rebalanceQuery.error.message) || '请求失败'
+    : null;
+  const pageWarningMessage = trendErrorMessage || holdingsErrorMessage || settingsErrorMessage || rebalanceErrorMessage || '请求失败';
+  const topAssetsError = holdingsUnavailable ? holdingsErrorMessage ?? '请求失败' : null;
 
   return (
     <div className="space-y-5">
@@ -95,57 +108,67 @@ export function OverviewPage() {
           <p className="text-sm text-muted-foreground">家庭资产与负债关键指标概览</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-          <Badge variant="secondary">基准币 {settingsQuery.data?.base_currency ?? '--'}</Badge>
-          <Badge variant="secondary">汇率源 {settingsQuery.data?.fx_provider ?? '--'}</Badge>
+          <Badge variant="secondary">基准币 {baseCurrencyBadge}</Badge>
+          <Badge variant="secondary">汇率源 {fxProviderBadge}</Badge>
         </div>
       </div>
 
-      {hasError ? (
+      {hasQueryWarning ? (
         <Card className="border-rose-200 bg-rose-50/50">
           <CardContent className="flex items-start gap-2 p-4 text-sm text-rose-700">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              <p className="font-medium">数据加载失败</p>
-              <p className="mt-1 text-xs text-rose-700/90">{errorMessage}</p>
+              <p className="font-medium">部分数据刷新失败</p>
+              <p className="mt-1 text-xs text-rose-700/90">
+                {summaryUnavailable || holdingsUnavailable || rebalanceUnavailable
+                  ? `当前展示最近一次成功结果；无缓存数据的模块暂时不可用。${pageWarningMessage}`
+                  : `当前展示最近一次成功结果。${pageWarningMessage}`}
+              </p>
             </div>
           </CardContent>
         </Card>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="净资产"
-          value={formatCurrency(latest.netAsset, baseCurrency)}
-          delta={formatDelta(latest.netAssetDelta)}
-          positive={(latest.netAssetDelta ?? 0) >= 0}
-          icon={<Wallet className="h-4 w-4" />}
-          loading={loading}
-        />
-        <MetricCard
-          title="总资产"
-          value={formatCurrency(latest.totalAsset, baseCurrency)}
-          delta={formatDelta(latest.totalAssetDelta)}
-          positive={(latest.totalAssetDelta ?? 0) >= 0}
-          icon={<ArrowUpRight className="h-4 w-4" />}
-          loading={loading}
-        />
-        <MetricCard
-          title="总负债"
-          value={formatCurrency(latest.totalLiability, baseCurrency)}
-          delta={formatDelta(latest.totalLiabilityDelta)}
-          positive={(latest.totalLiabilityDelta ?? 0) <= 0}
-          icon={<ArrowDownRight className="h-4 w-4" />}
-          loading={loading}
-        />
-        <MetricCard
-          title="基准币"
-          value={settingsQuery.data?.base_currency ?? '--'}
-          delta={settingsQuery.data ? `汇率源 ${settingsQuery.data.fx_provider}` : '读取设置中'}
-          positive
-          icon={<Globe className="h-4 w-4" />}
-          loading={settingsQuery.isLoading}
-        />
-      </div>
+      {summaryUnavailable ? (
+        <Card className="border-rose-200 bg-rose-50/50">
+          <CardContent className="p-4 text-sm text-rose-700">关键总览数据暂时不可用，请稍后刷新重试。</CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            title="净资产"
+            value={formatCurrency(latest.netAsset, baseCurrency)}
+            delta={formatDelta(latest.netAssetDelta)}
+            positive={(latest.netAssetDelta ?? 0) >= 0}
+            icon={<Wallet className="h-4 w-4" />}
+            loading={summaryLoading}
+          />
+          <MetricCard
+            title="总资产"
+            value={formatCurrency(latest.totalAsset, baseCurrency)}
+            delta={formatDelta(latest.totalAssetDelta)}
+            positive={(latest.totalAssetDelta ?? 0) >= 0}
+            icon={<ArrowUpRight className="h-4 w-4" />}
+            loading={summaryLoading}
+          />
+          <MetricCard
+            title="总负债"
+            value={formatCurrency(latest.totalLiability, baseCurrency)}
+            delta={formatDelta(latest.totalLiabilityDelta)}
+            positive={(latest.totalLiabilityDelta ?? 0) <= 0}
+            icon={<ArrowDownRight className="h-4 w-4" />}
+            loading={summaryLoading}
+          />
+          <MetricCard
+            title="基准币"
+            value={settingsQuery.data?.base_currency ?? '--'}
+            delta={settingsQuery.data ? `汇率源 ${settingsQuery.data.fx_provider}` : '读取设置中'}
+            positive
+            icon={<Globe className="h-4 w-4" />}
+            loading={settingsQuery.isLoading}
+          />
+        </div>
+      )}
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
@@ -155,9 +178,13 @@ export function OverviewPage() {
           <CardContent>
             {trendQuery.isError ? (
               <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
-                趋势数据加载失败：{errorMessage}
+                <p className="font-medium">{trendUnavailable ? '趋势数据加载失败' : '趋势数据刷新失败'}</p>
+                <p className="mt-1 text-xs text-rose-700/90">
+                  {trendUnavailable ? trendErrorMessage : `当前展示最近一次成功结果：${trendErrorMessage}`}
+                </p>
               </div>
-            ) : trendQuery.data ? (
+            ) : null}
+            {trendUnavailable ? null : trendQuery.data ? (
               <Suspense fallback={<Skeleton className="h-72 w-full" />}>
                 <TrendChart
                   dates={trendQuery.data.dates}
@@ -177,6 +204,14 @@ export function OverviewPage() {
             <CardTitle className="text-sm">Top Assets</CardTitle>
           </CardHeader>
           <CardContent>
+            {holdingsQuery.isError ? (
+              <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
+                <p className="font-medium">{holdingsUnavailable ? '资产数据加载失败' : '资产数据刷新失败'}</p>
+                <p className="mt-1 text-xs text-rose-700/90">
+                  {holdingsUnavailable ? holdingsErrorMessage : `当前展示最近一次成功结果：${holdingsErrorMessage}`}
+                </p>
+              </div>
+            ) : null}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -185,7 +220,13 @@ export function OverviewPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {topAssets.length > 0 ? (
+                {topAssetsError ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center text-rose-600">
+                      资产数据加载失败：{topAssetsError}
+                    </TableCell>
+                  </TableRow>
+                ) : topAssets.length > 0 ? (
                   topAssets.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
@@ -213,22 +254,32 @@ export function OverviewPage() {
           <CardTitle className="text-sm">再平衡预警</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {(rebalanceQuery.data ?? []).slice(0, 6).map((item) => (
-              <div key={item.id} className="rounded-lg border bg-secondary/45 p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="font-medium">{item.name}</p>
-                  <Badge variant={item.status === '超配' ? 'danger' : 'success'}>{item.status}</Badge>
+          {rebalanceQuery.isError ? (
+            <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
+              <p className="font-medium">{rebalanceUnavailable ? '再平衡数据加载失败' : '再平衡数据刷新失败'}</p>
+              <p className="mt-1 text-xs text-rose-700/90">
+                {rebalanceUnavailable ? rebalanceErrorMessage : `当前展示最近一次成功结果：${rebalanceErrorMessage}`}
+              </p>
+            </div>
+          ) : null}
+          {rebalanceUnavailable ? null : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {(rebalanceQuery.data ?? []).slice(0, 6).map((item) => (
+                <div key={item.id} className="rounded-lg border bg-secondary/45 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="font-medium">{item.name}</p>
+                    <Badge variant={item.status === '超配' ? 'danger' : 'success'}>{item.status}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">目标占比 {formatPercent(item.target_ratio)}</p>
+                  <p className="text-xs text-muted-foreground">当前占比 {formatPercent(item.current_ratio)}</p>
+                  <p className="mt-2 text-sm font-semibold">偏离 {formatPercent(item.deviation)}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">目标占比 {formatPercent(item.target_ratio)}</p>
-                <p className="text-xs text-muted-foreground">当前占比 {formatPercent(item.current_ratio)}</p>
-                <p className="mt-2 text-sm font-semibold">偏离 {formatPercent(item.deviation)}</p>
-              </div>
-            ))}
-            {(rebalanceQuery.data ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">当前没有超过阈值的资产项。</p>
-            ) : null}
-          </div>
+              ))}
+              {(rebalanceQuery.data ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">当前没有超过阈值的资产项。</p>
+              ) : null}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

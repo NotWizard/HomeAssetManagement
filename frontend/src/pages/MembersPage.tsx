@@ -19,6 +19,9 @@ export function MembersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const membersQuery = useQuery({ queryKey: ['members'], queryFn: fetchMembers });
+  const members = membersQuery.data ?? [];
+  const membersUnavailable = membersQuery.isError && !membersQuery.data;
+  const membersErrorMessage = membersQuery.isError ? formatError(membersQuery.error) : null;
 
   const createMutation = useMutation({
     mutationFn: createMember,
@@ -87,6 +90,15 @@ export function MembersPage() {
           <CardTitle className="text-sm">成员列表</CardTitle>
         </CardHeader>
         <CardContent>
+          {membersQuery.isError ? (
+            <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50/60 p-3 text-sm text-rose-700">
+              <p className="font-medium">{membersUnavailable ? '成员加载失败' : '成员刷新失败'}</p>
+              <p className="mt-1 text-xs text-rose-700/90">
+                {membersUnavailable ? membersErrorMessage : `当前展示最近一次成功结果：${membersErrorMessage}`}
+              </p>
+            </div>
+          ) : null}
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -95,17 +107,25 @@ export function MembersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(membersQuery.data ?? []).map((member) => (
-                <TableRow key={member.id}>
-                  <TableCell className="font-medium">{member.name}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(member.id, member.name)}>
-                      <Trash2 className="h-4 w-4 text-rose-500" />
-                    </Button>
+              {membersUnavailable ? (
+                <TableRow>
+                  <TableCell colSpan={2} className="py-8 text-center text-rose-600">
+                    成员加载失败，请稍后重试
                   </TableCell>
                 </TableRow>
-              ))}
-              {(membersQuery.data ?? []).length === 0 ? (
+              ) : (
+                members.map((member) => (
+                  <TableRow key={member.id}>
+                    <TableCell className="font-medium">{member.name}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(member.id, member.name)}>
+                        <Trash2 className="h-4 w-4 text-rose-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+              {!membersQuery.isError && (membersQuery.data ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={2} className="py-8 text-center text-muted-foreground">
                     <UsersRound className="mx-auto mb-2 h-5 w-5" />

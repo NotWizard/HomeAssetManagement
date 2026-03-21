@@ -52,8 +52,8 @@ function resolveBrowserOrigin(): string | undefined {
     return undefined;
   }
 
-  const { origin, protocol, hostname } = window.location;
-  if ((protocol === 'http:' || protocol === 'https:') && (hostname === '127.0.0.1' || hostname === 'localhost')) {
+  const { origin, protocol } = window.location;
+  if (protocol === 'http:' || protocol === 'https:') {
     return origin;
   }
 
@@ -81,19 +81,32 @@ function readDesktopBridge(
 export function resolveApiBaseUrl(
   runtimeConfig?: HbsRuntimeConfig,
   viteApiBaseUrl?: string,
-  currentOrigin?: string
+  currentOrigin?: string,
+  allowCurrentOriginFallback = true
 ): string {
-  return runtimeConfig?.apiBaseUrl ?? viteApiBaseUrl ?? (currentOrigin ? `${currentOrigin}/api/v1` : DEFAULT_API_BASE_URL);
+  return (
+    runtimeConfig?.apiBaseUrl ??
+    viteApiBaseUrl ??
+    (allowCurrentOriginFallback && currentOrigin
+      ? `${currentOrigin}/api/v1`
+      : DEFAULT_API_BASE_URL)
+  );
 }
 
 export function getApiBaseUrl(): string {
   const viteEnv = (import.meta as ImportMeta & {
     env?: {
       VITE_API_BASE_URL?: string;
+      DEV?: boolean;
     };
   }).env;
 
-  return resolveApiBaseUrl(readRuntimeConfig(), viteEnv?.VITE_API_BASE_URL, resolveBrowserOrigin());
+  return resolveApiBaseUrl(
+    readRuntimeConfig(),
+    viteEnv?.VITE_API_BASE_URL,
+    resolveBrowserOrigin(),
+    viteEnv?.DEV !== true
+  );
 }
 
 export function getDesktopBridge(

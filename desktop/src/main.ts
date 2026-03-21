@@ -84,6 +84,12 @@ function resolveDesktopPaths() {
   });
 }
 
+function ensureFrontendEntryExists(frontendEntryUrl: string): void {
+  if (!existsSync(fileURLToPath(frontendEntryUrl))) {
+    throw new Error(`缺少前端入口文件: ${frontendEntryUrl}`);
+  }
+}
+
 function spawnBackend(port: number): ChildProcessWithoutNullStreams {
   const desktopPaths = resolveDesktopPaths();
   mkdirSync(desktopPaths.storageDir, { recursive: true });
@@ -104,9 +110,7 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
     if (!existsSync(desktopPaths.frontendDistDir)) {
       throw new Error(`缺少前端构建产物目录: ${desktopPaths.frontendDistDir}`);
     }
-    if (!existsSync(fileURLToPath(desktopPaths.frontendEntryUrl))) {
-      throw new Error(`缺少前端入口文件: ${desktopPaths.frontendEntryUrl}`);
-    }
+    ensureFrontendEntryExists(desktopPaths.frontendEntryUrl);
 
     return spawn(desktopPaths.backendEntry, [], {
       env,
@@ -198,6 +202,44 @@ function focusWindow(window: BrowserWindow): void {
   window.focus();
 }
 
+function showWindowError(window: BrowserWindow, message: string): void {
+  process.stderr.write(`[hbs-window] ${message}\n`);
+  window
+    .loadURL(createPageUrl(createErrorPage(message)))
+    .catch(() => undefined);
+}
+
+function wireWindowDiagnostics(window: BrowserWindow): void {
+  window.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame || errorCode === -3) {
+        return;
+      }
+
+      const failedUrl = validatedURL || '未知地址';
+      showWindowError(
+        window,
+        `桌面界面加载失败（${errorCode}）：${errorDescription || '未知错误'}\n${failedUrl}`
+      );
+    }
+  );
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    showWindowError(window, `桌面界面渲染进程已退出：${details.reason}`);
+  });
+
+  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const channel = level >= 2 ? 'stderr' : 'stdout';
+    const prefix = `[hbs-renderer] ${sourceId || 'unknown'}:${line} ${message}\n`;
+    if (channel === 'stderr') {
+      process.stderr.write(prefix);
+      return;
+    }
+    process.stdout.write(prefix);
+  });
+}
+
 function ensureMainWindow(): BrowserWindow {
   const currentPort = backendController.getPort();
   if (isWindowAvailable(mainWindow) && windowPort === currentPort) {
@@ -220,7 +262,7 @@ function ensureMainWindow(): BrowserWindow {
     title: '家庭资产负债表',
     backgroundColor: '#ffffff',
     webPreferences: {
-      preload: join(currentDir, 'preload.js'),
+      preload: join(currentDir, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       additionalArguments: buildWindowArguments(),
@@ -233,6 +275,7 @@ function ensureMainWindow(): BrowserWindow {
       windowPort = null;
     }
   });
+  wireWindowDiagnostics(window);
 
   mainWindow = window;
   windowPort = currentPort ?? null;
@@ -283,6 +326,7 @@ const bootstrapController = createBootstrapController({
   startBackend: async () => {
     await backendController.ensureReady();
     const desktopPaths = resolveDesktopPaths();
+    ensureFrontendEntryExists(desktopPaths.frontendEntryUrl);
     return { appUrl: desktopPaths.frontendEntryUrl };
   },
 });

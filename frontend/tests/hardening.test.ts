@@ -44,6 +44,18 @@ test('设置页应展示后端真实 timezone，并避免提交 timezone', () =>
   assert.doesNotMatch(source, /mutation\.mutate\([\s\S]*timezone:/);
 });
 
+test('设置页在 settings 请求失败时应保留最近一次成功数据，并在缺少服务端值时回退本机时区', () => {
+  const source = readFrontendFile('src/pages/SettingsPage.tsx');
+
+  assert.match(source, /settingsQuery\.isError/);
+  assert.match(source, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone\s*\|\|\s*'UTC'/);
+  assert.match(source, /本机默认，未从服务端读取到/);
+  assert.match(source, /当前展示最近一次成功结果/);
+  assert.match(source, /if\s*\(\s*!settingsQuery\.data\s*\)/);
+  assert.match(source, /disabled=\{mutation\.isPending \|\| settingsQuery\.isLoading \|\| !settingsQuery\.data\}/);
+  assert.doesNotMatch(source, /if\s*\(\s*settingsQuery\.isError\s*\|\|\s*!settingsQuery\.data\s*\)/);
+});
+
 test('录入页单条 create\/update\/delete mutation 需要处理 onError', () => {
   const source = readFrontendFile('src/pages/EntryPage.tsx');
 
@@ -62,6 +74,27 @@ test('总览页与分析页需要对 query error 做明确展示', () => {
 
   assert.match(overviewSource, /isError/);
   assert.match(analyticsSource, /isError/);
+});
+
+test('总览页关键 query 应只在无缓存数据时降级为错误态', () => {
+  const source = readFrontendFile('src/pages/OverviewPage.tsx');
+
+  assert.match(source, /trendQuery\.isError\s*&&\s*!trendQuery\.data/);
+  assert.match(source, /holdingsQuery\.isError\s*&&\s*!holdingsQuery\.data/);
+  assert.match(source, /settingsQuery\.isError\s*&&\s*!settingsQuery\.data/);
+  assert.match(source, /rebalanceQuery\.isError\s*&&\s*!rebalanceQuery\.data/);
+  assert.match(source, /最近一次成功结果/);
+  assert.doesNotMatch(source, /const criticalQueriesFailed = trendQuery\.isError \|\| holdingsQuery\.isError \|\| settingsQuery\.isError/);
+});
+
+test('成员页请求失败时应保留旧列表，仅在无数据时显示替代错误行', () => {
+  const source = readFrontendFile('src/pages/MembersPage.tsx');
+
+  assert.match(source, /membersQuery\.isError/);
+  assert.match(source, /成员加载失败/);
+  assert.match(source, /membersQuery\.isError\s*&&\s*!membersQuery\.data/);
+  assert.match(source, /当前展示最近一次成功结果/);
+  assert.match(source, /!membersQuery\.isError\s*&&\s*\(membersQuery\.data \?\? \[\]\)\.length === 0/);
 });
 
 test('分析页时间区间筛选需要作用于桑基图与再平衡请求', () => {

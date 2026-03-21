@@ -28,9 +28,10 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const timezoneDisplay = settingsQuery.data?.timezone
-    ? settingsQuery.data.timezone
-    : `${browserTimezone}（本机默认，未从服务端读取到）`;
+  const settingsUnavailable = settingsQuery.isError && !settingsQuery.data;
+  const settingsErrorMessage = settingsQuery.isError ? formatError(settingsQuery.error) : null;
+  const timezoneDisplay = settingsQuery.data?.timezone ?? `${browserTimezone}（本机默认，未从服务端读取到）`;
+  const fxProviderDisplay = settingsQuery.data?.fx_provider ?? 'frankfurter';
 
   const [form, setForm] = useState<SettingsUpdatePayload>({
     base_currency: 'CNY',
@@ -101,6 +102,10 @@ export function SettingsPage() {
   });
 
   const submit = () => {
+    if (!settingsQuery.data) {
+      setError(settingsQuery.isError ? '设置加载失败，暂时无法保存，请刷新后重试' : '设置尚未加载完成，暂时无法保存');
+      return;
+    }
     if (!form.base_currency.trim()) {
       setError('基准币种不能为空');
       return;
@@ -136,41 +141,60 @@ export function SettingsPage() {
           <CardTitle className="text-sm">全局设置</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {settingsQuery.isError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 text-sm text-rose-700">
+              <p className="font-medium">{settingsUnavailable ? '设置加载失败' : '设置刷新失败'}</p>
+              <p className="mt-1 text-xs text-rose-700/90">
+                {settingsUnavailable
+                  ? settingsErrorMessage
+                  : `当前展示最近一次成功结果：${settingsErrorMessage}`}
+              </p>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="基准币种">
-              <Select
-                value={form.base_currency}
-                onChange={(event) => setForm((prev) => ({ ...prev, base_currency: event.target.value.toUpperCase() }))}
-                options={baseCurrencyOptions}
-              />
+              {settingsQuery.data ? (
+                <Select
+                  value={form.base_currency}
+                  onChange={(event) => setForm((prev) => ({ ...prev, base_currency: event.target.value.toUpperCase() }))}
+                  options={baseCurrencyOptions}
+                />
+              ) : (
+                <Input value={settingsQuery.isError ? '设置加载失败' : '读取中...'} disabled readOnly />
+              )}
             </Field>
             <Field label="时区">
               <Input value={timezoneDisplay} disabled readOnly />
               <p className="text-xs text-muted-foreground">优先显示服务端时区；未读取到时回退为本机时区，不支持手动修改</p>
             </Field>
             <Field label="再平衡阈值(%)">
-              <Input
-                type="number"
-                min="0.01"
-                max="99.99"
-                step="0.1"
-                value={form.rebalance_threshold_pct}
-                onChange={(event) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    rebalance_threshold_pct: Number(event.target.value || 0),
-                  }))
-                }
-              />
+              {settingsQuery.data ? (
+                <Input
+                  type="number"
+                  min="0.01"
+                  max="99.99"
+                  step="0.1"
+                  value={form.rebalance_threshold_pct}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      rebalance_threshold_pct: Number(event.target.value || 0),
+                    }))
+                  }
+                />
+              ) : (
+                <Input value={settingsQuery.isError ? '设置加载失败' : '读取中...'} disabled readOnly />
+              )}
             </Field>
             <Field label="汇率提供方">
-              <Input value={settingsQuery.data?.fx_provider ?? 'frankfurter'} disabled />
+              <Input value={fxProviderDisplay} disabled readOnly />
             </Field>
           </div>
 
           {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
-          <Button onClick={submit} disabled={mutation.isPending}>
+          <Button onClick={submit} disabled={mutation.isPending || settingsQuery.isLoading || !settingsQuery.data}>
             <Save className="mr-2 h-4 w-4" />
             保存设置
           </Button>

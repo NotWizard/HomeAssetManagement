@@ -81,7 +81,6 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
       port,
       storageDir: desktopPaths.storageDir,
       databaseUrl: desktopPaths.databaseUrl,
-      frontendDistDir: desktopPaths.frontendDistDir,
     }),
   };
 
@@ -91,6 +90,9 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
     }
     if (!existsSync(desktopPaths.frontendDistDir)) {
       throw new Error(`缺少前端构建产物目录: ${desktopPaths.frontendDistDir}`);
+    }
+    if (!existsSync(fileURLToPath(desktopPaths.frontendEntryUrl))) {
+      throw new Error(`缺少前端入口文件: ${desktopPaths.frontendEntryUrl}`);
     }
 
     return spawn(desktopPaths.backendEntry, [], {
@@ -255,8 +257,9 @@ const bootstrapController = createBootstrapController({
     };
   },
   startBackend: async () => {
-    const result = await backendController.ensureReady();
-    return { appUrl: result.appUrl };
+    await backendController.ensureReady();
+    const desktopPaths = resolveDesktopPaths();
+    return { appUrl: desktopPaths.frontendEntryUrl };
   },
 });
 

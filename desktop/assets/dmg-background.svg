@@ -1,0 +1,53 @@
+<svg width="658" height="498" viewBox="0 0 658 498" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="48" y1="40" x2="594" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5FBFA"/>
+      <stop offset="0.58" stop-color="#ECF7FE"/>
+      <stop offset="1" stop-color="#FFFFFF"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="72" y1="94" x2="230" y2="246" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="658" height="498" rx="28" fill="url(#bg)"/>
+  <rect x="34" y="34" width="590" height="430" rx="28" fill="white" fill-opacity="0.62"/>
+
+  <rect x="72" y="84" width="108" height="108" rx="28" fill="url(#accent)"/>
+  <path d="M96 136L126 112L156 136" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="104" y="132" width="44" height="36" rx="12" fill="white"/>
+  <rect x="114" y="144" width="8" height="16" rx="4" fill="#0F766E"/>
+  <rect x="126" y="138" width="8" height="22" rx="4" fill="#0EA5A4"/>
+  <rect x="138" y="132" width="8" height="28" rx="4" fill="#38BDF8"/>
+
+  <text x="72" y="242" fill="#0F172A" font-size="30" font-weight="700" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+    家庭资产负债表
+  </text>
+  <text x="72" y="278" fill="#334155" font-size="18" font-weight="500" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+    把左侧应用拖入右侧“应用程序”，即可完成安装
+  </text>
+
+  <rect x="72" y="314" width="244" height="90" rx="18" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text x="94" y="346" fill="#0F766E" font-size="16" font-weight="700" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+    首次打开提示
+  </text>
+  <text x="94" y="372" fill="#0F172A" font-size="14" font-weight="500" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+    这是未签名版本，若被拦截
+  </text>
+  <text x="94" y="394" fill="#0F172A" font-size="14" font-weight="500" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+    请到“系统设置 -> 隐私与安全性”
+  </text>
+  <text x="94" y="416" fill="#0F172A" font-size="14" font-weight="500" font-family="PingFang SC, Microsoft YaHei, sans-serif">
+    允许打开一次即可
+  </text>
+
+  <path d="M362 248H512" stroke="#38BDF8" stroke-width="12" stroke-linecap="round"/>
+  <path d="M488 216L540 248L488 280" stroke="#0EA5A4" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="534" y="174" width="74" height="74" rx="18" fill="#F8FAFC" stroke="#CBD5E1"/>
+  <path d="M558 208L571 195M571 195L584 208M571 195V227" stroke="#94A3B8" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="526" y="280" width="96" height="96" rx="22" fill="#F8FAFC" stroke="#CBD5E1"/>
+  <path d="M550 332H598" stroke="#94A3B8" stroke-width="12" stroke-linecap="round"/>
+  <path d="M550 352H598" stroke="#94A3B8" stroke-width="12" stroke-linecap="round"/>
+  <path d="M550 312H598" stroke="#94A3B8" stroke-width="12" stroke-linecap="round"/>
+</svg>

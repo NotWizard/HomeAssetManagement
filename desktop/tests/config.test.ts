@@ -58,10 +58,15 @@ test('桌面配置会根据打包状态解析前端和后端入口', async () =>
   });
 
   assert.equal(devPaths.frontendDistDir, '/repo/HouseholdBalanceSheet/frontend/dist');
+  assert.equal(devPaths.frontendEntryUrl, 'file:///repo/HouseholdBalanceSheet/frontend/dist/index.html');
   assert.equal(devPaths.backendEntry, '/repo/HouseholdBalanceSheet/backend/desktop_server.py');
   assert.equal(
     packagedPaths.frontendDistDir,
     '/Applications/HouseholdBalanceSheet.app/Contents/Resources/frontend-dist'
+  );
+  assert.equal(
+    packagedPaths.frontendEntryUrl,
+    'file:///Applications/HouseholdBalanceSheet.app/Contents/Resources/frontend-dist/index.html'
   );
   assert.equal(
     packagedPaths.backendEntry,

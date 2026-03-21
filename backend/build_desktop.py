@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+import platform
 import shutil
 import sys
 from dataclasses import dataclass
@@ -7,6 +9,13 @@ from pathlib import Path
 import os
 
 DESKTOP_EXECUTABLE_NAME = "hbs-backend"
+ARCH_ALIASES = {
+    "arm64": "arm64",
+    "aarch64": "arm64",
+    "x64": "x64",
+    "x86_64": "x64",
+    "amd64": "x64",
+}
 
 
 def build_executable_filename() -> str:
@@ -24,23 +33,37 @@ class DesktopBuildPaths:
     executable_path: Path
 
 
-def build_output_paths(project_root: Path) -> DesktopBuildPaths:
+def normalize_target_arch(
+    target_arch: str | None, machine_name: str | None = None
+) -> str:
+    raw_value = (target_arch or machine_name or platform.machine()).lower()
+
+    if raw_value in ARCH_ALIASES:
+        return ARCH_ALIASES[raw_value]
+
+    raise ValueError(
+        f"不支持的桌面目标架构: {raw_value}，仅支持 arm64 / x64。"
+    )
+
+
+def build_output_paths(project_root: Path, target_arch: str) -> DesktopBuildPaths:
     backend_dir = project_root / "backend"
-    dist_dir = backend_dir / "dist-desktop"
+    normalized_arch = normalize_target_arch(target_arch)
+    dist_dir = backend_dir / "dist-desktop" / normalized_arch
     bundle_dir = dist_dir / DESKTOP_EXECUTABLE_NAME
     return DesktopBuildPaths(
         entry_script=backend_dir / "desktop_server.py",
         dist_dir=dist_dir,
-        work_dir=backend_dir / "build-desktop",
-        cache_dir=backend_dir / ".pyinstaller",
+        work_dir=backend_dir / "build-desktop" / normalized_arch,
+        cache_dir=backend_dir / ".pyinstaller" / normalized_arch,
         spec_dir=backend_dir,
         bundle_dir=bundle_dir,
         executable_path=bundle_dir / build_executable_filename(),
     )
 
 
-def build_pyinstaller_args(project_root: Path) -> list[str]:
-    paths = build_output_paths(project_root)
+def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
+    paths = build_output_paths(project_root, target_arch)
     return [
         "--noconfirm",
         "--clean",
@@ -59,8 +82,10 @@ def build_pyinstaller_args(project_root: Path) -> list[str]:
     ]
 
 
-def build_pyinstaller_environment(project_root: Path) -> dict[str, str]:
-    paths = build_output_paths(project_root)
+def build_pyinstaller_environment(
+    project_root: Path, target_arch: str
+) -> dict[str, str]:
+    paths = build_output_paths(project_root, target_arch)
     return {
         **os.environ,
         "PYINSTALLER_CONFIG_DIR": str(paths.cache_dir),
@@ -77,9 +102,23 @@ def _remove_previous_build(paths: DesktopBuildPaths) -> None:
         spec_file.unlink()
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--arch", default=None)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+
+    try:
+        target_arch = normalize_target_arch(args.arch)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
     project_root = Path(__file__).resolve().parents[1]
-    paths = build_output_paths(project_root)
+    paths = build_output_paths(project_root, target_arch)
     _remove_previous_build(paths)
 
     try:
@@ -93,10 +132,10 @@ def main() -> int:
 
     paths.cache_dir.mkdir(parents=True, exist_ok=True)
     original_environment = os.environ.copy()
-    os.environ.update(build_pyinstaller_environment(project_root))
+    os.environ.update(build_pyinstaller_environment(project_root, target_arch))
 
     try:
-        PyInstaller.__main__.run(build_pyinstaller_args(project_root))
+        PyInstaller.__main__.run(build_pyinstaller_args(project_root, target_arch))
     finally:
         os.environ.clear()
         os.environ.update(original_environment)
@@ -105,7 +144,7 @@ def main() -> int:
         print(f"后端桌面二进制未生成: {paths.executable_path}", file=sys.stderr)
         return 1
 
-    print(f"后端桌面二进制已生成: {paths.executable_path}")
+    print(f"后端桌面二进制已生成 ({target_arch}): {paths.executable_path}")
     return 0
 
 

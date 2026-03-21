@@ -1,7 +1,25 @@
 import type { ApiResponse } from '../types';
-import { getApiBaseUrl } from '../config/runtime';
+import {
+  getApiBaseUrl,
+  getDesktopBridge,
+  type DesktopFormDataEntry,
+} from '../config/runtime';
+
+function normalizeResponse<T>(payload: unknown): T {
+  const json = payload as ApiResponse<T>;
+  if (json.code !== 0) {
+    throw new Error(json.message || 'Request failed');
+  }
+
+  return json.data;
+}
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const desktopBridge = getDesktopBridge();
+  if (desktopBridge?.isDesktop) {
+    return normalizeResponse<T>(await desktopBridge.requestJson(url, options));
+  }
+
   const response = await fetch(`${getApiBaseUrl()}${url}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -11,12 +29,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   const json = (await response.json()) as ApiResponse<T>;
-
-  if (!response.ok || json.code !== 0) {
+  if (!response.ok) {
     throw new Error(json.message || 'Request failed');
   }
-
-  return json.data;
+  return normalizeResponse<T>(json);
 }
 
 export async function getJSON<T>(url: string): Promise<T> {
@@ -36,13 +52,28 @@ export async function deleteJSON<T>(url: string): Promise<T> {
 }
 
 export async function postForm<T>(url: string, formData: FormData): Promise<T> {
+  const desktopBridge = getDesktopBridge();
+  if (desktopBridge?.isDesktop) {
+    return normalizeResponse<T>(
+      await desktopBridge.postForm(url, serializeFormData(formData))
+    );
+  }
+
   const response = await fetch(`${getApiBaseUrl()}${url}`, {
     method: 'POST',
     body: formData,
   });
   const json = (await response.json()) as ApiResponse<T>;
-  if (!response.ok || json.code !== 0) {
+  if (!response.ok) {
     throw new Error(json.message || 'Request failed');
   }
-  return json.data;
+  return normalizeResponse<T>(json);
+}
+
+function serializeFormData(formData: FormData): DesktopFormDataEntry[] {
+  const entries: DesktopFormDataEntry[] = [];
+  for (const [key, value] of formData.entries()) {
+    entries.push([key, value]);
+  }
+  return entries;
 }

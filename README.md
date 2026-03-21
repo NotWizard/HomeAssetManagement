@@ -86,7 +86,9 @@
 
 推荐直接使用桌面安装包。
 
-1. 获取 `DMG` 安装包并安装到“应用程序”
+1. 获取与你的 Mac 芯片匹配的 `DMG` 安装包
+   - Apple Silicon（M1 / M2 / M3 / M4）使用 `HouseholdBalanceSheet-<version>-macos-arm64.dmg`
+   - Intel Mac 使用 `HouseholdBalanceSheet-<version>-macos-x64.dmg`
 2. 双击打开 `家庭资产负债表`
 3. 如果 macOS 因未签名阻止打开，按提示到“系统设置 -> 隐私与安全性”里允许打开一次
 4. 应用启动后会先显示加载页，等待本地服务准备完成
@@ -143,24 +145,45 @@ curl http://127.0.0.1:8000/health
 ```bash
 source .venv/bin/activate
 pip install -r backend/requirements-desktop.txt
+npm --prefix frontend install
 npm --prefix desktop install
 ```
 
-2. 执行打包
+2. 如需同时构建 Intel 与 Apple Silicon，两种方式任选其一：
+
+- 准备额外的 x64 Python 环境，并放在仓库根目录 `.venv-x64`
+- 或设置环境变量 `HBS_DESKTOP_PYTHON_X64=/path/to/x64/python`
+
+说明：
+
+- 当前仓库根目录 `.venv` 会被视为宿主机架构环境
+- 在 Apple Silicon 机器上，通常可保留 `.venv` 为 `arm64`，再额外准备一个通过 Rosetta 创建的 `.venv-x64`
+- 如果缺少 x64 Python，`make:dmg:x64` / `make:dmg` 会给出明确错误提示，不会静默产出错误安装包
+
+3. 执行打包
 
 ```bash
-npm --prefix desktop run make
+npm --prefix desktop run make:dmg:arm64
+npm --prefix desktop run make:dmg:x64
 ```
 
-3. 打包结果
+如需一键尝试同时产出两套安装包：
+
+```bash
+npm --prefix desktop run make:dmg
+```
+
+4. 打包结果
 
 - 前端会先执行生产构建
-- 后端会通过 `PyInstaller onedir` 生成本地 sidecar
-- `Electron Forge` 会生成 macOS `DMG` 和 `ZIP`
+- 后端会按目标架构通过 `PyInstaller onedir` 生成本地 sidecar
+- `Electron Forge` 会为每个目标架构生成 macOS `DMG` 和 `ZIP`
+- 发布脚本会把最终可分发文件整理到独立目录，并使用稳定命名
 
 默认产物目录：
 
-- `desktop/out/make/`
+- 最终发布产物：`desktop/out/release/`
+- Forge 原始产物：`desktop/out/make/`
 
 ### 环境配置
 

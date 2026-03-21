@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 export type DesktopPathOptions = {
   userDataDir: string;
@@ -18,6 +19,7 @@ export type BackendEnvironmentOptions = {
 export type DesktopPaths = {
   backendEntry: string;
   databaseUrl: string;
+  frontendEntryUrl: string;
   frontendDistDir: string;
   storageDir: string;
 };
@@ -31,6 +33,7 @@ export function buildDesktopPaths(options: DesktopPathOptions): DesktopPaths {
   const frontendDistDir = options.isPackaged
     ? join(resolveResourcesPath(options), 'frontend-dist')
     : join(options.projectRoot, 'frontend', 'dist');
+  const frontendEntryUrl = pathToFileURL(join(frontendDistDir, 'index.html')).toString();
   const backendEntry = options.isPackaged
     ? join(
         resolveResourcesPath(options),
@@ -43,6 +46,7 @@ export function buildDesktopPaths(options: DesktopPathOptions): DesktopPaths {
   return {
     backendEntry,
     databaseUrl: toSqliteUrl(join(storageDir, 'app.db')),
+    frontendEntryUrl,
     frontendDistDir,
     storageDir,
   };

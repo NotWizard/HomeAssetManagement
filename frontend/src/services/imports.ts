@@ -1,5 +1,9 @@
 import { getJSON, postForm } from './apiClient';
-import { getApiBaseUrl } from '../config/runtime';
+import {
+  getApiBaseUrl,
+  getDesktopBridge,
+  type HbsDesktopBinaryResponse,
+} from '../config/runtime';
 
 export type ImportPreview = {
   total_rows: number;
@@ -51,6 +55,15 @@ function resolveFilename(response: Response, fallback: string) {
   return match?.[1] ?? fallback;
 }
 
+function resolveFilenameFromHeaders(
+  headers: Record<string, string>,
+  fallback: string
+) {
+  const disposition = headers['content-disposition'] ?? '';
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? fallback;
+}
+
 async function parseDownloadError(response: Response): Promise<string> {
   try {
     const payload = (await response.json()) as { message?: string; detail?: string };
@@ -60,15 +73,24 @@ async function parseDownloadError(response: Response): Promise<string> {
   }
 }
 
-export async function downloadImportErrors(importId: number) {
-  const response = await fetch(`${getApiBaseUrl()}/imports/${importId}/errors`, { method: 'GET' });
-  if (!response.ok) {
-    throw new Error(await parseDownloadError(response));
+async function parseBinaryDownloadError(
+  response: HbsDesktopBinaryResponse
+): Promise<string> {
+  try {
+    const text = new TextDecoder().decode(response.body);
+    const payload = JSON.parse(text) as { message?: string; detail?: string };
+    return payload.message || payload.detail || '下载失败';
+  } catch {
+    return '下载失败';
   }
+}
 
-  const blob = await response.blob();
-  const filename = resolveFilename(response, `import-errors-${importId}.csv`);
-
+function triggerDownload(
+  body: BlobPart,
+  filename: string,
+  mimeType: string
+) {
+  const blob = new Blob([body], { type: mimeType });
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -77,6 +99,39 @@ export async function downloadImportErrors(importId: number) {
   anchor.click();
   anchor.remove();
   window.URL.revokeObjectURL(url);
+}
+
+export async function downloadImportErrors(importId: number) {
+  const desktopBridge = getDesktopBridge();
+  if (desktopBridge?.isDesktop) {
+    const response = await desktopBridge.requestBinary(
+      `/imports/${importId}/errors`,
+      { method: 'GET' }
+    );
+    if (!response.ok) {
+      throw new Error(await parseBinaryDownloadError(response));
+    }
+
+    const filename = resolveFilenameFromHeaders(
+      response.headers,
+      `import-errors-${importId}.csv`
+    );
+    triggerDownload(
+      response.body,
+      filename,
+      response.headers['content-type'] ?? 'text/csv'
+    );
+    return filename;
+  }
+
+  const response = await fetch(`${getApiBaseUrl()}/imports/${importId}/errors`, { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(await parseDownloadError(response));
+  }
+
+  const blob = await response.blob();
+  const filename = resolveFilename(response, `import-errors-${importId}.csv`);
+  triggerDownload(blob, filename, blob.type || 'text/csv');
 
   return filename;
 }

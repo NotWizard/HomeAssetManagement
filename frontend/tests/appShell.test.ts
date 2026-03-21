@@ -16,11 +16,13 @@ test('应用壳会声明 favicon 资源，避免开发环境持续请求 404 图
   assert.equal(existsSync(resolve(FRONTEND_ROOT, 'public/favicon.svg')), true);
 });
 
-test('BrowserRouter 显式开启 v7 future flags，避免控制台 deprecation 警告', () => {
+test('桌面模式与 Web 模式会分别选择 HashRouter 和 BrowserRouter，并显式开启 v7 future flags', () => {
   const mainSource = readFrontendFile('src/main.tsx');
 
-  assert.match(mainSource, /<BrowserRouter[\s\S]*future=\{\{[\s\S]*v7_startTransition:\s*true/);
-  assert.match(mainSource, /<BrowserRouter[\s\S]*future=\{\{[\s\S]*v7_relativeSplatPath:\s*true/);
+  assert.match(mainSource, /HashRouter/);
+  assert.match(mainSource, /BrowserRouter/);
+  assert.match(mainSource, /v7_startTransition:\s*true/);
+  assert.match(mainSource, /v7_relativeSplatPath:\s*true/);
 });
 
 test('侧边栏导航顺序符合当前产品要求，并移除本地模式无登录提示', () => {

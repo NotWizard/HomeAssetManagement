@@ -2,6 +2,7 @@
   "name": "household-balance-sheet-desktop",
   "version": "0.1.0",
   "private": true,
+  "productName": "HouseholdBalanceSheet",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
@@ -9,6 +10,9 @@
     "build:backend": "node ./scripts/build-backend.mjs",
     "build": "tsc -p tsconfig.json",
     "stage:resources": "node ./scripts/stage-resources.mjs",
+    "make:dmg": "node ./scripts/make-macos-release.mjs --arch=all",
+    "make:dmg:arm64": "node ./scripts/make-macos-release.mjs --arch=arm64",
+    "make:dmg:x64": "node ./scripts/make-macos-release.mjs --arch=x64",
     "typecheck": "tsc --pretty false --noEmit",
     "dev": "npm run build && electron-forge start",
     "package": "npm run build:frontend && npm run build:backend && npm run build && npm run stage:resources && electron-forge package",

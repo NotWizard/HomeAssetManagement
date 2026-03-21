@@ -25,7 +25,7 @@ type CalendarDay = {
 };
 
 type PresetOption = {
-  id: 'last3Months' | 'last6Months' | 'last1Year' | 'allTime';
+  id: 'last3Months' | 'last6Months' | 'last1Year';
   label: string;
   startDate: string;
   endDate: string;
@@ -73,11 +73,15 @@ function formatDateValue(value: string): string {
   return `${parsed.getFullYear()}.${String(parsed.getMonth() + 1).padStart(2, '0')}.${String(parsed.getDate()).padStart(2, '0')}`;
 }
 
-function buildRangeSummary(startDate: string, endDate: string): string {
+function buildRangeSummary(startDate: string, endDate: string, minDate: string, maxDate: string): string {
   const start = parseDateValue(startDate);
   const end = parseDateValue(endDate);
   if (!start || !end) {
     return '暂未设置';
+  }
+
+  if (startDate === minDate && endDate === maxDate) {
+    return '全部时间';
   }
 
   const dayCount = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1);
@@ -174,12 +178,6 @@ function buildPresetOptions(minDate: string, maxDate: string): PresetOption[] {
       startDate: clampDateValue(formatDateInputValue(shiftCalendarMonths(end, -12)), minDate, maxDate),
       endDate: maxDate,
     },
-    {
-      id: 'allTime',
-      label: '全部时间',
-      startDate: minDate,
-      endDate: maxDate,
-    },
   ];
 }
 
@@ -253,7 +251,7 @@ export function AnalyticsDateRangePicker({
   const [visibleMonth, setVisibleMonth] = useState(() =>
     startOfMonth(parseDateValue(endDate || maxDate) ?? new Date())
   );
-  const rangeSummary = buildRangeSummary(startDate, endDate);
+  const rangeSummary = buildRangeSummary(startDate, endDate, minDate, maxDate);
 
   const activeValue = openField === 'start' ? startDate : endDate;
   const activeMin = openField === 'end' ? pickLaterDate(minDate, startDate) : minDate;
@@ -339,6 +337,26 @@ export function AnalyticsDateRangePicker({
   return (
     <section className="w-full xl:min-w-[520px] xl:max-w-[540px]">
       <div className="flex flex-col gap-3">
+        {presetOptions.length > 0 ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            {presetOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => handlePresetSelect(option)}
+                className={cn(
+                  'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
+                  activePresetId === option.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <div ref={containerRef} className="relative">
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
             <div className="flex min-w-0 items-center gap-2 px-1">
@@ -454,26 +472,6 @@ export function AnalyticsDateRangePicker({
             </div>
           ) : null}
         </div>
-
-        {presetOptions.length > 0 ? (
-          <div className="flex flex-wrap justify-end gap-2">
-            {presetOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => handlePresetSelect(option)}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors',
-                  activePresetId === option.id
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                )}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
     </section>
   );

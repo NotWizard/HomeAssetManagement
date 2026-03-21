@@ -48,7 +48,7 @@ def _load_latest_snapshot(
 @router.get("/date-bounds")
 def get_date_bounds(db: Session = Depends(get_db)):
     today = business_today(db)
-    earliest = SnapshotService.get_earliest_daily_snapshot_date(db)
+    earliest = SnapshotService.get_earliest_holding_business_date(db) or SnapshotService.get_earliest_daily_snapshot_date(db)
     return ok(
         {
             "start_date": (earliest or today).isoformat(),

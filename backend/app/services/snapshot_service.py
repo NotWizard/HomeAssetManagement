@@ -1,4 +1,5 @@
 import json
+from datetime import UTC
 from datetime import date
 from decimal import Decimal
 
@@ -13,6 +14,7 @@ from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
 from app.core.clock import utc_now_naive
 from app.core.timezone import business_today
+from app.core.timezone import get_business_tzinfo
 from app.services.common import get_default_family
 from app.services.fx_service import FXService
 from app.utils.fx import convert_to_base_amount
@@ -118,6 +120,25 @@ class SnapshotService:
             .order_by(SnapshotDaily.snapshot_date.asc())
             .limit(1)
         )
+
+    @staticmethod
+    def get_earliest_holding_business_date(session: Session) -> date | None:
+        family = get_default_family(session)
+        earliest_created_at = session.scalar(
+            select(HoldingItem.created_at)
+            .where(HoldingItem.family_id == family.id)
+            .order_by(HoldingItem.created_at.asc())
+            .limit(1)
+        )
+        if earliest_created_at is None:
+            return None
+
+        utc_value = (
+            earliest_created_at.replace(tzinfo=UTC)
+            if earliest_created_at.tzinfo is None
+            else earliest_created_at.astimezone(UTC)
+        )
+        return utc_value.astimezone(get_business_tzinfo(session)).date()
 
     @staticmethod
     def get_latest_daily_snapshot(

@@ -5,6 +5,7 @@ from datetime import datetime
 
 import app.api.v1.analytics as analytics_api
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app.analytics.currency_overview import build_currency_overview
 from app.analytics.correlation import compute_correlation
@@ -12,7 +13,10 @@ from app.analytics.sankey_builder import build_sankey
 from app.analytics.series_builder import build_daily_series
 from app.analytics.volatility import compute_volatility
 from app.core.database import SessionLocal
+from app.models.category import Category
+from app.models.holding_item import HoldingItem
 from app.main import app
+from app.models.member import Member
 from app.models.snapshot_daily import SnapshotDaily
 from app.services.bootstrap import init_database
 from app.services.common import get_default_family
@@ -337,26 +341,41 @@ def test_trend_api_supports_date_range_filters():
     assert payload['asset_series']['现金'] == [200.0, 300.0]
 
 
-def test_date_bounds_api_returns_earliest_snapshot_to_today(monkeypatch):
+def test_date_bounds_api_returns_earliest_holding_business_date_to_today(monkeypatch):
     _reset_daily_snapshots()
 
     monkeypatch.setattr(analytics_api, 'business_today', lambda session=None: date(2026, 3, 21))
 
     with SessionLocal() as session:
         family = get_default_family(session)
-        session.add_all(
-            [
-                SnapshotDaily(
-                    family_id=family.id,
-                    snapshot_date=date(2026, 3, 1),
-                    payload_json=json.dumps(_snapshot_payload(100.0, 0.0), ensure_ascii=False),
-                ),
-                SnapshotDaily(
-                    family_id=family.id,
-                    snapshot_date=date(2026, 3, 20),
-                    payload_json=json.dumps(_snapshot_payload(200.0, 10.0), ensure_ascii=False),
-                ),
-            ]
+        member = Member(family_id=family.id, name='测试成员')
+        session.add(member)
+        session.flush()
+        asset_l1 = session.scalar(select(Category).where(Category.type == 'asset', Category.level == 1).limit(1))
+        asset_l2 = session.scalar(select(Category).where(Category.type == 'asset', Category.level == 2).limit(1))
+        asset_l3 = session.scalar(select(Category).where(Category.type == 'asset', Category.level == 3).limit(1))
+        assert asset_l1 is not None
+        assert asset_l2 is not None
+        assert asset_l3 is not None
+
+        session.add(
+            HoldingItem(
+                family_id=family.id,
+                member_id=member.id,
+                type='asset',
+                name='最早录入资产',
+                category_l1_id=asset_l1.id,
+                category_l2_id=asset_l2.id,
+                category_l3_id=asset_l3.id,
+                currency='CNY',
+                amount_original=100,
+                amount_base=100,
+                target_ratio=None,
+                source='manual',
+                is_deleted=False,
+                created_at=datetime(2026, 3, 1, 23, 30, 0),
+                updated_at=datetime(2026, 3, 1, 23, 30, 0),
+            )
         )
         session.commit()
 
@@ -365,7 +384,7 @@ def test_date_bounds_api_returns_earliest_snapshot_to_today(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()['data'] == {
-        'start_date': '2026-03-01',
+        'start_date': '2026-03-02',
         'end_date': '2026-03-21',
     }
 

@@ -25,8 +25,14 @@ async def preview_import(file: UploadFile, db: Session = Depends(get_db)):
 @router.post("/commit")
 async def commit_import(file: UploadFile, db: Session = Depends(get_db)):
     content = await file.read()
-    data = ImportService.commit_csv(db, content, file.filename or "import.csv")
+    data, parsed = ImportService.commit_csv(db, content, file.filename or "import.csv")
     db.commit()
+
+    if data["failed_rows"] > 0:
+        error_report_path = ImportService.finalize_error_report(db, data["import_id"], parsed)
+        db.commit()
+        data["error_report_path"] = error_report_path
+
     return ok(data)
 
 

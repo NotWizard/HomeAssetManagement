@@ -84,6 +84,7 @@ def _revalue_all_holdings(session: Session, base_currency: str) -> None:
                 quote_currency=currency,
                 base_currency=base_currency,
                 as_of=target_date,
+                allow_refresh=False,
             )
 
         row.amount_base = convert_to_base_amount(amount_original, rate_cache[currency])

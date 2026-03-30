@@ -111,6 +111,7 @@ class FXService:
         quote_currency: str,
         base_currency: str | None = None,
         as_of: date | None = None,
+        allow_refresh: bool = True,
     ) -> tuple[Decimal, bool]:
         from app.services.settings_service import SettingsService
 
@@ -134,8 +135,8 @@ class FXService:
         if exact:
             return Decimal(exact.rate), exact.is_estimated
 
-        # Try to pull fresh rates for the date.
-        FXService.refresh_rates(session, as_of_date, base)
+        if allow_refresh:
+            FXService.refresh_rates(session, as_of_date, base)
 
         exact = session.scalar(
             select(FxRateDaily).where(

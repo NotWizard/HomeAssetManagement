@@ -46,7 +46,7 @@ class ImportService:
         return _to_preview(parsed)
 
     @staticmethod
-    def commit_csv(session: Session, content: bytes, filename: str) -> dict:
+    def commit_csv(session: Session, content: bytes, filename: str) -> tuple[dict, list[ParsedRow]]:
         parsed = _parse_csv(session, content)
         family = get_default_family(session)
 
@@ -58,18 +58,23 @@ class ImportService:
             if row.error:
                 failed += 1
                 continue
-            assert row.payload is not None
-            if row.action == "update":
-                _update_existing(session, row.payload)
-                updated += 1
-            else:
-                HoldingService.create_holding(
-                    session,
-                    row.payload,
-                    source="csv",
-                    refresh_snapshots=False,
-                )
-                inserted += 1
+
+            try:
+                assert row.payload is not None
+                if row.action == "update":
+                    _update_existing(session, row.payload)
+                    updated += 1
+                else:
+                    HoldingService.create_holding(
+                        session,
+                        row.payload,
+                        source="csv",
+                        refresh_snapshots=False,
+                    )
+                    inserted += 1
+            except Exception as exc:  # noqa: BLE001
+                row.error = str(exc)
+                failed += 1
 
         total = len(parsed)
 
@@ -86,21 +91,35 @@ class ImportService:
         session.add(import_log)
         session.flush()
 
-        if failed > 0:
-            path = _write_error_report(import_log.id, parsed)
-            import_log.error_report_path = str(path)
-
         SnapshotService.create_event_snapshot(session, trigger_type="import", note=filename)
         SnapshotService.create_daily_snapshot(session)
 
-        return {
-            "import_id": import_log.id,
-            "total_rows": total,
-            "updated_rows": updated,
-            "inserted_rows": inserted,
-            "failed_rows": failed,
-            "error_report_path": import_log.error_report_path,
-        }
+        return (
+            {
+                "import_id": import_log.id,
+                "total_rows": total,
+                "updated_rows": updated,
+                "inserted_rows": inserted,
+                "failed_rows": failed,
+                "error_report_path": None,
+            },
+            parsed,
+        )
+
+    @staticmethod
+    def finalize_error_report(session: Session, import_id: int, parsed: list[ParsedRow]) -> str | None:
+        failed_rows = [row for row in parsed if row.error is not None]
+        if not failed_rows:
+            return None
+
+        import_log = session.get(ImportLog, import_id)
+        if import_log is None:
+            return None
+
+        path = _write_error_report(import_id, failed_rows)
+        import_log.error_report_path = str(path)
+        session.flush()
+        return import_log.error_report_path
 
     @staticmethod
     def list_logs(session: Session, limit: int = 100) -> list[ImportLog]:

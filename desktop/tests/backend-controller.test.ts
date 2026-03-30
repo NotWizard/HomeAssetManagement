@@ -50,13 +50,13 @@ test('后端启动失败后再次确保就绪会重新选择端口', async () =>
     },
     async waitForBackendReady(_port: number, _proc: unknown) {
       if (usedPorts.length === 1) {
-        throw new Error('后端健康检查超时');
+        throw new Error('后端健康检查超时：健康检查请求超时');
       }
     },
     wireBackendLogs() {},
   });
 
-  await assert.rejects(controller.ensureReady(), /后端健康检查超时/);
+  await assert.rejects(controller.ensureReady(), /后端健康检查超时：健康检查请求超时/);
   await controller.ensureReady();
 
   assert.deepEqual(usedPorts, [41001, 41002]);

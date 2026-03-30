@@ -7,7 +7,6 @@ import {
 import { existsSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -21,6 +20,10 @@ import { createBootstrapController } from './bootstrap-controller.js';
 import { resolvePythonExecutable } from './python-executable.js';
 import { createErrorPage, createLoadingPage } from './startup-page.js';
 import {
+  probeBackendHealth,
+  waitForBackendReadyWithHealthCheck,
+} from './backend-health.js';
+import {
   UPDATE_IPC_CHANNELS,
   createUpdateController,
 } from './update-controller.js';
@@ -29,6 +32,7 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(currentDir, '..', '..');
 const BACKEND_READY_TIMEOUT_MS = 15_000;
 const BACKEND_READY_POLL_INTERVAL_MS = 150;
+const BACKEND_HEALTH_REQUEST_TIMEOUT_MS = 1_500;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
@@ -149,24 +153,14 @@ async function waitForBackendReady(
     BACKEND_READY_TIMEOUT_MS / BACKEND_READY_POLL_INTERVAL_MS
   );
 
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (processRef.exitCode !== null) {
-      throw new Error(`后端进程提前退出，退出码: ${processRef.exitCode ?? 'unknown'}`);
-    }
-
-    try {
-      const response = await fetch(healthUrl);
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Keep polling until timeout.
-    }
-
-    await delay(BACKEND_READY_POLL_INTERVAL_MS);
-  }
-
-  throw new Error('后端健康检查超时');
+  await waitForBackendReadyWithHealthCheck({
+    healthUrl,
+    attempts,
+    pollIntervalMs: BACKEND_READY_POLL_INTERVAL_MS,
+    requestTimeoutMs: BACKEND_HEALTH_REQUEST_TIMEOUT_MS,
+    isProcessExited: () => processRef.exitCode !== null,
+    getExitCode: () => processRef.exitCode,
+  });
 }
 
 function buildWindowArguments(): string[] {

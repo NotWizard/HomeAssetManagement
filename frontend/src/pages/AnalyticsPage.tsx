@@ -10,6 +10,9 @@ import { Select } from '../components/ui/select';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import {
+  queryKeys,
+} from '../services/holdingRelatedQueries';
+import {
   fetchAnalyticsDateBounds,
   fetchCorrelation,
   fetchCurrencyOverview,
@@ -64,7 +67,7 @@ export function AnalyticsPage() {
   const setSelectedAnalyticsCurrency = useUIStore((state) => state.setSelectedAnalyticsCurrency);
 
   const analyticsDateBoundsQuery = useQuery({
-    queryKey: ['analytics-date-bounds'],
+    queryKey: queryKeys.analyticsDateBounds.all(),
     queryFn: fetchAnalyticsDateBounds,
     enabled: analyticsView !== 'currency',
   });
@@ -113,37 +116,37 @@ export function AnalyticsPage() {
   };
 
   const trendQuery = useQuery({
-    queryKey: ['trend', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryKey: queryKeys.trend.range(analyticsDateRange),
     queryFn: () => fetchTrend(analyticsDateRange),
     enabled: analyticsView === 'overview' && analyticsDateRangeReady,
   });
   const volatilityQuery = useQuery({
-    queryKey: ['volatility', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryKey: queryKeys.volatility.range(analyticsDateRange),
     queryFn: () => fetchVolatility(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
   });
   const correlationQuery = useQuery({
-    queryKey: ['correlation', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryKey: queryKeys.correlation.range(analyticsDateRange),
     queryFn: () => fetchCorrelation(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
   });
   const sankeyQuery = useQuery({
-    queryKey: ['sankey', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryKey: queryKeys.sankey.range(analyticsDateRange),
     queryFn: () => fetchSankey(analyticsDateRange),
     enabled: analyticsView === 'overview' && analyticsDateRangeReady,
   });
   const rebalanceQuery = useQuery({
-    queryKey: ['rebalance', analyticsDateRange.startDate, analyticsDateRange.endDate],
+    queryKey: queryKeys.rebalance.range(analyticsDateRange),
     queryFn: () => fetchRebalance(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
   });
   const currencyOverviewQuery = useQuery({
-    queryKey: ['currency-overview'],
+    queryKey: queryKeys.currencyOverview.all(),
     queryFn: fetchCurrencyOverview,
     enabled: analyticsView === 'currency',
   });
   const settingsQuery = useQuery({
-    queryKey: ['settings', 'analytics'],
+    queryKey: queryKeys.settings.scope('analytics'),
     queryFn: fetchSettings,
     enabled: analyticsView === 'currency',
   });

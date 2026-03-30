@@ -7,7 +7,11 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
+import {
+  invalidateHoldingRelatedQueries,
+  invalidateImportLogQueries,
+  queryKeys,
+} from '../services/holdingRelatedQueries';
 import { commitImport, downloadImportErrors, fetchImportLogs, previewImport, type ImportPreview } from '../services/imports';
 
 export function ImportPage() {
@@ -19,7 +23,7 @@ export function ImportPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingImportId, setDownloadingImportId] = useState<number | null>(null);
 
-  const logsQuery = useQuery({ queryKey: ['import-logs'], queryFn: fetchImportLogs });
+  const logsQuery = useQuery({ queryKey: queryKeys.importLogs.all(), queryFn: fetchImportLogs });
 
   const previewMutation = useMutation({
     mutationFn: (target: File) => previewImport(target),
@@ -34,7 +38,7 @@ export function ImportPage() {
     mutationFn: (target: File) => commitImport(target),
     onSuccess: async () => {
       setError(null);
-      await queryClient.invalidateQueries({ queryKey: ['import-logs'] });
+      await invalidateImportLogQueries(queryClient);
       await invalidateHoldingRelatedQueries(queryClient);
     },
     onError: (e) => setError(String(e)),

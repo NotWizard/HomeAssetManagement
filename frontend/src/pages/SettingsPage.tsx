@@ -6,7 +6,11 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
-import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
+import {
+  invalidateMemberQueries,
+  invalidateSettingsQueries,
+  queryKeys,
+} from '../services/holdingRelatedQueries';
 import { exportMigrationPackage, importMigrationPackage } from '../services/migration';
 import { fetchSettings, updateSettings } from '../services/settings';
 import type { MigrationImportResult, SettingsUpdatePayload } from '../types';
@@ -26,7 +30,7 @@ const COMMON_CURRENCY_OPTIONS = [
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
-  const settingsQuery = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const settingsUnavailable = settingsQuery.isError && !settingsQuery.data;
   const settingsErrorMessage = settingsQuery.isError ? formatError(settingsQuery.error) : null;
@@ -64,8 +68,7 @@ export function SettingsPage() {
     mutationFn: updateSettings,
     onSuccess: async () => {
       setError(null);
-      await queryClient.invalidateQueries({ queryKey: ['settings'] });
-      await queryClient.invalidateQueries({ queryKey: ['rebalance'] });
+      await invalidateSettingsQueries(queryClient);
     },
     onError: (e) => setError(formatError(e)),
   });
@@ -91,9 +94,8 @@ export function SettingsPage() {
         `导入完成：已恢复 ${result.members_count} 位成员、${result.holdings_count} 条资产负债、${result.daily_snapshots_count} 条日快照。`
       );
       setMigrationInputKey((prev) => prev + 1);
-      await queryClient.invalidateQueries({ queryKey: ['settings'] });
-      await queryClient.invalidateQueries({ queryKey: ['members'] });
-      await invalidateHoldingRelatedQueries(queryClient);
+      await invalidateSettingsQueries(queryClient);
+      await invalidateMemberQueries(queryClient);
     },
     onError: (e) => {
       setMigrationMessage(null);

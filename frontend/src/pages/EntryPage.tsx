@@ -13,7 +13,10 @@ import { Select } from '../components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Tooltip } from '../components/ui/tooltip';
 import { fetchCategories } from '../services/categories';
-import { invalidateHoldingRelatedQueries } from '../services/holdingRelatedQueries';
+import {
+  invalidateHoldingRelatedQueries,
+  queryKeys,
+} from '../services/holdingRelatedQueries';
 import {
   bulkDeleteHoldings,
   createHolding,
@@ -215,11 +218,11 @@ export function EntryPage() {
   const [memberDeleteId, setMemberDeleteId] = useState('');
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
-  const membersQuery = useQuery({ queryKey: ['members'], queryFn: fetchMembers });
-  const holdingsQuery = useQuery({ queryKey: ['holdings'], queryFn: fetchHoldings });
-  const assetCategoryQuery = useQuery({ queryKey: ['categories', 'asset'], queryFn: () => fetchCategories('asset') });
-  const liabilityCategoryQuery = useQuery({ queryKey: ['categories', 'liability'], queryFn: () => fetchCategories('liability') });
-  const settingsQuery = useQuery({ queryKey: ['settings', 'entry'], queryFn: fetchSettings });
+  const membersQuery = useQuery({ queryKey: queryKeys.members.all(), queryFn: fetchMembers });
+  const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
+  const assetCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('asset'), queryFn: () => fetchCategories('asset') });
+  const liabilityCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('liability'), queryFn: () => fetchCategories('liability') });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.scope('entry'), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 
   const createHoldingMutation = useMutation({

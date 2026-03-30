@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { invalidateMemberHoldingRelatedQueries, invalidateMemberQueries, queryKeys } from '../services/holdingRelatedQueries';
 import { createMember, deleteMember, fetchMembers } from '../services/members';
 
 function formatError(error: unknown) {
@@ -18,7 +19,7 @@ export function MembersPage() {
   const [newMemberName, setNewMemberName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const membersQuery = useQuery({ queryKey: ['members'], queryFn: fetchMembers });
+  const membersQuery = useQuery({ queryKey: queryKeys.members.all(), queryFn: fetchMembers });
   const members = membersQuery.data ?? [];
   const membersUnavailable = membersQuery.isError && !membersQuery.data;
   const membersErrorMessage = membersQuery.isError ? formatError(membersQuery.error) : null;
@@ -28,7 +29,7 @@ export function MembersPage() {
     onSuccess: async () => {
       setError(null);
       setNewMemberName('');
-      await queryClient.invalidateQueries({ queryKey: ['members'] });
+      await invalidateMemberQueries(queryClient);
     },
     onError: (err) => setError(formatError(err)),
   });
@@ -37,8 +38,7 @@ export function MembersPage() {
     mutationFn: deleteMember,
     onSuccess: async () => {
       setError(null);
-      await queryClient.invalidateQueries({ queryKey: ['members'] });
-      await queryClient.invalidateQueries({ queryKey: ['holdings'] });
+      await invalidateMemberHoldingRelatedQueries(queryClient);
     },
     onError: (err) => setError(formatError(err)),
   });

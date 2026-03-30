@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { queryKeys } from '../services/holdingRelatedQueries';
 import { fetchRebalance, fetchTrend } from '../services/analytics';
 import { fetchHoldings } from '../services/holdings';
 import { fetchSettings } from '../services/settings';
@@ -29,10 +30,10 @@ function formatDelta(value: number | null): string {
 }
 
 export function OverviewPage() {
-  const trendQuery = useQuery({ queryKey: ['trend', 'overview'], queryFn: () => fetchTrend(90) });
-  const holdingsQuery = useQuery({ queryKey: ['holdings', 'overview'], queryFn: fetchHoldings });
-  const rebalanceQuery = useQuery({ queryKey: ['rebalance', 'overview'], queryFn: () => fetchRebalance() });
-  const settingsQuery = useQuery({ queryKey: ['settings', 'overview'], queryFn: fetchSettings });
+  const trendQuery = useQuery({ queryKey: queryKeys.trend.scope('overview'), queryFn: () => fetchTrend(90) });
+  const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.scope('overview'), queryFn: fetchHoldings });
+  const rebalanceQuery = useQuery({ queryKey: queryKeys.rebalance.scope('overview'), queryFn: () => fetchRebalance() });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.scope('overview'), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
   const trendUnavailable = trendQuery.isError && !trendQuery.data;
   const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;

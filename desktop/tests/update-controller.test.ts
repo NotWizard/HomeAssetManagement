@@ -72,6 +72,39 @@ test('更新控制器会从持久化状态恢复已下载更新', async () => {
   assert.equal(state.downloadedFilePath, downloadedFilePath);
 });
 
+test('持久化的已下载文件丢失时启动会回退为空闲状态', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const missingFilePath = '/tmp/hbs-userdata/updates/missing-update.zip';
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.1.0',
+    arch: 'x64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata',
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'downloaded',
+      currentVersion: '0.1.0',
+      latestVersion: '0.2.0',
+      releaseTag: 'v0.2.0',
+      assetName: 'HouseholdBalanceSheet-0.2.0-macos-x64.zip',
+      assetUrl: 'https://example.com/download/x64.zip',
+      downloadedFilePath: missingFilePath,
+      lastCheckedAt: 1_700_000_000_000,
+    }),
+    persistState: () => undefined,
+    now: () => 1_700_000_000_100,
+  });
+
+  await controller.start();
+  const state = controller.getState();
+  assert.equal(state.status, 'idle');
+  assert.equal(state.downloadedFilePath, undefined);
+});
+
 test('当前版本已经追平已下载版本时不会继续显示待安装更新', async () => {
   const updateControllerModule = await import('../src/update-controller.ts');
   const downloadDir = '/tmp/hbs-userdata/updates';

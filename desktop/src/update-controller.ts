@@ -42,7 +42,7 @@ export type UpdateControllerOptions = {
   isPackaged: boolean;
   userDataDir: string;
   now?: () => number;
-  fetchJsonReleases?: () => Promise<GithubRelease[]>;
+  fetchJsonReleases?: () => Promise<unknown[]>;
   scheduleInterval?: (
     handler: () => Promise<void>,
     intervalMs: number
@@ -60,11 +60,6 @@ export type UpdateControllerOptions = {
 };
 
 type UpdateListener = (state: UpdateState) => void;
-type GithubReleaseAsset = {
-  name: string;
-  browser_download_url: string;
-  size?: number;
-};
 
 type GithubRelease = {
   tag_name: string;
@@ -73,96 +68,19 @@ type GithubRelease = {
   draft: boolean;
   prerelease: boolean;
   published_at?: string;
-  assets: GithubReleaseAsset[];
+  assets: Array<{
+    name: string;
+    browser_download_url: string;
+    size?: number;
+  }>;
 };
+
+async function loadUpdateService(): Promise<typeof import('./update-service.ts')> {
+  return import(new URL('./update-service.ts', import.meta.url).href);
+}
 
 function toArch(value: string): 'arm64' | 'x64' {
   return value === 'arm64' ? 'arm64' : 'x64';
-}
-
-function normalizeVersion(version: string): string {
-  const matched = version.trim().match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!matched) {
-    return '0.0.0';
-  }
-
-  return `${matched[1]}.${matched[2]}.${matched[3]}`;
-}
-
-function compareVersions(left: string, right: string): number {
-  const leftParts = normalizeVersion(left).split('.').map(Number);
-  const rightParts = normalizeVersion(right).split('.').map(Number);
-
-  for (let index = 0; index < 3; index += 1) {
-    const leftValue = leftParts[index] ?? 0;
-    const rightValue = rightParts[index] ?? 0;
-    if (leftValue > rightValue) {
-      return 1;
-    }
-    if (leftValue < rightValue) {
-      return -1;
-    }
-  }
-
-  return 0;
-}
-
-function parseReleaseVersion(tagName: string): string | null {
-  const matched = tagName.match(/(\d+)\.(\d+)\.(\d+)/);
-  if (!matched) {
-    return null;
-  }
-
-  return `${matched[1]}.${matched[2]}.${matched[3]}`;
-}
-
-function pickUpdateCandidate(options: {
-  currentVersion: string;
-  arch: 'arm64' | 'x64';
-  releases: GithubRelease[];
-}): {
-  version: string;
-  tagName: string;
-  releaseUrl?: string;
-  asset: {
-    name: string;
-    url: string;
-    size?: number;
-  };
-} | null {
-  const stableReleases = options.releases
-    .filter((release) => !release.draft && !release.prerelease)
-    .map((release) => {
-      const version = parseReleaseVersion(release.tag_name);
-      return version ? { release, version } : null;
-    })
-    .filter((value): value is { release: GithubRelease; version: string } => value !== null)
-    .sort((left, right) => compareVersions(right.version, left.version));
-
-  for (const item of stableReleases) {
-    if (compareVersions(item.version, options.currentVersion) <= 0) {
-      continue;
-    }
-
-    const expectedAssetName = `HouseholdBalanceSheet-${item.version}-macos-${options.arch}.zip`;
-    const asset = item.release.assets.find((entry) => entry.name === expectedAssetName);
-    if (!asset) {
-      continue;
-    }
-
-    return {
-      version: item.version,
-      tagName: item.release.tag_name,
-      releaseUrl: item.release.html_url,
-      asset: {
-        name: asset.name,
-        url: asset.browser_download_url,
-        size: asset.size,
-      },
-    };
-  }
-
-  return null;
 }
 
 function escapeSingleQuotes(value: string): string {
@@ -256,6 +174,36 @@ function createDefaultState(appVersion: string): UpdateState {
     status: 'idle',
     currentVersion: appVersion,
   };
+}
+
+function sanitizePersistedState(appVersion: string, persisted: UpdateState | null): UpdateState {
+  if (!persisted) {
+    return createDefaultState(appVersion);
+  }
+
+  const nextState: UpdateState = {
+    ...createDefaultState(appVersion),
+    ...persisted,
+    currentVersion: appVersion,
+  };
+
+  if (
+    nextState.status === 'downloaded' &&
+    (!nextState.downloadedFilePath || !existsSync(nextState.downloadedFilePath))
+  ) {
+    return {
+      ...createDefaultState(appVersion),
+      lastCheckedAt: nextState.lastCheckedAt,
+      latestVersion: nextState.latestVersion,
+      releaseTag: nextState.releaseTag,
+      releaseUrl: nextState.releaseUrl,
+      assetName: nextState.assetName,
+      assetUrl: nextState.assetUrl,
+      totalBytes: nextState.totalBytes,
+    };
+  }
+
+  return nextState;
 }
 
 function calculateProgress(
@@ -378,8 +326,9 @@ export function createUpdateController(options: UpdateControllerOptions) {
     });
 
     try {
-      const releases = await fetchJsonReleases();
-      const candidate = pickUpdateCandidate({
+      const releases = (await fetchJsonReleases()) as GithubRelease[];
+      const updateService = await loadUpdateService();
+      const candidate = updateService.pickUpdateCandidate({
         currentVersion: options.appVersion,
         arch,
         releases,
@@ -389,7 +338,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
         const shouldKeepDownloaded =
           previousState.status === 'downloaded' &&
           typeof previousState.latestVersion === 'string' &&
-          compareVersions(previousState.latestVersion, options.appVersion) > 0 &&
+          updateService.compareVersions(previousState.latestVersion, options.appVersion) > 0 &&
           !!previousState.downloadedFilePath &&
           existsSync(previousState.downloadedFilePath);
 
@@ -437,6 +386,9 @@ export function createUpdateController(options: UpdateControllerOptions) {
         releaseUrl: candidate.releaseUrl,
         assetName: candidate.asset.name,
         assetUrl: candidate.asset.url,
+        downloadedFilePath: shouldKeepDownloaded ? state.downloadedFilePath : undefined,
+        downloadedAt: shouldKeepDownloaded ? state.downloadedAt : undefined,
+        downloadedBytes: shouldKeepDownloaded ? state.downloadedBytes : undefined,
         totalBytes: candidate.asset.size,
         progress: shouldKeepDownloaded ? 100 : undefined,
         errorMessage: undefined,
@@ -605,13 +557,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
   return {
     async start(): Promise<void> {
       const persisted = loadPersistedState();
-      if (persisted) {
-        state = {
-          ...state,
-          ...persisted,
-          currentVersion: options.appVersion,
-        };
-      }
+      state = sanitizePersistedState(options.appVersion, persisted);
       emitState();
 
       if (!isPackaged) {

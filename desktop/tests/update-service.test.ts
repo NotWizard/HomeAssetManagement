@@ -49,6 +49,44 @@ test('更新服务会挑选最新正式 release 并匹配当前架构 zip 资产
   assert.equal(candidate?.asset.name, 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip');
 });
 
+test('更新服务会跳过缺少当前架构资产的较新版本并选择可安装稳定版', async () => {
+  const updateService = await import('../src/update-service.ts');
+
+  const releases = [
+    {
+      tag_name: 'v0.3.0',
+      draft: false,
+      prerelease: false,
+      assets: [
+        {
+          name: 'HouseholdBalanceSheet-0.3.0-macos-x64.zip',
+          browser_download_url: 'https://example.com/download/0.3.0-x64.zip',
+        },
+      ],
+    },
+    {
+      tag_name: 'v0.2.5',
+      draft: false,
+      prerelease: false,
+      assets: [
+        {
+          name: 'HouseholdBalanceSheet-0.2.5-macos-arm64.zip',
+          browser_download_url: 'https://example.com/download/0.2.5-arm64.zip',
+        },
+      ],
+    },
+  ];
+
+  const candidate = updateService.pickUpdateCandidate({
+    currentVersion: '0.2.0',
+    arch: 'arm64',
+    releases,
+  });
+
+  assert.equal(candidate?.version, '0.2.5');
+  assert.equal(candidate?.asset.name, 'HouseholdBalanceSheet-0.2.5-macos-arm64.zip');
+});
+
 test('当前版本已是最新版本时不会返回可更新候选', async () => {
   const updateService = await import('../src/update-service.ts');
 

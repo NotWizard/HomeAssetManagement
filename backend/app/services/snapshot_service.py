@@ -16,6 +16,7 @@ from app.core.clock import utc_now_naive
 from app.core.timezone import business_today
 from app.core.timezone import get_business_tzinfo
 from app.services.common import get_default_family
+from app.services.common import get_scoped_member
 from app.services.fx_service import FXService
 from app.utils.fx import convert_to_base_amount
 from app.utils.serialization import decimal_to_float
@@ -24,7 +25,8 @@ from app.utils.serialization import decimal_to_float
 class SnapshotService:
     @staticmethod
     def build_current_payload(session: Session) -> dict:
-        return _build_snapshot_payload(session)
+        family = get_default_family(session)
+        return _build_snapshot_payload(session, family.id)
 
     @staticmethod
     def create_event_snapshot(session: Session, trigger_type: str, note: str | None = None) -> SnapshotEvent:
@@ -74,9 +76,11 @@ class SnapshotService:
 
     @staticmethod
     def list_event_snapshots(session: Session, limit: int = 100) -> list[dict]:
+        family = get_default_family(session)
         rows = list(
             session.scalars(
                 select(SnapshotEvent)
+                .where(SnapshotEvent.family_id == family.id)
                 .order_by(SnapshotEvent.snapshot_at.desc())
                 .limit(max(1, min(limit, 500)))
             )
@@ -94,9 +98,11 @@ class SnapshotService:
 
     @staticmethod
     def list_daily_snapshots(session: Session, limit: int = 365) -> list[dict]:
+        family = get_default_family(session)
         rows = list(
             session.scalars(
                 select(SnapshotDaily)
+                .where(SnapshotDaily.family_id == family.id)
                 .order_by(SnapshotDaily.snapshot_date.desc())
                 .limit(max(1, min(limit, 1000)))
             )
@@ -157,9 +163,16 @@ class SnapshotService:
 
     @staticmethod
     def revalue_all_snapshots(session: Session, base_currency: str) -> None:
+        family = get_default_family(session)
         rate_cache: dict[tuple[date, str], Decimal] = {}
 
-        daily_rows = list(session.scalars(select(SnapshotDaily).order_by(SnapshotDaily.snapshot_date.asc())))
+        daily_rows = list(
+            session.scalars(
+                select(SnapshotDaily)
+                .where(SnapshotDaily.family_id == family.id)
+                .order_by(SnapshotDaily.snapshot_date.asc())
+            )
+        )
         for row in daily_rows:
             payload = json.loads(row.payload_json)
             row.payload_json = json.dumps(
@@ -173,7 +186,13 @@ class SnapshotService:
                 ensure_ascii=False,
             )
 
-        event_rows = list(session.scalars(select(SnapshotEvent).order_by(SnapshotEvent.snapshot_at.asc())))
+        event_rows = list(
+            session.scalars(
+                select(SnapshotEvent)
+                .where(SnapshotEvent.family_id == family.id)
+                .order_by(SnapshotEvent.snapshot_at.asc())
+            )
+        )
         for row in event_rows:
             payload = json.loads(row.payload_json)
             row.payload_json = json.dumps(
@@ -190,10 +209,12 @@ class SnapshotService:
         session.flush()
 
 
-def _build_snapshot_payload(session: Session) -> dict:
+def _build_snapshot_payload(session: Session, family_id: int) -> dict:
     holdings = list(
         session.scalars(
-            select(HoldingItem).where(HoldingItem.is_deleted.is_(False)).order_by(HoldingItem.id.asc())
+            select(HoldingItem)
+            .where(HoldingItem.family_id == family_id, HoldingItem.is_deleted.is_(False))
+            .order_by(HoldingItem.id.asc())
         )
     )
 

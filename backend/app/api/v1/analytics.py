@@ -4,7 +4,6 @@ import json
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analytics.correlation import compute_correlation
@@ -17,7 +16,7 @@ from app.core.database import get_db
 from app.core.exceptions import AppError
 from app.core.response import ok
 from app.core.timezone import business_today
-from app.models.member import Member
+from app.services.common import get_scoped_member
 from app.services.settings_service import SettingsService
 from app.services.snapshot_service import SnapshotService
 
@@ -99,8 +98,8 @@ def get_sankey(
     if latest is None:
         return ok({"nodes": [], "links": []})
     payload = json.loads(latest.payload_json)
-    members = list(db.scalars(select(Member)))
-    name_map = {m.id: m.name for m in members}
+    member_ids = {item.get("member_id") for item in payload.get("holdings", []) if item.get("member_id") is not None}
+    name_map = {member_id: get_scoped_member(db, int(member_id)).name for member_id in member_ids}
     return ok(build_sankey(payload.get("holdings", []), name_map))
 
 

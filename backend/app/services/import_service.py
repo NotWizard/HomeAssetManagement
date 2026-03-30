@@ -14,6 +14,7 @@ from app.models.import_log import ImportLog
 from app.models.member import Member
 from app.services.category_service import CategoryService
 from app.services.common import get_default_family
+from app.services.common import get_scoped_import_log
 from app.services.holding_service import HoldingService
 from app.core.clock import utc_now_naive
 from app.services.snapshot_service import SnapshotService
@@ -112,9 +113,7 @@ class ImportService:
         if not failed_rows:
             return None
 
-        import_log = session.get(ImportLog, import_id)
-        if import_log is None:
-            return None
+        import_log = get_scoped_import_log(session, import_id)
 
         path = _write_error_report(import_id, failed_rows)
         import_log.error_report_path = str(path)
@@ -123,9 +122,13 @@ class ImportService:
 
     @staticmethod
     def list_logs(session: Session, limit: int = 100) -> list[ImportLog]:
+        family = get_default_family(session)
         return list(
             session.scalars(
-                select(ImportLog).order_by(ImportLog.created_at.desc()).limit(max(1, min(500, limit)))
+                select(ImportLog)
+                .where(ImportLog.family_id == family.id)
+                .order_by(ImportLog.created_at.desc())
+                .limit(max(1, min(500, limit)))
             )
         )
 
@@ -210,9 +213,11 @@ def _build_payload(session: Session, raw: dict[str, str]) -> dict:
 
 
 def _resolve_action(session: Session, payload: dict) -> str:
+    family = get_default_family(session)
     existing = session.scalar(
         select(HoldingItem).where(
             and_(
+                HoldingItem.family_id == family.id,
                 HoldingItem.is_deleted.is_(False),
                 HoldingItem.type == payload["type"],
                 HoldingItem.name == payload["name"],
@@ -226,9 +231,11 @@ def _resolve_action(session: Session, payload: dict) -> str:
 
 
 def _update_existing(session: Session, payload: dict) -> None:
+    family = get_default_family(session)
     existing = session.scalar(
         select(HoldingItem).where(
             and_(
+                HoldingItem.family_id == family.id,
                 HoldingItem.is_deleted.is_(False),
                 HoldingItem.type == payload["type"],
                 HoldingItem.name == payload["name"],

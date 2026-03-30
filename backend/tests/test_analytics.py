@@ -16,6 +16,7 @@ from app.core.database import SessionLocal
 from app.models.category import Category
 from app.models.holding_item import HoldingItem
 from app.main import app
+from app.models.family import Family
 from app.models.member import Member
 from app.models.snapshot_daily import SnapshotDaily
 from app.services.bootstrap import init_database
@@ -27,6 +28,8 @@ def _reset_daily_snapshots() -> None:
     init_database()
     with SessionLocal() as session:
         session.query(SnapshotDaily).delete()
+        session.query(HoldingItem).delete()
+        session.query(Member).delete()
         session.commit()
 
 
@@ -507,3 +510,94 @@ def test_rebalance_api_uses_latest_snapshot_within_selected_range():
             'status': '超配',
         }
     ]
+
+
+def test_trend_and_sankey_ignore_other_family_snapshots_and_members():
+    _reset_daily_snapshots()
+
+    current_payload = {
+        'totals': {'total_asset': 100.0, 'total_liability': 0.0, 'net_asset': 100.0},
+        'holdings': [
+            {
+                'id': 1,
+                'name': '当前家庭资产',
+                'type': 'asset',
+                'member_id': 1,
+                'amount_base': 100.0,
+                'amount_original': 100.0,
+                'currency': 'CNY',
+                'category_l1': '现金与存款',
+                'category_l2': '银行存款',
+                'category_l3': '活期存款',
+            }
+        ],
+    }
+    outsider_payload = {
+        'totals': {'total_asset': 999.0, 'total_liability': 0.0, 'net_asset': 999.0},
+        'holdings': [
+            {
+                'id': 2,
+                'name': '外部家庭资产',
+                'type': 'asset',
+                'member_id': 2,
+                'amount_base': 999.0,
+                'amount_original': 999.0,
+                'currency': 'CNY',
+                'category_l1': '现金与存款',
+                'category_l2': '银行存款',
+                'category_l3': '活期存款',
+            }
+        ],
+    }
+
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        current_member = Member(family_id=family.id, name='Alice')
+        session.add(current_member)
+        session.flush()
+
+        other_family = Family(name='第二家庭')
+        session.add(other_family)
+        session.flush()
+        outsider_member = Member(family_id=other_family.id, name='Mallory')
+        session.add(outsider_member)
+        session.flush()
+
+        current_payload['holdings'][0]['member_id'] = current_member.id
+        outsider_payload['holdings'][0]['member_id'] = outsider_member.id
+
+        session.add_all(
+            [
+                SnapshotDaily(
+                    family_id=family.id,
+                    snapshot_date=date(2026, 3, 10),
+                    payload_json=json.dumps(current_payload, ensure_ascii=False),
+                ),
+                SnapshotDaily(
+                    family_id=other_family.id,
+                    snapshot_date=date(2026, 3, 10),
+                    payload_json=json.dumps(outsider_payload, ensure_ascii=False),
+                ),
+            ]
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        trend_resp = client.get(
+            '/api/v1/analytics/trend',
+            params={'start_date': '2026-03-10', 'end_date': '2026-03-10'},
+        )
+        sankey_resp = client.get(
+            '/api/v1/analytics/sankey',
+            params={'start_date': '2026-03-10', 'end_date': '2026-03-10'},
+        )
+
+    assert trend_resp.status_code == 200
+    assert trend_resp.json()['data']['total_asset'] == [100.0]
+
+    assert sankey_resp.status_code == 200
+    node_names = {node['name'] for node in sankey_resp.json()['data']['nodes']}
+    assert 'Alice' in node_names
+    assert 'Mallory' not in node_names
+    assert '活期存款' in node_names
+    assert '外部家庭资产' not in node_names

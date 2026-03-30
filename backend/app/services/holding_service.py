@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError
 from app.core.timezone import business_today
 from app.models.holding_item import HoldingItem
-from app.models.member import Member
 from app.services.category_service import CategoryService
 from app.services.common import get_default_family
+from app.services.common import get_scoped_holding
+from app.services.common import get_scoped_member
 from app.services.fx_service import FXService
 from app.services.settings_service import SettingsService
 from app.services.snapshot_service import SnapshotService
@@ -86,9 +87,7 @@ class HoldingService:
         payload: dict,
         refresh_snapshots: bool = True,
     ) -> HoldingItem:
-        row = session.get(HoldingItem, holding_id)
-        if row is None or row.is_deleted:
-            raise AppError(4040, "资产/负债不存在")
+        row = get_scoped_holding(session, holding_id)
 
         _validate_member(session, payload["member_id"])
         _validate_holding_payload(session, payload)
@@ -123,9 +122,7 @@ class HoldingService:
 
     @staticmethod
     def soft_delete_holding(session: Session, holding_id: int) -> None:
-        row = session.get(HoldingItem, holding_id)
-        if row is None or row.is_deleted:
-            raise AppError(4040, "资产/负债不存在")
+        row = get_scoped_holding(session, holding_id)
         row.is_deleted = True
         session.flush()
         _refresh_snapshots(session, trigger_type="update", note=f"delete:{row.id}")
@@ -204,9 +201,7 @@ def _refresh_snapshots(session: Session, trigger_type: str, note: str | None = N
 
 
 def _validate_member(session: Session, member_id: int) -> None:
-    member = session.get(Member, member_id)
-    if member is None:
-        raise AppError(4002, "成员不存在")
+    get_scoped_member(session, member_id)
 
 
 

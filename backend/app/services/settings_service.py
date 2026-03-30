@@ -63,11 +63,14 @@ class SettingsService:
 
 
 def _revalue_all_holdings(session: Session, base_currency: str) -> None:
+    family = get_default_family(session)
     rate_cache: dict[str, Decimal] = {}
     target_date = business_today(session)
     rows = list(
         session.scalars(
-            select(HoldingItem).where(HoldingItem.is_deleted.is_(False)).order_by(HoldingItem.id.asc())
+            select(HoldingItem)
+            .where(HoldingItem.family_id == family.id, HoldingItem.is_deleted.is_(False))
+            .order_by(HoldingItem.id.asc())
         )
     )
 

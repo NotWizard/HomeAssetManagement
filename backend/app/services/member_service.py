@@ -6,6 +6,7 @@ from app.core.exceptions import AppError
 from app.models.holding_item import HoldingItem
 from app.models.member import Member
 from app.services.common import get_default_family
+from app.services.common import get_scoped_member
 
 
 class MemberService:
@@ -32,9 +33,7 @@ class MemberService:
 
     @staticmethod
     def update_member(session: Session, member_id: int, name: str) -> Member:
-        member = session.get(Member, member_id)
-        if member is None:
-            raise AppError(4040, "成员不存在")
+        member = get_scoped_member(session, member_id)
         normalized_name = _normalize_member_name(name)
         _ensure_member_name_available(
             session,
@@ -48,9 +47,7 @@ class MemberService:
 
     @staticmethod
     def delete_member(session: Session, member_id: int) -> None:
-        member = session.get(Member, member_id)
-        if member is None:
-            raise AppError(4040, "成员不存在")
+        member = get_scoped_member(session, member_id)
 
         holding = session.scalar(
             select(HoldingItem.id)

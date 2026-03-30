@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.exceptions import AppError
 from app.core.response import ok
-from app.models.import_log import ImportLog
+from app.services.common import get_scoped_import_log
 from app.services.import_service import ImportService
 
 router = APIRouter()
@@ -58,7 +58,7 @@ def list_import_logs(limit: int = Query(default=100, ge=1, le=500), db: Session 
 
 @router.get("/{import_id}/errors")
 def download_import_errors(import_id: int, db: Session = Depends(get_db)):
-    row = db.get(ImportLog, import_id)
+    row = get_scoped_import_log(db, import_id)
     if row is None or not row.error_report_path:
         raise AppError(4040, "错误报告不存在")
 

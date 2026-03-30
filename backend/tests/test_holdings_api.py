@@ -4,6 +4,7 @@ from decimal import Decimal
 from fastapi.testclient import TestClient
 
 from app.core.database import SessionLocal
+from app.models.family import Family
 from app.models.fx_rate_daily import FxRateDaily
 from app.main import app
 from app.models.holding_item import HoldingItem
@@ -463,3 +464,162 @@ def test_delete_member_succeeds_after_bulk_deleting_all_member_holdings():
         members_after_delete = client.get("/api/v1/members")
         assert members_after_delete.status_code == 200
         assert members_after_delete.json()["data"] == []
+
+
+def test_update_holding_rejects_cross_family_holding_id():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Alice"})
+        assert member_resp.status_code == 200
+        member_id = member_resp.json()["data"]["id"]
+        category_resp = client.get("/api/v1/categories", params={"type": "asset"})
+        tree = category_resp.json()["data"]
+        l1, l2, l3 = tree[0], tree[0]["children"][0], tree[0]["children"][0]["children"][0]
+
+    with SessionLocal() as session:
+        other_family = Family(name="第二家庭")
+        session.add(other_family)
+        session.flush()
+        outsider_member = Member(family_id=other_family.id, name="外部成员")
+        session.add(outsider_member)
+        session.flush()
+        outsider_holding = HoldingItem(
+            family_id=other_family.id,
+            member_id=outsider_member.id,
+            type="asset",
+            name="外部资产",
+            category_l1_id=l1["id"],
+            category_l2_id=l2["id"],
+            category_l3_id=l3["id"],
+            currency="CNY",
+            amount_original=100,
+            amount_base=100,
+            target_ratio=10,
+            source="manual",
+            is_deleted=False,
+        )
+        session.add(outsider_holding)
+        session.commit()
+        outsider_holding_id = outsider_holding.id
+
+    with TestClient(app) as client:
+        response = client.put(
+            f"/api/v1/holdings/{outsider_holding_id}",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "Should Fail",
+                "category_l1_id": l1["id"],
+                "category_l2_id": l2["id"],
+                "category_l3_id": l3["id"],
+                "currency": "CNY",
+                "amount_original": "120",
+                "target_ratio": "10",
+            },
+        )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == 4040
+
+
+def test_update_settings_only_revalues_current_family_holdings_and_snapshots():
+    _reset_runtime_data()
+    with SessionLocal() as session:
+        session.add(
+            FxRateDaily(
+                rate_date=date.today(),
+                base_currency="USD",
+                quote_currency="CNY",
+                rate=Decimal("7"),
+                provider="test",
+                is_estimated=False,
+            )
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Carol"})
+        member_id = member_resp.json()["data"]["id"]
+        category_resp = client.get("/api/v1/categories", params={"type": "asset"})
+        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金与存款", "银行存款", "活期存款"))
+        create_resp = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "家庭备用金",
+                "category_l1_id": asset_l1["id"],
+                "category_l2_id": asset_l2["id"],
+                "category_l3_id": asset_l3["id"],
+                "currency": "CNY",
+                "amount_original": "700",
+                "target_ratio": "10",
+            },
+        )
+        assert create_resp.status_code == 200
+
+    with SessionLocal() as session:
+        other_family = Family(name="第二家庭")
+        session.add(other_family)
+        session.flush()
+        outsider_member = Member(family_id=other_family.id, name="外部成员")
+        session.add(outsider_member)
+        session.flush()
+        outsider_holding = HoldingItem(
+            family_id=other_family.id,
+            member_id=outsider_member.id,
+            type="asset",
+            name="外部资产",
+            category_l1_id=asset_l1["id"],
+            category_l2_id=asset_l2["id"],
+            category_l3_id=asset_l3["id"],
+            currency="CNY",
+            amount_original=700,
+            amount_base=700,
+            target_ratio=10,
+            source="manual",
+            is_deleted=False,
+        )
+        session.add(outsider_holding)
+        session.flush()
+        outsider_snapshot = SnapshotDaily(
+            family_id=other_family.id,
+            snapshot_date=date.today(),
+            payload_json='{"totals":{"total_asset":700.0,"total_liability":0.0,"net_asset":700.0},"holdings":[{"id":999,"name":"外部资产","type":"asset","currency":"CNY","amount_original":700.0,"amount_base":700.0,"target_ratio":10.0}]}',
+        )
+        outsider_event = SnapshotEvent(
+            family_id=other_family.id,
+            trigger_type="manual",
+            payload_json='{"totals":{"total_asset":700.0,"total_liability":0.0,"net_asset":700.0},"holdings":[{"id":999,"name":"外部资产","type":"asset","currency":"CNY","amount_original":700.0,"amount_base":700.0,"target_ratio":10.0}]}',
+        )
+        session.add_all([outsider_snapshot, outsider_event])
+        session.commit()
+        outsider_holding_id = outsider_holding.id
+        outsider_snapshot_id = outsider_snapshot.id
+        outsider_event_id = outsider_event.id
+
+    with TestClient(app) as client:
+        update_resp = client.put(
+            "/api/v1/settings",
+            json={
+                "base_currency": "USD",
+                "rebalance_threshold_pct": 5,
+            },
+        )
+        assert update_resp.status_code == 200
+
+        daily_resp = client.get("/api/v1/snapshots/daily")
+        event_resp = client.get("/api/v1/snapshots/events")
+
+    with SessionLocal() as session:
+        current_holding = session.query(HoldingItem).filter(HoldingItem.name == "家庭备用金").one()
+        untouched_holding = session.query(HoldingItem).filter(HoldingItem.id == outsider_holding_id).one()
+        untouched_snapshot = session.query(SnapshotDaily).filter(SnapshotDaily.id == outsider_snapshot_id).one()
+        untouched_event = session.query(SnapshotEvent).filter(SnapshotEvent.id == outsider_event_id).one()
+
+    assert float(current_holding.amount_base) == 100.0
+    assert float(untouched_holding.amount_base) == 700.0
+    assert '"amount_base":700.0' in untouched_snapshot.payload_json
+    assert '"amount_base":700.0' in untouched_event.payload_json
+    assert all(row["family_id"] == 1 for row in daily_resp.json()["data"])
+    assert all(row["family_id"] == 1 for row in event_resp.json()["data"])

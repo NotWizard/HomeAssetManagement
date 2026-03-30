@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.clock import format_utc_iso_z
 from app.models.snapshot_daily import SnapshotDaily
+from app.services.common import get_default_family
 
 
 def build_daily_series(
@@ -14,7 +15,8 @@ def build_daily_series(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> dict:
-    stmt = select(SnapshotDaily)
+    family = get_default_family(session)
+    stmt = select(SnapshotDaily).where(SnapshotDaily.family_id == family.id)
     if start_date is not None:
         stmt = stmt.where(SnapshotDaily.snapshot_date >= start_date)
     if end_date is not None:

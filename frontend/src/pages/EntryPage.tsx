@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2, UsersRound } from 'lucide-react';
+import { Plus, UsersRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import { Badge } from '../components/ui/badge';
+import { EntryFiltersBar } from '../components/entry/EntryFiltersBar';
+import { EntryHoldingsTable } from '../components/entry/EntryHoldingsTable';
+import { EntryTargetRatioSummary } from '../components/entry/EntryTargetRatioSummary';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Dialog } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { SearchableSelect, type SearchableSelectOption } from '../components/ui/searchable-select';
 import { Select } from '../components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Tooltip } from '../components/ui/tooltip';
 import { fetchCategories } from '../services/categories';
 import {
@@ -572,161 +573,45 @@ export function EntryPage() {
               {actionError}
             </div>
           ) : null}
-          {hasLoadedHoldings && hasAssetHoldings ? (
-            <div className="mb-4 rounded-2xl border border-border/60 bg-muted/15 px-3 py-3 sm:px-4">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="text-xs font-medium tracking-[0.14em] text-muted-foreground">目标占比状态</div>
-                <div
-                  className={`inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold ${targetRatioStatus.badgeClassName}`}
-                >
-                  {targetRatioStatus.label}
-                </div>
-              </div>
+          <EntryTargetRatioSummary
+            hasLoadedHoldings={hasLoadedHoldings}
+            hasAssetHoldings={hasAssetHoldings}
+            targetRatioStatus={targetRatioStatus}
+            totalAssetTargetRatioSummary={formatTargetRatioSummary(totalAssetTargetRatio)}
+            filteredAssetTargetRatioSummary={formatTargetRatioSummary(filteredAssetTargetRatio)}
+          />
+          <EntryFiltersBar
+            keyword={keyword}
+            memberFilter={memberFilter}
+            typeFilter={typeFilter}
+            memberOptions={[
+              { label: '全部成员', value: 'all' },
+              ...(membersQuery.data ?? []).map((member) => ({ label: member.name, value: member.id })),
+            ]}
+            filteredCount={filteredHoldings.length}
+            selectedCount={selectedHoldingIds.length}
+            hasAnyHoldings={allHoldings.length > 0}
+            bulkDeletePending={bulkDeleteMutation.isPending}
+            onKeywordChange={setKeyword}
+            onMemberFilterChange={setMemberFilter}
+            onTypeFilterChange={setTypeFilter}
+            onOpenMemberDeleteDialog={openMemberDeleteDialog}
+            onOpenSelectedDeleteDialog={openSelectedDeleteDialog}
+          />
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-xl border border-border/70 bg-background/90 px-3 py-2.5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm text-muted-foreground">当前资产合计</div>
-                      <div className="mt-1 text-[2rem] font-semibold leading-none tracking-tight">
-                        {formatTargetRatioSummary(totalAssetTargetRatio)}
-                      </div>
-                    </div>
-                    <div className={`pt-0.5 text-xs font-semibold ${targetRatioStatus.detailClassName}`}>{targetRatioStatus.detail}</div>
-                  </div>
-                  <div className="mt-1.5 text-xs text-muted-foreground">
-                    全部资产目标占比求和，当前筛选资产 {formatTargetRatioSummary(filteredAssetTargetRatio)}
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-emerald-100/80 bg-emerald-50/40 px-3 py-2.5">
-                  <div className="text-sm text-muted-foreground">目标占比</div>
-                  <div className="mt-1 flex items-start justify-between gap-3">
-                    <div className="text-[2rem] font-semibold leading-none tracking-tight">100.0%</div>
-                    <div className="pt-0.5 text-xs font-medium text-muted-foreground">全部资产配平基准</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-          <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-            <div className="grid gap-3 md:grid-cols-3 xl:flex-1">
-              <div>
-                <label className="mb-1 block text-sm text-muted-foreground">名称搜索</label>
-                <Input placeholder="搜索名称、成员、币种" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-muted-foreground">成员筛选</label>
-                <Select
-                  value={memberFilter}
-                  onChange={(event) => setMemberFilter(event.target.value)}
-                  options={[
-                    { label: '全部成员', value: 'all' },
-                    ...(membersQuery.data ?? []).map((member) => ({ label: member.name, value: member.id })),
-                  ]}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm text-muted-foreground">类型筛选</label>
-                <Select
-                  value={typeFilter}
-                  onChange={(event) => setTypeFilter(event.target.value as HoldingFilterType)}
-                  options={[
-                    { label: '全部类型', value: 'all' },
-                    { label: '资产', value: 'asset' },
-                    { label: '负债', value: 'liability' },
-                  ]}
-                />
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <div className="inline-flex h-10 items-center rounded-lg border bg-secondary/25 px-3 text-sm text-muted-foreground">
-                当前筛选 {filteredHoldings.length} 条，已选 {selectedHoldingIds.length} 条
-              </div>
-              <Button variant="outline" onClick={openMemberDeleteDialog} disabled={allHoldings.length === 0 || bulkDeleteMutation.isPending}>
-                按成员删除
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={openSelectedDeleteDialog}
-                disabled={selectedHoldingIds.length === 0 || bulkDeleteMutation.isPending}
-              >
-                删除已选
-              </Button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12 px-3">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border"
-                      checked={allVisibleSelected}
-                      onChange={(event) => toggleSelectAllVisible(event.target.checked)}
-                      aria-label="全选当前筛选结果"
-                    />
-                  </TableHead>
-                  <TableHead>名称</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>成员</TableHead>
-                  <TableHead>币种</TableHead>
-                  <TableHead className="text-right">原币金额</TableHead>
-                  <TableHead className="text-right">折算金额</TableHead>
-                  <TableHead className="text-right">目标占比</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredHoldings.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="w-12 px-3">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border"
-                        checked={selectedIdSet.has(row.id)}
-                        onChange={(event) => toggleHoldingSelection(row.id, event.target.checked)}
-                        aria-label={`选择 ${row.name}`}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{row.name}</TableCell>
-                    <TableCell>
-                      <Badge variant={row.type === 'asset' ? 'default' : 'secondary'}>{row.type === 'asset' ? '资产' : '负债'}</Badge>
-                    </TableCell>
-                    <TableCell>{memberNameMap.get(row.member_id) ?? row.member_id}</TableCell>
-                    <TableCell>{row.currency}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(row.amount_original, row.currency)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(row.amount_base, baseCurrency)}</TableCell>
-                    <TableCell className="text-right">{row.target_ratio == null ? '-' : `${row.target_ratio}%`}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(row)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteHoldingMutation.mutate(row.id)}
-                          disabled={deleteHoldingMutation.isPending}
-                        >
-                          <Trash2 className="h-4 w-4 text-rose-500" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredHoldings.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
-                      {allHoldings.length === 0 ? '暂无录入数据' : '当前筛选条件下暂无匹配数据'}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
+          <EntryHoldingsTable
+            filteredHoldings={filteredHoldings}
+            allHoldingsCount={allHoldings.length}
+            allVisibleSelected={allVisibleSelected}
+            selectedIdSet={selectedIdSet}
+            memberNameMap={memberNameMap}
+            baseCurrency={baseCurrency}
+            deletePending={deleteHoldingMutation.isPending}
+            onToggleSelectAllVisible={toggleSelectAllVisible}
+            onToggleHoldingSelection={toggleHoldingSelection}
+            onOpenEditDialog={openEditDialog}
+            onDeleteHolding={(holdingId) => deleteHoldingMutation.mutate(holdingId)}
+          />
         </CardContent>
       </Card>
 

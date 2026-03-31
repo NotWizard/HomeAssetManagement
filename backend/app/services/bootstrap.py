@@ -2,7 +2,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.database import Base
 from app.core.database import engine
 from app.models.category import Category
 from app.models.family import Family
@@ -120,7 +119,9 @@ def init_database() -> None:
 
 
 def ensure_database_schema() -> None:
-    Base.metadata.create_all(bind=engine)
+    from app.services.schema_migration import run_database_migrations
+
+    run_database_migrations(str(engine.url))
 
 
 def ensure_seed_data(session: Session) -> None:

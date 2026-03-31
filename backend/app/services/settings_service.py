@@ -43,26 +43,28 @@ class SettingsService:
     ) -> SettingsModel:
         settings = SettingsService.get_settings(session)
         next_base_currency = base_currency.upper()
-        base_currency_changed = settings.base_currency.upper() != next_base_currency
-
-        settings.base_currency = next_base_currency
-        settings.rebalance_threshold_pct = rebalance_threshold_pct
-        settings.fx_provider = DEFAULT_FX_PROVIDER
+        base_currency_changed = _apply_settings_update(
+            settings,
+            base_currency=next_base_currency,
+            rebalance_threshold_pct=rebalance_threshold_pct,
+        )
         session.flush()
 
         if base_currency_changed:
-            _revalue_all_holdings(session, next_base_currency)
-            SnapshotService.revalue_all_snapshots(session, next_base_currency)
-            SnapshotService.create_event_snapshot(
+            _run_base_currency_change_pipeline(
                 session,
-                trigger_type="settings",
-                note=f"base_currency:{next_base_currency}",
+                next_base_currency,
+                allow_rate_refresh=True,
             )
-            SnapshotService.create_daily_snapshot(session)
         return settings
 
 
-def _revalue_all_holdings(session: Session, base_currency: str) -> None:
+def _revalue_all_holdings(
+    session: Session,
+    base_currency: str,
+    *,
+    allow_rate_refresh: bool,
+) -> None:
     family = get_default_family(session)
     rate_cache: dict[str, Decimal] = {}
     target_date = business_today(session)
@@ -82,14 +84,53 @@ def _revalue_all_holdings(session: Session, base_currency: str) -> None:
             continue
 
         if currency not in rate_cache:
-            rate_cache[currency], _ = FXService.resolve_rate(
+            rate_cache[currency], _ = FXService.resolve_rate_for_pair(
                 session,
                 quote_currency=currency,
                 base_currency=base_currency,
                 as_of=target_date,
-                allow_refresh=False,
+                allow_refresh=allow_rate_refresh,
             )
 
         row.amount_base = convert_to_base_amount(amount_original, rate_cache[currency])
 
     session.flush()
+
+
+
+def _apply_settings_update(
+    settings: SettingsModel,
+    *,
+    base_currency: str,
+    rebalance_threshold_pct: float,
+) -> bool:
+    base_currency_changed = settings.base_currency.upper() != base_currency
+    settings.base_currency = base_currency
+    settings.rebalance_threshold_pct = rebalance_threshold_pct
+    settings.fx_provider = DEFAULT_FX_PROVIDER
+    return base_currency_changed
+
+
+
+def _run_base_currency_change_pipeline(
+    session: Session,
+    next_base_currency: str,
+    *,
+    allow_rate_refresh: bool,
+) -> None:
+    _revalue_all_holdings(
+        session,
+        next_base_currency,
+        allow_rate_refresh=allow_rate_refresh,
+    )
+    SnapshotService.revalue_all_snapshots(
+        session,
+        next_base_currency,
+        allow_rate_refresh=allow_rate_refresh,
+    )
+    SnapshotService.create_event_snapshot(
+        session,
+        trigger_type="settings",
+        note=f"base_currency:{next_base_currency}",
+    )
+    SnapshotService.create_daily_snapshot(session)

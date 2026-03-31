@@ -15,6 +15,7 @@ from app.models.member import Member
 from app.models.settings import SettingsModel
 from app.models.snapshot_daily import SnapshotDaily
 from app.services.snapshot_service import SnapshotService
+from app.services.common import get_default_family
 
 
 def _get_asset_path(client: TestClient) -> tuple[int, int, int]:
@@ -113,18 +114,33 @@ def _read_zip_entries(content: bytes) -> tuple[list[str], dict, list[dict], dict
 
 def _collect_state() -> dict:
     with SessionLocal() as session:
-        family = session.scalar(select(Family).limit(1))
-        settings = session.scalar(select(SettingsModel).limit(1))
-        members = list(session.scalars(select(Member).order_by(Member.id.asc())))
+        family = get_default_family(session)
+        settings = session.scalar(
+            select(SettingsModel).where(SettingsModel.family_id == family.id).limit(1)
+        )
+        members = list(
+            session.scalars(
+                select(Member)
+                .where(Member.family_id == family.id)
+                .order_by(Member.id.asc())
+            )
+        )
         holdings = list(
             session.scalars(
                 select(HoldingItem)
-                .where(HoldingItem.is_deleted.is_(False))
+                .where(
+                    HoldingItem.family_id == family.id,
+                    HoldingItem.is_deleted.is_(False),
+                )
                 .order_by(HoldingItem.id.asc())
             )
         )
         snapshots = list(
-            session.scalars(select(SnapshotDaily).order_by(SnapshotDaily.snapshot_date.asc()))
+            session.scalars(
+                select(SnapshotDaily)
+                .where(SnapshotDaily.family_id == family.id)
+                .order_by(SnapshotDaily.snapshot_date.asc())
+            )
         )
 
     return {

@@ -165,7 +165,12 @@ class SnapshotService:
         return session.scalar(stmt)
 
     @staticmethod
-    def revalue_all_snapshots(session: Session, base_currency: str) -> None:
+    def revalue_all_snapshots(
+        session: Session,
+        base_currency: str,
+        *,
+        allow_rate_refresh: bool = True,
+    ) -> None:
         family = get_default_family(session)
         rate_cache: dict[tuple[date, str], Decimal] = {}
 
@@ -185,6 +190,7 @@ class SnapshotService:
                     base_currency=base_currency,
                     as_of=row.snapshot_date,
                     rate_cache=rate_cache,
+                    allow_rate_refresh=allow_rate_refresh,
                 ),
                 ensure_ascii=False,
             )
@@ -205,6 +211,7 @@ class SnapshotService:
                     base_currency=base_currency,
                     as_of=row.snapshot_at.date(),
                     rate_cache=rate_cache,
+                    allow_rate_refresh=allow_rate_refresh,
                 ),
                 ensure_ascii=False,
             )
@@ -295,6 +302,8 @@ def _revalue_snapshot_payload(
     base_currency: str,
     as_of: date,
     rate_cache: dict[tuple[date, str], Decimal],
+    *,
+    allow_rate_refresh: bool,
 ) -> dict:
     holdings = payload.get("holdings", [])
     total_asset = Decimal("0")
@@ -309,11 +318,12 @@ def _revalue_snapshot_payload(
         else:
             cache_key = (as_of, currency)
             if cache_key not in rate_cache:
-                rate_cache[cache_key], _ = FXService.resolve_rate(
+                rate_cache[cache_key], _ = FXService.resolve_rate_for_pair(
                     session,
                     quote_currency=currency,
                     base_currency=base_currency,
                     as_of=as_of,
+                    allow_refresh=allow_rate_refresh,
                 )
             amount_base = convert_to_base_amount(amount_original, rate_cache[cache_key])
 

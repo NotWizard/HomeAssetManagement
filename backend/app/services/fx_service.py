@@ -119,6 +119,26 @@ class FXService:
         base = (base_currency or settings.base_currency).upper()
         quote = quote_currency.upper()
         as_of_date = as_of or business_today(session)
+        return FXService.resolve_rate_for_pair(
+            session,
+            quote_currency=quote,
+            base_currency=base,
+            as_of=as_of_date,
+            allow_refresh=allow_refresh,
+        )
+
+    @staticmethod
+    def resolve_rate_for_pair(
+        session: Session,
+        quote_currency: str,
+        base_currency: str,
+        as_of: date,
+        *,
+        allow_refresh: bool,
+    ) -> tuple[Decimal, bool]:
+        base = base_currency.upper()
+        quote = quote_currency.upper()
+        as_of_date = as_of
 
         if quote == base:
             return Decimal("1"), False

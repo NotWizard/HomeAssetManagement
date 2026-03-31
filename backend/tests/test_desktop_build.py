@@ -40,6 +40,9 @@ def test_pyinstaller_args_target_onedir_binary_for_desktop_bundle():
     assert str(project_root / "backend" / "build-desktop" / "x64") in args
     assert "--paths" in args
     assert str(project_root / "backend") in args
+    assert "--add-data" in args
+    assert f"{project_root / 'backend' / 'db_migrations'}:db_migrations" in args
+    assert f"{project_root / 'backend' / 'alembic.ini'}:." in args
     assert str(project_root / "backend" / "desktop_server.py") == args[-1]
 
 

@@ -64,6 +64,7 @@ def build_output_paths(project_root: Path, target_arch: str) -> DesktopBuildPath
 
 def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
     paths = build_output_paths(project_root, target_arch)
+    backend_dir = project_root / "backend"
     return [
         "--noconfirm",
         "--clean",
@@ -77,7 +78,11 @@ def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
         "--specpath",
         str(paths.spec_dir),
         "--paths",
-        str(project_root / "backend"),
+        str(backend_dir),
+        "--add-data",
+        f"{backend_dir / 'db_migrations'}:db_migrations",
+        "--add-data",
+        f"{backend_dir / 'alembic.ini'}:.",
         str(paths.entry_script),
     ]
 

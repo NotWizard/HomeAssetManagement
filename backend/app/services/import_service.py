@@ -40,6 +40,14 @@ class ParsedRow:
     error: str | None
 
 
+@dataclass
+class ImportApplyResult:
+    total: int
+    inserted: int
+    updated: int
+    failed: int
+
+
 class ImportService:
     @staticmethod
     def preview_csv(session: Session, content: bytes) -> dict:
@@ -50,58 +58,22 @@ class ImportService:
     def commit_csv(session: Session, content: bytes, filename: str) -> tuple[dict, list[ParsedRow]]:
         parsed = _parse_csv(session, content)
         family = get_default_family(session)
-
-        inserted = 0
-        updated = 0
-        failed = 0
-
-        for row in parsed:
-            if row.error:
-                failed += 1
-                continue
-
-            try:
-                assert row.payload is not None
-                if row.action == "update":
-                    _update_existing(session, row.payload)
-                    updated += 1
-                else:
-                    HoldingService.create_holding(
-                        session,
-                        row.payload,
-                        source="csv",
-                        refresh_snapshots=False,
-                    )
-                    inserted += 1
-            except Exception as exc:  # noqa: BLE001
-                row.error = str(exc)
-                failed += 1
-
-        total = len(parsed)
-
-        import_log = ImportLog(
+        apply_result = _apply_parsed_rows(session, parsed)
+        import_log = _create_import_log(
+            session,
             family_id=family.id,
-            file_name=filename,
-            total_rows=total,
-            updated_rows=updated,
-            inserted_rows=inserted,
-            failed_rows=failed,
-            error_report_path=None,
-            created_at=utc_now_naive(),
+            filename=filename,
+            apply_result=apply_result,
         )
-        session.add(import_log)
-        session.flush()
-
-        SnapshotService.create_event_snapshot(session, trigger_type="import", note=filename)
-        SnapshotService.create_daily_snapshot(session)
+        _record_import_snapshots(session, filename)
 
         return (
             {
                 "import_id": import_log.id,
-                "total_rows": total,
-                "updated_rows": updated,
-                "inserted_rows": inserted,
-                "failed_rows": failed,
+                "total_rows": apply_result.total,
+                "updated_rows": apply_result.updated,
+                "inserted_rows": apply_result.inserted,
+                "failed_rows": apply_result.failed,
                 "error_report_path": None,
             },
             parsed,
@@ -248,6 +220,71 @@ def _update_existing(session: Session, payload: dict) -> None:
         HoldingService.create_holding(session, payload, source="csv", refresh_snapshots=False)
     else:
         HoldingService.update_holding(session, existing.id, payload, refresh_snapshots=False)
+
+
+
+def _apply_parsed_rows(session: Session, parsed: list[ParsedRow]) -> ImportApplyResult:
+    inserted = 0
+    updated = 0
+    failed = 0
+
+    for row in parsed:
+        if row.error:
+            failed += 1
+            continue
+
+        try:
+            assert row.payload is not None
+            if row.action == "update":
+                _update_existing(session, row.payload)
+                updated += 1
+            else:
+                HoldingService.create_holding(
+                    session,
+                    row.payload,
+                    source="csv",
+                    refresh_snapshots=False,
+                )
+                inserted += 1
+        except Exception as exc:  # noqa: BLE001
+            row.error = str(exc)
+            failed += 1
+
+    return ImportApplyResult(
+        total=len(parsed),
+        inserted=inserted,
+        updated=updated,
+        failed=failed,
+    )
+
+
+
+def _create_import_log(
+    session: Session,
+    *,
+    family_id: int,
+    filename: str,
+    apply_result: ImportApplyResult,
+) -> ImportLog:
+    import_log = ImportLog(
+        family_id=family_id,
+        file_name=filename,
+        total_rows=apply_result.total,
+        updated_rows=apply_result.updated,
+        inserted_rows=apply_result.inserted,
+        failed_rows=apply_result.failed,
+        error_report_path=None,
+        created_at=utc_now_naive(),
+    )
+    session.add(import_log)
+    session.flush()
+    return import_log
+
+
+
+def _record_import_snapshots(session: Session, filename: str) -> None:
+    SnapshotService.create_event_snapshot(session, trigger_type="import", note=filename)
+    SnapshotService.create_daily_snapshot(session)
 
 
 

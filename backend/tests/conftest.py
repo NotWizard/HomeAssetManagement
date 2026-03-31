@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-os.environ.setdefault("HBS_DATABASE_URL", "sqlite:///./backend/data/test.db")
+test_db = ROOT / "data" / "test.db"
+os.environ.setdefault("HBS_DATABASE_URL", f"sqlite:///{test_db}")
 os.environ.setdefault("HBS_ENABLE_SCHEDULER", "false")
 os.environ.setdefault("HBS_ENABLE_BOOTSTRAP_SNAPSHOT", "false")
 
-test_db = ROOT / "data" / "test.db"
 if test_db.exists():
     test_db.unlink()

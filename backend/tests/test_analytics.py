@@ -22,6 +22,7 @@ from app.models.snapshot_daily import SnapshotDaily
 from app.services.bootstrap import init_database
 from app.services.common import get_default_family
 from app.services.snapshot_service import SnapshotService
+from app.services.snapshot_service import parse_snapshot_payload
 
 
 def _reset_daily_snapshots() -> None:
@@ -35,6 +36,7 @@ def _reset_daily_snapshots() -> None:
 
 def _snapshot_payload(total_asset: float, total_liability: float, holding_name: str = '现金') -> dict:
     return {
+        'schema_version': 2,
         'totals': {
             'total_asset': total_asset,
             'total_liability': total_liability,
@@ -51,6 +53,30 @@ def _snapshot_payload(total_asset: float, total_liability: float, holding_name: 
         if total_asset > 0
         else [],
     }
+
+
+
+
+def test_parse_snapshot_payload_supports_legacy_payload_without_schema_version():
+    payload = parse_snapshot_payload(json.dumps({
+        'totals': {'total_asset': 100.0, 'total_liability': 0.0, 'net_asset': 100.0},
+        'holdings': [{'id': 1, 'name': '现金', 'type': 'asset', 'amount_base': 100.0}],
+    }, ensure_ascii=False))
+
+    assert payload['schema_version'] == 1
+    assert payload['totals']['total_asset'] == 100.0
+    assert payload['holdings'][0]['name'] == '现金'
+
+
+def test_snapshot_service_build_current_payload_sets_schema_version():
+    init_database()
+
+    with SessionLocal() as session:
+        payload = SnapshotService.build_current_payload(session)
+
+    assert payload['schema_version'] == 2
+    assert 'totals' in payload
+    assert 'holdings' in payload
 
 
 def test_compute_volatility_returns_values_for_sufficient_samples():

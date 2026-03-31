@@ -1,5 +1,4 @@
 from datetime import date
-import json
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -18,6 +17,7 @@ from app.core.response import ok
 from app.core.timezone import business_today
 from app.services.common import get_scoped_member
 from app.services.settings_service import SettingsService
+from app.services.snapshot_service import parse_snapshot_payload
 from app.services.snapshot_service import SnapshotService
 
 router = APIRouter()
@@ -97,7 +97,7 @@ def get_sankey(
     latest = _load_latest_snapshot(db, start_date, end_date)
     if latest is None:
         return ok({"nodes": [], "links": []})
-    payload = json.loads(latest.payload_json)
+    payload = parse_snapshot_payload(latest.payload_json)
     member_ids = {item.get("member_id") for item in payload.get("holdings", []) if item.get("member_id") is not None}
     name_map = {member_id: get_scoped_member(db, int(member_id)).name for member_id in member_ids}
     return ok(build_sankey(payload.get("holdings", []), name_map))
@@ -112,7 +112,7 @@ def get_rebalance(
     latest = _load_latest_snapshot(db, start_date, end_date)
     if latest is None:
         return ok([])
-    payload = json.loads(latest.payload_json)
+    payload = parse_snapshot_payload(latest.payload_json)
     totals = payload.get("totals", {})
     net_asset = float(totals.get("net_asset", 0.0) or 0.0)
     settings = SettingsService.get_settings(db)

@@ -21,6 +21,9 @@ from app.services.fx_service import FXService
 from app.utils.fx import convert_to_base_amount
 from app.utils.serialization import decimal_to_float
 
+SNAPSHOT_PAYLOAD_SCHEMA_VERSION = 2
+LEGACY_SNAPSHOT_PAYLOAD_VERSION = 1
+
 
 class SnapshotService:
     @staticmethod
@@ -91,7 +94,7 @@ class SnapshotService:
                 "family_id": row.family_id,
                 "trigger_type": row.trigger_type,
                 "snapshot_at": row.snapshot_at.isoformat(),
-                "payload": json.loads(row.payload_json),
+                "payload": parse_snapshot_payload(row.payload_json),
             }
             for row in rows
         ]
@@ -112,7 +115,7 @@ class SnapshotService:
                 "id": row.id,
                 "family_id": row.family_id,
                 "snapshot_date": row.snapshot_date.isoformat(),
-                "payload": json.loads(row.payload_json),
+                "payload": parse_snapshot_payload(row.payload_json),
             }
             for row in rows
         ]
@@ -174,7 +177,7 @@ class SnapshotService:
             )
         )
         for row in daily_rows:
-            payload = json.loads(row.payload_json)
+            payload = parse_snapshot_payload(row.payload_json)
             row.payload_json = json.dumps(
                 _revalue_snapshot_payload(
                     session,
@@ -194,7 +197,7 @@ class SnapshotService:
             )
         )
         for row in event_rows:
-            payload = json.loads(row.payload_json)
+            payload = parse_snapshot_payload(row.payload_json)
             row.payload_json = json.dumps(
                 _revalue_snapshot_payload(
                     session,
@@ -207,6 +210,27 @@ class SnapshotService:
             )
 
         session.flush()
+
+
+def parse_snapshot_payload(payload_json: str) -> dict:
+    payload = json.loads(payload_json)
+    if not isinstance(payload, dict):
+        return {
+            "schema_version": LEGACY_SNAPSHOT_PAYLOAD_VERSION,
+            "totals": {},
+            "holdings": [],
+        }
+
+    return {
+        "schema_version": int(payload.get("schema_version") or LEGACY_SNAPSHOT_PAYLOAD_VERSION),
+        "totals": payload.get("totals") or {},
+        "holdings": payload.get("holdings") or [],
+        **{
+            key: value
+            for key, value in payload.items()
+            if key not in {"schema_version", "totals", "holdings"}
+        },
+    }
 
 
 def _build_snapshot_payload(session: Session, family_id: int) -> dict:
@@ -255,6 +279,7 @@ def _build_snapshot_payload(session: Session, family_id: int) -> dict:
     net_asset = total_asset - total_liability
 
     return {
+        "schema_version": SNAPSHOT_PAYLOAD_SCHEMA_VERSION,
         "totals": {
             "total_asset": decimal_to_float(total_asset),
             "total_liability": decimal_to_float(total_liability),
@@ -298,6 +323,7 @@ def _revalue_snapshot_payload(
         else:
             total_liability += amount_base
 
+    payload["schema_version"] = SNAPSHOT_PAYLOAD_SCHEMA_VERSION
     payload["totals"] = {
         "total_asset": decimal_to_float(total_asset),
         "total_liability": decimal_to_float(total_liability),

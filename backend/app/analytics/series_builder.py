@@ -1,4 +1,3 @@
-import json
 from datetime import date
 
 from sqlalchemy import select
@@ -7,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.clock import format_utc_iso_z
 from app.models.snapshot_daily import SnapshotDaily
 from app.services.common import get_default_family
+from app.services.snapshot_service import parse_snapshot_payload
 
 
 def build_daily_series(
@@ -35,7 +35,7 @@ def build_daily_series(
     per_asset: dict[str, list[float | None]] = {}
 
     for index, row in enumerate(rows):
-        payload = json.loads(row.payload_json)
+        payload = parse_snapshot_payload(row.payload_json)
         dates.append(row.snapshot_date.isoformat())
         totals = payload.get("totals", {})
         total_asset.append(float(totals.get("total_asset", 0.0)))

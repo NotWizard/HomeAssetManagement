@@ -31,19 +31,26 @@ export type HbsDesktopUpdateState = {
 
 export type HbsDesktopBridge = {
   isDesktop: boolean;
-  requestJson: (path: string, init?: RequestInit) => Promise<unknown>;
-  requestBinary: (
-    path: string,
-    init?: RequestInit
-  ) => Promise<HbsDesktopBinaryResponse>;
-  postForm: (path: string, entries: DesktopFormDataEntry[]) => Promise<unknown>;
-  retryBootstrap: () => Promise<unknown>;
-  getUpdateState: () => Promise<unknown>;
-  checkForUpdates: () => Promise<unknown>;
-  downloadUpdate: () => Promise<unknown>;
-  installUpdate: () => Promise<unknown>;
-  onUpdateStateChanged: (listener: (state: unknown) => void) => (() => void);
+  api: {
+    requestJson: (path: string, init?: RequestInit) => Promise<unknown>;
+    requestBinary: (
+      path: string,
+      init?: RequestInit
+    ) => Promise<HbsDesktopBinaryResponse>;
+    postForm: (path: string, entries: DesktopFormDataEntry[]) => Promise<unknown>;
+  };
+  bootstrap: {
+    retry: () => Promise<unknown>;
+  };
+  updates: {
+    getState: () => Promise<unknown>;
+    check: () => Promise<unknown>;
+    download: () => Promise<unknown>;
+    install: () => Promise<unknown>;
+    onStateChanged: (listener: (state: unknown) => void) => (() => void);
+  };
 };
+
 
 export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 

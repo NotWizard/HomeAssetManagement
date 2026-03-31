@@ -81,36 +81,43 @@ async function requestBinary(
 
 contextBridge.exposeInMainWorld('__HBS_DESKTOP__', {
   isDesktop: true,
-  requestJson: async (path: string, init?: JsonRequestInit) => {
-    const response = await fetch(resolveApiUrl(path), {
-      method: init?.method ?? 'GET',
-      headers: init?.headers,
-      body: init?.body,
-    });
+  api: {
+    requestJson: async (path: string, init?: JsonRequestInit) => {
+      const response = await fetch(resolveApiUrl(path), {
+        method: init?.method ?? 'GET',
+        headers: init?.headers,
+        body: init?.body,
+      });
 
-    return response.json();
-  },
-  requestBinary,
-  postForm: async (path: string, entries: FormEntries) => {
-    const response = await fetch(resolveApiUrl(path), {
-      method: 'POST',
-      body: toFormData(entries),
-    });
+      return response.json();
+    },
+    requestBinary,
+    postForm: async (path: string, entries: FormEntries) => {
+      const response = await fetch(resolveApiUrl(path), {
+        method: 'POST',
+        body: toFormData(entries),
+      });
 
-    return response.json();
+      return response.json();
+    },
   },
-  retryBootstrap: () => ipcRenderer.invoke(RETRY_BOOTSTRAP_CHANNEL),
-  getUpdateState: () => ipcRenderer.invoke(UPDATE_GET_STATE_CHANNEL),
-  checkForUpdates: () => ipcRenderer.invoke(UPDATE_CHECK_CHANNEL),
-  downloadUpdate: () => ipcRenderer.invoke(UPDATE_DOWNLOAD_CHANNEL),
-  installUpdate: () => ipcRenderer.invoke(UPDATE_INSTALL_CHANNEL),
-  onUpdateStateChanged: (listener: UpdateListener) => {
-    const wrapped = (_event: unknown, payload: unknown) => {
-      listener(payload);
-    };
-    ipcRenderer.on(UPDATE_STATE_CHANNEL, wrapped);
-    return () => {
-      ipcRenderer.removeListener(UPDATE_STATE_CHANNEL, wrapped);
-    };
+  bootstrap: {
+    retry: () => ipcRenderer.invoke(RETRY_BOOTSTRAP_CHANNEL),
+  },
+  updates: {
+    getState: () => ipcRenderer.invoke(UPDATE_GET_STATE_CHANNEL),
+    check: () => ipcRenderer.invoke(UPDATE_CHECK_CHANNEL),
+    download: () => ipcRenderer.invoke(UPDATE_DOWNLOAD_CHANNEL),
+    install: () => ipcRenderer.invoke(UPDATE_INSTALL_CHANNEL),
+    onStateChanged: (listener: UpdateListener) => {
+      const wrapped = (_event: unknown, payload: unknown) => {
+        listener(payload);
+      };
+      ipcRenderer.on(UPDATE_STATE_CHANNEL, wrapped);
+      return () => {
+        ipcRenderer.removeListener(UPDATE_STATE_CHANNEL, wrapped);
+      };
+    },
   },
 });
+

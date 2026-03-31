@@ -439,7 +439,7 @@ export function createErrorPage(message: string): string {
     '  retryButton.setAttribute("disabled", "true");',
     '  retryButton.textContent = "正在重试...";',
     '  try {',
-    '    const retry = window.__HBS_DESKTOP__?.retryBootstrap;',
+    '    const retry = window.__HBS_DESKTOP__?.bootstrap?.retry;',
     '    if (typeof retry === "function") {',
     '      await retry();',
     '      return;',

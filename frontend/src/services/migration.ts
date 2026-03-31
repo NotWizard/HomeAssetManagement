@@ -61,7 +61,7 @@ function triggerDownload(
 export async function exportMigrationPackage() {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
-    const response = await desktopBridge.requestBinary('/migration/export', {
+    const response = await desktopBridge.api.requestBinary('/migration/export', {
       method: 'POST',
     });
     if (!response.ok) {

@@ -17,7 +17,7 @@ function normalizeResponse<T>(payload: unknown): T {
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
-    return normalizeResponse<T>(await desktopBridge.requestJson(url, options));
+    return normalizeResponse<T>(await desktopBridge.api.requestJson(url, options));
   }
 
   const response = await fetch(`${getApiBaseUrl()}${url}`, {
@@ -55,7 +55,7 @@ export async function postForm<T>(url: string, formData: FormData): Promise<T> {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
     return normalizeResponse<T>(
-      await desktopBridge.postForm(url, serializeFormData(formData))
+      await desktopBridge.api.postForm(url, serializeFormData(formData))
     );
   }
 

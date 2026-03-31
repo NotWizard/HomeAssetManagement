@@ -70,13 +70,13 @@ export function DesktopUpdateNotice() {
 
     let disposed = false;
 
-    void desktopBridge.getUpdateState().then((state) => {
+    void desktopBridge.updates.getState().then((state) => {
       if (!disposed) {
         setUpdateState(normalizeUpdateState(state));
       }
     });
 
-    const unsubscribe = desktopBridge.onUpdateStateChanged((state) => {
+    const unsubscribe = desktopBridge.updates.onStateChanged((state) => {
       if (!disposed) {
         setUpdateState(normalizeUpdateState(state));
       }
@@ -128,7 +128,7 @@ export function DesktopUpdateNotice() {
   const confirmDownload = async () => {
     setActionPending(true);
     try {
-      await desktopBridge.downloadUpdate();
+      await desktopBridge.updates.download();
       setDownloadDialogOpen(false);
     } finally {
       setActionPending(false);
@@ -138,7 +138,7 @@ export function DesktopUpdateNotice() {
   const confirmInstall = async () => {
     setActionPending(true);
     try {
-      await desktopBridge.installUpdate();
+      await desktopBridge.updates.install();
       setInstallDialogOpen(false);
     } finally {
       setActionPending(false);
@@ -161,7 +161,7 @@ export function DesktopUpdateNotice() {
             return;
           }
           if (status === 'error') {
-            void desktopBridge.checkForUpdates();
+            void desktopBridge.updates.check();
           }
         }}
       >

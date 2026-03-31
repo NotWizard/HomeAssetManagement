@@ -19,6 +19,7 @@ import { createBackendController, type BackendProcess } from './backend-controll
 import { createBootstrapController } from './bootstrap-controller.js';
 import { resolvePythonExecutable } from './python-executable.js';
 import { createErrorPage, createLoadingPage } from './startup-page.js';
+import { buildMainWindowWebPreferences } from './window-options.js';
 import {
   probeBackendHealth,
   waitForBackendReadyWithHealthCheck,
@@ -255,12 +256,10 @@ function ensureMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     title: '家庭资产负债表',
     backgroundColor: '#ffffff',
-    webPreferences: {
-      preload: join(currentDir, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      additionalArguments: buildWindowArguments(),
-    },
+    webPreferences: buildMainWindowWebPreferences(
+      currentDir,
+      buildWindowArguments()
+    ),
   });
 
   window.on('closed', () => {

@@ -38,10 +38,12 @@ test('设置更新 payload 不再包含 timezone 字段', () => {
   assert.doesNotMatch(block, /timezone:/);
 });
 
-test('设置页应展示后端真实 timezone，并避免提交 timezone', () => {
+test('设置页应将 timezone 作为服务端业务时区只读展示，并避免提交 timezone', () => {
   const source = readFrontendFile('src/pages/SettingsPage.tsx');
 
   assert.match(source, /settingsQuery\.data\?\.timezone/);
+  assert.match(source, /服务端业务时区（只读）/);
+  assert.match(source, /用于快照与调度时间语义/);
   assert.doesNotMatch(source, /mutation\.mutate\([\s\S]*timezone:/);
 });
 

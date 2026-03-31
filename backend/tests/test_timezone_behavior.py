@@ -41,3 +41,17 @@ def test_scheduler_timezone_follows_settings_timezone():
         session.commit()
 
     assert str(_get_scheduler_timezone()) == "UTC"
+
+
+def test_scheduler_timezone_uses_business_timezone_source():
+    from app.core.timezone import get_business_tzinfo
+    from app.jobs.scheduler import _get_scheduler_timezone
+
+    init_database()
+    with SessionLocal() as session:
+        settings = SettingsService.get_settings(session)
+        settings.timezone = "Europe/London"
+        session.commit()
+        expected = str(get_business_tzinfo(session))
+
+    assert str(_get_scheduler_timezone()) == expected

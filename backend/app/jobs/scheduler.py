@@ -41,7 +41,7 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.start()
-    logger.info("scheduler started timezone=%s", scheduler_timezone)
+    logger.info("scheduler started business_timezone=%s", scheduler_timezone)
 
 
 def stop_scheduler() -> None:

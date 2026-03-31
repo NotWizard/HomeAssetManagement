@@ -135,7 +135,7 @@ export function SettingsPage() {
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-semibold">系统设置</h2>
-        <p className="text-sm text-muted-foreground">配置基准币种、时区、再平衡阈值、汇率提供方与迁移备份能力</p>
+        <p className="text-sm text-muted-foreground">配置基准币种、服务端业务时区、再平衡阈值、汇率提供方与迁移备份能力</p>
       </div>
 
       <Card>
@@ -166,9 +166,9 @@ export function SettingsPage() {
                 <Input value={settingsQuery.isError ? '设置加载失败' : '读取中...'} disabled readOnly />
               )}
             </Field>
-            <Field label="时区">
+            <Field label="服务端业务时区（只读）">
               <Input value={timezoneDisplay} disabled readOnly />
-              <p className="text-xs text-muted-foreground">优先显示服务端时区；未读取到时回退为本机时区，不支持手动修改</p>
+              <p className="text-xs text-muted-foreground">优先显示服务端业务时区；未读取到时回退为本机时区，用于快照与调度时间语义，不支持手动修改</p>
             </Field>
             <Field label="再平衡阈值(%)">
               {settingsQuery.data ? (

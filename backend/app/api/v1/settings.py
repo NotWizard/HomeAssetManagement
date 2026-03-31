@@ -10,7 +10,11 @@ from app.services.settings_service import SettingsService
 router = APIRouter()
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="读取系统设置",
+    description="返回当前家庭的系统设置，其中 timezone 为服务端业务时区，只读展示给前端。",
+)
 def get_settings(db: Session = Depends(get_db)):
     settings = SettingsService.get_settings(db)
     return ok(
@@ -23,7 +27,11 @@ def get_settings(db: Session = Depends(get_db)):
     )
 
 
-@router.put("")
+@router.put(
+    "",
+    summary="更新系统设置",
+    description="仅允许更新 base_currency 与 rebalance_threshold_pct；timezone 为服务端业务时区，不支持通过设置接口修改。",
+)
 def update_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
     settings = SettingsService.update_settings(db, **payload.model_dump())
     db.commit()

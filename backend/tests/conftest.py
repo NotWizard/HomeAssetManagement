@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 
 os.environ.setdefault("HBS_DATABASE_URL", "sqlite:///./backend/data/test.db")
 os.environ.setdefault("HBS_ENABLE_SCHEDULER", "false")
+os.environ.setdefault("HBS_ENABLE_BOOTSTRAP_SNAPSHOT", "false")
 
 test_db = ROOT / "data" / "test.db"
 if test_db.exists():

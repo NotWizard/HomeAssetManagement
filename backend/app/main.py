@@ -11,11 +11,8 @@ from app.api.v1 import router as api_router
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.core.response import err
-from app.jobs.scheduler import start_scheduler
-from app.jobs.scheduler import stop_scheduler
-from app.services.bootstrap import init_database
-from app.services.snapshot_service import SnapshotService
-from app.core.database import SessionLocal
+from app.services.bootstrap_runtime import run_application_shutdown
+from app.services.bootstrap_runtime import run_application_startup
 
 settings = get_settings()
 frontend_dist_dir = Path(settings.frontend_dist_dir).resolve() if settings.frontend_dist_dir else None
@@ -34,15 +31,11 @@ def _status_code_for_app_error(code: int) -> int:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
-    init_database()
-    with SessionLocal() as session:
-        SnapshotService.create_daily_snapshot(session)
-        session.commit()
-    start_scheduler()
+    run_application_startup()
     try:
         yield
     finally:
-        stop_scheduler()
+        run_application_shutdown()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

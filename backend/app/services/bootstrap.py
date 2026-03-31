@@ -113,12 +113,20 @@ LEGACY_CATEGORY_NAMES = {"默认一级", "默认二级", "默认三级"}
 
 
 def init_database() -> None:
-    Base.metadata.create_all(bind=engine)
+    ensure_database_schema()
     with Session(engine) as session:
-        _ensure_default_family(session)
-        _ensure_default_settings(session)
-        _ensure_default_categories(session)
+        ensure_seed_data(session)
         session.commit()
+
+
+def ensure_database_schema() -> None:
+    Base.metadata.create_all(bind=engine)
+
+
+def ensure_seed_data(session: Session) -> None:
+    _ensure_default_family(session)
+    _ensure_default_settings(session)
+    _ensure_default_categories(session)
 
 
 def _ensure_default_family(session: Session) -> Family:

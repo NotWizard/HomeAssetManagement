@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Shanghai"
     rebalance_threshold_pct: float = 5.0
     enable_scheduler: bool = True
+    enable_bootstrap_snapshot: bool = True
 
     fx_primary_url: str = "https://api.frankfurter.app"
     fx_fallback_url: str = "https://api.exchangerate.host"

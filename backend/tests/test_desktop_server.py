@@ -1,4 +1,5 @@
 import desktop_server
+from app.services.bootstrap_runtime import resolve_startup_runtime_options
 
 
 def test_desktop_server_runs_imported_asgi_app(monkeypatch):
@@ -18,3 +19,8 @@ def test_desktop_server_runs_imported_asgi_app(monkeypatch):
     assert captured["host"] == desktop_server.settings.app_host
     assert captured["port"] == desktop_server.settings.app_port
     assert captured["reload"] is False
+
+
+def test_desktop_runtime_keeps_bootstrap_snapshot_disabled_by_env():
+    options = resolve_startup_runtime_options()
+    assert options.run_bootstrap_snapshot is False

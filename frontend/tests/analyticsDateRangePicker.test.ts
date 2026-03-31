@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const FRONTEND_ROOT = process.cwd();
+const FRONTEND_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function readFrontendFile(relativePath: string): string {
   return readFileSync(resolve(FRONTEND_ROOT, relativePath), 'utf8');

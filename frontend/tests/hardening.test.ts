@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
-const FRONTEND_ROOT = process.cwd();
+const FRONTEND_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function readFrontendFile(relativePath: string): string {
   return readFileSync(resolve(FRONTEND_ROOT, relativePath), 'utf8');
@@ -100,8 +101,8 @@ test('成员页请求失败时应保留旧列表，仅在无数据时显示替�
 test('分析页时间区间筛选需要作用于桑基图与再平衡请求', () => {
   const analyticsSource = readFrontendFile('src/pages/AnalyticsPage.tsx');
 
-  assert.match(analyticsSource, /queryKey:\s*\[\s*'sankey',\s*analyticsDateRange\.startDate,\s*analyticsDateRange\.endDate\s*\]/);
-  assert.match(analyticsSource, /queryKey:\s*\[\s*'rebalance',\s*analyticsDateRange\.startDate,\s*analyticsDateRange\.endDate\s*\]/);
+  assert.match(analyticsSource, /queryKey:\s*queryKeys\.sankey\.range\(analyticsDateRange\)/);
+  assert.match(analyticsSource, /queryKey:\s*queryKeys\.rebalance\.range\(analyticsDateRange\)/);
 });
 
 test('分析页应从后端读取时间边界，并将默认时间初始化为全部时间', () => {
@@ -113,7 +114,7 @@ test('分析页应从后端读取时间边界，并将默认时间初始化为�
   assert.match(analyticsServiceSource, /fetchAnalyticsDateBounds/);
   assert.match(analyticsServiceSource, /\/analytics\/date-bounds/);
 
-  assert.match(analyticsPageSource, /queryKey:\s*\[\s*'analytics-date-bounds'\s*\]/);
+  assert.match(analyticsPageSource, /queryKey:\s*queryKeys\.analyticsDateBounds\.all\(\)/);
   assert.match(analyticsPageSource, /fetchAnalyticsDateBounds/);
   assert.match(analyticsPageSource, /analyticsDateRangeInitialized/);
   assert.match(analyticsPageSource, /analyticsDateBoundsQuery\.data\?\.start_date/);

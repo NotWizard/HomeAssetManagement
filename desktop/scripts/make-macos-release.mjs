@@ -14,6 +14,14 @@ const scriptFile = fileURLToPath(import.meta.url);
 const scriptDir = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const desktopRoot = resolve(scriptDir, '..');
 const packageJsonPath = resolve(desktopRoot, 'package.json');
+const electronForgeCliPath = resolve(
+  desktopRoot,
+  'node_modules',
+  '@electron-forge',
+  'cli',
+  'dist',
+  'electron-forge.js'
+);
 
 function runCommand(command, args, cwd) {
   const result = spawnSync(command, args, {
@@ -83,9 +91,9 @@ export function makeMacOSRelease(targetArchOption = 'all') {
     runCommand('node', ['./scripts/build-backend.mjs', `--arch=${arch}`], desktopRoot);
     runCommand('node', ['./scripts/stage-resources.mjs', `--arch=${arch}`], desktopRoot);
     runCommand(
-      'npx',
+      'node',
       [
-        'electron-forge',
+        electronForgeCliPath,
         'make',
         `--arch=${arch}`,
         '--targets=@electron-forge/maker-dmg,@electron-forge/maker-zip',

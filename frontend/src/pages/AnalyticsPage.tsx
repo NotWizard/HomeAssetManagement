@@ -2,6 +2,13 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { AnalyticsDateRangePicker } from '../components/analytics/AnalyticsDateRangePicker';
+import {
+  applyEndDateChange,
+  applyStartDateChange,
+  isAnalyticsDateRangeReady,
+  resolveAnalyticsDateRange,
+  resolveNextSelectedCurrency,
+} from '../components/analytics/analyticsPageState';
 import { CurrencyAnalyticsSection } from '../components/analytics/CurrencyAnalyticsSection';
 import { OverviewAnalyticsSection } from '../components/analytics/OverviewAnalyticsSection';
 import { RiskAnalyticsSection } from '../components/analytics/RiskAnalyticsSection';
@@ -56,13 +63,12 @@ export function AnalyticsPage() {
   });
 
   const analyticsDateRange =
-    analyticsDateRangeInitialized || !analyticsDateBoundsQuery.data
-      ? storedAnalyticsDateRange
-      : {
-          startDate: analyticsDateBoundsQuery.data?.start_date ?? '',
-          endDate: analyticsDateBoundsQuery.data?.end_date ?? '',
-        };
-  const analyticsDateRangeReady = Boolean(analyticsDateRange.startDate && analyticsDateRange.endDate);
+    resolveAnalyticsDateRange({
+      storedRange: storedAnalyticsDateRange,
+      initialized: analyticsDateRangeInitialized,
+      bounds: analyticsDateBoundsQuery.data,
+    });
+  const analyticsDateRangeReady = isAnalyticsDateRangeReady(analyticsDateRange);
 
   useEffect(() => {
     if (analyticsDateRangeInitialized || !analyticsDateBoundsQuery.data) {
@@ -82,20 +88,14 @@ export function AnalyticsPage() {
     if (!startDate) {
       return;
     }
-    setAnalyticsDateRange({
-      startDate,
-      endDate: !analyticsDateRange.endDate || startDate > analyticsDateRange.endDate ? startDate : analyticsDateRange.endDate,
-    });
+    setAnalyticsDateRange(applyStartDateChange(analyticsDateRange, startDate));
   };
 
   const handleEndDateChange = (endDate: string) => {
     if (!endDate) {
       return;
     }
-    setAnalyticsDateRange({
-      startDate: !analyticsDateRange.startDate || endDate < analyticsDateRange.startDate ? endDate : analyticsDateRange.startDate,
-      endDate,
-    });
+    setAnalyticsDateRange(applyEndDateChange(analyticsDateRange, endDate));
   };
 
   const trendQuery = useQuery({
@@ -138,18 +138,15 @@ export function AnalyticsPage() {
   const selectedSummary = selectedCurrency ? currencyOverviewQuery.data?.details[selectedCurrency]?.summary : undefined;
   const selectedDetail = selectedCurrency ? currencyOverviewQuery.data?.details[selectedCurrency] : undefined;
   useEffect(() => {
-    if (analyticsView !== 'currency') {
+    const nextSelectedCurrency = resolveNextSelectedCurrency({
+      analyticsView,
+      currencySummaries,
+      selectedCurrency,
+    });
+    if (nextSelectedCurrency === selectedCurrency) {
       return;
     }
-    if (currencySummaries.length === 0) {
-      if (selectedCurrency) {
-        setSelectedAnalyticsCurrency('');
-      }
-      return;
-    }
-    if (!selectedCurrency || !currencySummaries.some((item) => item.currency === selectedCurrency)) {
-      setSelectedAnalyticsCurrency(currencySummaries[0].currency);
-    }
+    setSelectedAnalyticsCurrency(nextSelectedCurrency);
   }, [analyticsView, currencySummaries, selectedCurrency, setSelectedAnalyticsCurrency]);
 
   return (

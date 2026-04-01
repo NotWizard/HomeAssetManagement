@@ -24,5 +24,5 @@ test('错误页会提示先重试，再在必要时查看系统设置', async ()
   assert.match(html, /重新尝试启动/);
   assert.match(html, /应用内重试/);
   assert.match(html, /系统设置/);
-  assert.match(html, /retryBootstrap/);
+  assert.match(html, /window\.__HBS_DESKTOP__\?\.bootstrap\?\.retry/);
 });

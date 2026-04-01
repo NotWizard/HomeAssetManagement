@@ -31,79 +31,18 @@ class FXService:
         settings = SettingsService.get_settings(session)
         base = (base_currency or settings.base_currency).upper()
 
-        providers = [
-            ("frankfurter", _fetch_frankfurter),
-            ("exchangerate_host", _fetch_exchangerate_host),
-        ]
-
-        latest_rates: dict[str, Decimal] | None = None
-        provider_name = ""
-        for name, fn in providers:
-            try:
-                latest_rates = fn(rate_date, base)
-                provider_name = name
-                break
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("fx provider %s failed: %s", name, exc)
-
-        if latest_rates is None:
+        provider_payload = _fetch_provider_rates(rate_date, base)
+        if provider_payload is None:
             return 0
 
-        upserts = 0
-        for quote, rate in latest_rates.items():
-            existing = session.scalar(
-                select(FxRateDaily).where(
-                    and_(
-                        FxRateDaily.rate_date == rate_date,
-                        FxRateDaily.base_currency == base,
-                        FxRateDaily.quote_currency == quote,
-                    )
-                )
-            )
-            if existing is None:
-                existing = FxRateDaily(
-                    rate_date=rate_date,
-                    base_currency=base,
-                    quote_currency=quote,
-                    rate=rate,
-                    provider=provider_name,
-                    is_estimated=False,
-                    fetched_at=utc_now_naive(),
-                )
-                session.add(existing)
-            else:
-                existing.rate = rate
-                existing.provider = provider_name
-                existing.is_estimated = False
-                existing.fetched_at = utc_now_naive()
-            upserts += 1
-
-        # ensure base currency itself exists
-        base_row = session.scalar(
-            select(FxRateDaily).where(
-                and_(
-                    FxRateDaily.rate_date == rate_date,
-                    FxRateDaily.base_currency == base,
-                    FxRateDaily.quote_currency == base,
-                )
-            )
+        provider_name, latest_rates = provider_payload
+        return _upsert_daily_rates(
+            session,
+            rate_date=rate_date,
+            base_currency=base,
+            provider_name=provider_name,
+            latest_rates=latest_rates,
         )
-        if base_row is None:
-            session.add(
-                FxRateDaily(
-                    rate_date=rate_date,
-                    base_currency=base,
-                    quote_currency=base,
-                    rate=Decimal("1"),
-                    provider=provider_name,
-                    is_estimated=False,
-                    fetched_at=utc_now_naive(),
-                )
-            )
-            upserts += 1
-
-        session.flush()
-        return upserts
 
     @staticmethod
     def resolve_rate(
@@ -215,6 +154,88 @@ class FXService:
                 .order_by(desc(FxRateDaily.rate_date), FxRateDaily.quote_currency.asc())
             )
         )
+
+
+def _fetch_provider_rates(
+    rate_date: date,
+    base_currency: str,
+) -> tuple[str, dict[str, Decimal]] | None:
+    providers = [
+        ("frankfurter", _fetch_frankfurter),
+        ("exchangerate_host", _fetch_exchangerate_host),
+    ]
+
+    for name, fn in providers:
+        try:
+            return name, fn(rate_date, base_currency)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("fx provider %s failed: %s", name, exc)
+
+    return None
+
+
+def _upsert_daily_rates(
+    session: Session,
+    *,
+    rate_date: date,
+    base_currency: str,
+    provider_name: str,
+    latest_rates: dict[str, Decimal],
+) -> int:
+    upserts = 0
+    for quote, rate in latest_rates.items():
+        existing = session.scalar(
+            select(FxRateDaily).where(
+                and_(
+                    FxRateDaily.rate_date == rate_date,
+                    FxRateDaily.base_currency == base_currency,
+                    FxRateDaily.quote_currency == quote,
+                )
+            )
+        )
+        if existing is None:
+            existing = FxRateDaily(
+                rate_date=rate_date,
+                base_currency=base_currency,
+                quote_currency=quote,
+                rate=rate,
+                provider=provider_name,
+                is_estimated=False,
+                fetched_at=utc_now_naive(),
+            )
+            session.add(existing)
+        else:
+            existing.rate = rate
+            existing.provider = provider_name
+            existing.is_estimated = False
+            existing.fetched_at = utc_now_naive()
+        upserts += 1
+
+    base_row = session.scalar(
+        select(FxRateDaily).where(
+            and_(
+                FxRateDaily.rate_date == rate_date,
+                FxRateDaily.base_currency == base_currency,
+                FxRateDaily.quote_currency == base_currency,
+            )
+        )
+    )
+    if base_row is None:
+        session.add(
+            FxRateDaily(
+                rate_date=rate_date,
+                base_currency=base_currency,
+                quote_currency=base_currency,
+                rate=Decimal("1"),
+                provider=provider_name,
+                is_estimated=False,
+                fetched_at=utc_now_naive(),
+            )
+        )
+        upserts += 1
+
+    session.flush()
+    return upserts
 
 
 def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:

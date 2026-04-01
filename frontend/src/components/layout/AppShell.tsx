@@ -5,22 +5,32 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/cn';
 import { DesktopUpdateNotice } from './DesktopUpdateNotice';
+import {
+  APP_NAV_ITEMS,
+  APP_SHELL_UPDATE_SECTION_CLASS,
+} from './appShellConfig';
 
-type NavItem = {
-  key: string;
-  label: string;
+type NavItem = typeof APP_NAV_ITEMS[number] & {
   icon: ReactNode;
-  path: string;
 };
 
-const navItems: NavItem[] = [
-  { key: 'overview', label: '总览', icon: <Home className="h-4 w-4" />, path: '/' },
-  { key: 'analytics', label: '分析看板', icon: <ChartSpline className="h-4 w-4" />, path: '/analytics' },
-  { key: 'entry', label: '资产负债录入', icon: <Database className="h-4 w-4" />, path: '/entry' },
-  { key: 'members', label: '成员管理', icon: <UsersRound className="h-4 w-4" />, path: '/members' },
-  { key: 'import', label: 'CSV导入', icon: <Import className="h-4 w-4" />, path: '/import' },
-  { key: 'settings', label: '设置', icon: <Settings2 className="h-4 w-4" />, path: '/settings' },
-];
+const navItems: NavItem[] = APP_NAV_ITEMS.map((item) => ({
+  ...item,
+  icon:
+    item.key === 'overview' ? (
+      <Home className="h-4 w-4" />
+    ) : item.key === 'analytics' ? (
+      <ChartSpline className="h-4 w-4" />
+    ) : item.key === 'entry' ? (
+      <Database className="h-4 w-4" />
+    ) : item.key === 'members' ? (
+      <UsersRound className="h-4 w-4" />
+    ) : item.key === 'import' ? (
+      <Import className="h-4 w-4" />
+    ) : (
+      <Settings2 className="h-4 w-4" />
+    ),
+}));
 
 export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -65,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           );
         })}
       </nav>
-      <div className="mt-auto border-t border-slate-200/70 p-3">
+      <div className={APP_SHELL_UPDATE_SECTION_CLASS}>
         <DesktopUpdateNotice />
       </div>
     </div>

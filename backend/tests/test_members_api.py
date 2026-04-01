@@ -55,7 +55,8 @@ def test_update_member_rejects_cross_family_member_id():
         response = client.put(f"/api/v1/members/{outsider_id}", json={"name": "Should Fail"})
 
     assert response.status_code == 404
-    assert response.json()["code"] == 4040
+    assert response.json()["code"] == 4041
+    assert response.json()["message"] == "成员不属于当前家庭"
 
 
 def test_delete_member_rejects_cross_family_member_id():
@@ -73,4 +74,5 @@ def test_delete_member_rejects_cross_family_member_id():
         response = client.delete(f"/api/v1/members/{outsider_id}")
 
     assert response.status_code == 404
-    assert response.json()["code"] == 4040
+    assert response.json()["code"] == 4041
+    assert response.json()["message"] == "成员不属于当前家庭"

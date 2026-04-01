@@ -3,30 +3,32 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, UsersRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import { EntryBulkDeleteDialogs } from '../components/entry/EntryBulkDeleteDialogs';
 import {
   buildBulkErrorMessage,
   buildPathOptions,
   buildTargetRatioStatus,
   formatTargetRatioSummary,
-  hasValidTwoDecimalAmount,
-  normalizeAmountInput,
   summarizeHoldings,
   sumAssetTargetRatio,
-  TARGET_RATIO_EPSILON,
-  type BulkDeleteSummary,
-  type PathOption,
-  type TargetRatioStatus,
 } from '../components/entry/entryPageLogic';
 import { EntryFiltersBar } from '../components/entry/EntryFiltersBar';
+import { EntryHoldingFormDialog } from '../components/entry/EntryHoldingFormDialog';
 import { EntryHoldingsTable } from '../components/entry/EntryHoldingsTable';
 import { EntryTargetRatioSummary } from '../components/entry/EntryTargetRatioSummary';
+import {
+  buildCreateEntryForm,
+  buildEditEntryForm,
+  buildHoldingPayload,
+  INITIAL_ENTRY_FORM,
+  resolveDefaultMemberDeleteId,
+  resolvePathOptions,
+  type EntryFormState,
+  validateEntryForm,
+} from '../components/entry/entryPageController';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Dialog } from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
 import { SearchableSelect, type SearchableSelectOption } from '../components/ui/searchable-select';
-import { Select } from '../components/ui/select';
-import { Tooltip } from '../components/ui/tooltip';
 import { fetchCategories } from '../services/categories';
 import {
   invalidateHoldingRelatedQueries,
@@ -43,32 +45,10 @@ import {
 } from '../services/holdings';
 import { fetchMembers } from '../services/members';
 import { fetchSettings } from '../services/settings';
-import type { CategoryNode, Holding } from '../types';
+import type { Holding } from '../types';
 import { formatCurrency } from '../utils/format';
 
-type EntryFormState = {
-  memberId: string;
-  type: 'asset' | 'liability';
-  name: string;
-  pathKey: string;
-  currency: string;
-  amountOriginal: string;
-  targetRatio: string;
-};
-
 type HoldingFilterType = 'all' | 'asset' | 'liability';
-
-const INITIAL_FORM: EntryFormState = {
-  memberId: '',
-  type: 'asset',
-  name: '',
-  pathKey: '',
-  currency: '',
-  amountOriginal: '',
-  targetRatio: '',
-};
-
-const LEGACY_CATEGORY_PATH_LABEL = '默认一级 / 默认二级 / 默认三级';
 
 const COMMON_CURRENCY_OPTIONS: SearchableSelectOption[] = [
   { value: 'CNY', label: 'CNY（人民币）', searchText: '人民币 china chinese yuan renminbi' },
@@ -89,7 +69,7 @@ export function EntryPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Holding | null>(null);
-  const [form, setForm] = useState<EntryFormState>(INITIAL_FORM);
+  const [form, setForm] = useState<EntryFormState>(INITIAL_ENTRY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
@@ -112,7 +92,7 @@ export function EntryPage() {
     mutationFn: createHolding,
     onSuccess: async () => {
       setOpen(false);
-      setForm(INITIAL_FORM);
+      setForm(INITIAL_ENTRY_FORM);
       setEditing(null);
       setError(null);
       await invalidateHoldingRelatedQueries(queryClient);
@@ -126,7 +106,7 @@ export function EntryPage() {
     mutationFn: ({ id, payload }: { id: number; payload: HoldingPayload }) => updateHolding(id, payload),
     onSuccess: async () => {
       setOpen(false);
-      setForm(INITIAL_FORM);
+      setForm(INITIAL_ENTRY_FORM);
       setEditing(null);
       setError(null);
       await invalidateHoldingRelatedQueries(queryClient);
@@ -169,18 +149,10 @@ export function EntryPage() {
     return buildPathOptions(liabilityCategoryQuery.data ?? []);
   }, [form.type, assetCategoryQuery.data, liabilityCategoryQuery.data]);
 
-  const pathOptions = useMemo(() => {
-    const filtered = allPathOptions.filter((option) => option.label !== LEGACY_CATEGORY_PATH_LABEL);
-    if (editing == null) {
-      return filtered;
-    }
-
-    const selected = allPathOptions.find((option) => option.key === form.pathKey);
-    if (!selected || selected.label !== LEGACY_CATEGORY_PATH_LABEL) {
-      return filtered;
-    }
-    return [selected, ...filtered];
-  }, [allPathOptions, editing, form.pathKey]);
+  const pathOptions = useMemo(
+    () => resolvePathOptions(allPathOptions, editing, form.pathKey),
+    [allPathOptions, editing, form.pathKey]
+  );
 
   const pathSelectOptions = useMemo<SearchableSelectOption[]>(
     () =>
@@ -276,7 +248,7 @@ export function EntryPage() {
     void assetCategoryQuery.refetch();
     void liabilityCategoryQuery.refetch();
     setEditing(null);
-    setForm({ ...INITIAL_FORM, memberId: String((membersQuery.data ?? [])[0]?.id ?? ''), pathKey: '' });
+    setForm(buildCreateEntryForm(membersQuery.data ?? []));
     setError(null);
     setOpen(true);
   };
@@ -286,15 +258,7 @@ export function EntryPage() {
     void liabilityCategoryQuery.refetch();
     setEditing(row);
     setError(null);
-    setForm({
-      memberId: String(row.member_id),
-      type: row.type,
-      name: row.name,
-      pathKey: `${row.category_l1_id}|${row.category_l2_id}|${row.category_l3_id}`,
-      currency: row.currency,
-      amountOriginal: String(row.amount_original),
-      targetRatio: row.target_ratio == null ? '' : String(row.target_ratio),
-    });
+    setForm(buildEditEntryForm(row));
     setOpen(true);
   };
 
@@ -304,68 +268,29 @@ export function EntryPage() {
   };
 
   const openMemberDeleteDialog = () => {
-    const defaultMemberId =
-      memberFilter !== 'all'
-        ? memberFilter
-        : String(
-            (membersQuery.data ?? []).find((member) => allHoldings.some((row) => row.member_id === member.id))?.id ??
-              (membersQuery.data ?? [])[0]?.id ??
-              ''
-          );
-    setMemberDeleteId(defaultMemberId);
+    setMemberDeleteId(
+      resolveDefaultMemberDeleteId({
+        memberFilter,
+        members: membersQuery.data ?? [],
+        holdings: allHoldings,
+      })
+    );
     setBulkDeleteError(null);
     setMemberDeleteOpen(true);
   };
 
   const submitForm = () => {
     setError(null);
-
-    if (!form.memberId) {
-      setError('请选择成员');
-      return;
-    }
-    if (!form.name.trim()) {
-      setError('请输入名称');
-      return;
-    }
-    if (!form.pathKey) {
-      setError('请选择三级分类路径');
-      return;
-    }
-    if (!form.currency.trim()) {
-      setError('请选择币种');
-      return;
-    }
-    if (!form.amountOriginal) {
-      setError('请输入金额');
-      return;
-    }
-    if (!hasValidTwoDecimalAmount(form.amountOriginal)) {
-      setError('金额必须大于 0，且最多支持两位小数');
-      return;
-    }
-    if (form.type === 'asset' && (!form.targetRatio || Number(form.targetRatio) < 0 || Number(form.targetRatio) > 100)) {
-      setError('资产期望占比必须在 0 到 100 之间');
+    const validation = validateEntryForm(form, pathOptions);
+    if (validation.error || validation.selectedPath == null) {
+      setError(validation.error ?? '分类路径无效');
       return;
     }
 
-    const selectedPath = pathOptions.find((option) => option.key === form.pathKey);
-    if (!selectedPath) {
-      setError('分类路径无效');
-      return;
-    }
-
-    const payload: HoldingPayload = {
-      member_id: Number(form.memberId),
-      type: form.type,
-      name: form.name.trim(),
-      category_l1_id: selectedPath.l1Id,
-      category_l2_id: selectedPath.l2Id,
-      category_l3_id: selectedPath.l3Id,
-      currency: form.currency.trim().toUpperCase(),
-      amount_original: form.amountOriginal,
-      target_ratio: form.type === 'asset' ? form.targetRatio : null,
-    };
+    const payload: HoldingPayload = buildHoldingPayload(
+      form,
+      validation.selectedPath
+    );
 
     if (editing) {
       updateHoldingMutation.mutate({ id: editing.id, payload });
@@ -497,225 +422,45 @@ export function EntryPage() {
         </CardContent>
       </Card>
 
-      <Dialog
-        open={selectedDeleteOpen}
-        title="批量删除已选条目"
-        description="删除后将立即刷新录入列表、快照与分析看板数据。"
-        onClose={() => {
+      <EntryBulkDeleteDialogs
+        selectedDeleteOpen={selectedDeleteOpen}
+        memberDeleteOpen={memberDeleteOpen}
+        bulkDeleteError={bulkDeleteError}
+        selectedSummary={selectedSummary}
+        memberDeleteId={memberDeleteId}
+        memberDeleteOptions={memberDeleteOptions}
+        memberDeleteSummary={memberDeleteSummary}
+        baseCurrency={baseCurrency}
+        pending={bulkDeleteMutation.isPending}
+        onCloseSelectedDelete={() => {
           setSelectedDeleteOpen(false);
           setBulkDeleteError(null);
         }}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelectedDeleteOpen(false);
-                setBulkDeleteError(null);
-              }}
-            >
-              取消
-            </Button>
-            <Button variant="destructive" onClick={submitDeleteSelected} disabled={bulkDeleteMutation.isPending || selectedSummary.count === 0}>
-              {bulkDeleteMutation.isPending ? '删除中...' : `删除已选（${selectedSummary.count}）`}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border bg-secondary/20 p-3">
-              <div className="text-xs text-muted-foreground">已选条目</div>
-              <div className="mt-1 text-lg font-semibold">{selectedSummary.count}</div>
-            </div>
-            <div className="rounded-lg border bg-secondary/20 p-3">
-              <div className="text-xs text-muted-foreground">资产 / 负债</div>
-              <div className="mt-1 text-lg font-semibold">{selectedSummary.assetCount} / {selectedSummary.liabilityCount}</div>
-            </div>
-            <div className="rounded-lg border bg-secondary/20 p-3">
-              <div className="text-xs text-muted-foreground">折算金额</div>
-              <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedSummary.totalBase, baseCurrency)}</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
-            此操作不可撤销，将删除当前已勾选的资产与负债，并立即重建最新快照。
-          </div>
-          {selectedSummary.previewNames.length > 0 ? (
-            <div className="text-sm text-muted-foreground">示例条目：{selectedSummary.previewNames.join('、')}</div>
-          ) : null}
-          {bulkDeleteError ? <p className="text-sm text-rose-600">{bulkDeleteError}</p> : null}
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={memberDeleteOpen}
-        title="按成员删除资产负债"
-        description="支持直接清空某个成员名下的全部资产和负债数据。"
-        onClose={() => {
+        onCloseMemberDelete={() => {
           setMemberDeleteOpen(false);
           setBulkDeleteError(null);
         }}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setMemberDeleteOpen(false);
-                setBulkDeleteError(null);
-              }}
-            >
-              取消
-            </Button>
-            <Button variant="destructive" onClick={submitDeleteByMember} disabled={bulkDeleteMutation.isPending || memberDeleteSummary.count === 0}>
-              {bulkDeleteMutation.isPending ? '删除中...' : '删除该成员全部数据'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-sm text-muted-foreground">成员</label>
-            <Select value={memberDeleteId} onChange={(event) => setMemberDeleteId(event.target.value)} options={memberDeleteOptions} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border bg-secondary/20 p-3">
-              <div className="text-xs text-muted-foreground">待删除条目</div>
-              <div className="mt-1 text-lg font-semibold">{memberDeleteSummary.count}</div>
-            </div>
-            <div className="rounded-lg border bg-secondary/20 p-3">
-              <div className="text-xs text-muted-foreground">资产 / 负债</div>
-              <div className="mt-1 text-lg font-semibold">{memberDeleteSummary.assetCount} / {memberDeleteSummary.liabilityCount}</div>
-            </div>
-            <div className="rounded-lg border bg-secondary/20 p-3">
-              <div className="text-xs text-muted-foreground">折算金额</div>
-              <div className="mt-1 text-lg font-semibold">{formatCurrency(memberDeleteSummary.totalBase, baseCurrency)}</div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
-            将删除该成员名下全部资产与负债。删除完成后，录入列表与分析数据会立即刷新。
-          </div>
-          {memberDeleteSummary.previewNames.length > 0 ? (
-            <div className="text-sm text-muted-foreground">示例条目：{memberDeleteSummary.previewNames.join('、')}</div>
-          ) : null}
-          {bulkDeleteError ? <p className="text-sm text-rose-600">{bulkDeleteError}</p> : null}
-        </div>
-      </Dialog>
+        onMemberDeleteIdChange={setMemberDeleteId}
+        onSubmitDeleteSelected={submitDeleteSelected}
+        onSubmitDeleteByMember={submitDeleteByMember}
+      />
 
-      <Dialog
+      <EntryHoldingFormDialog
         open={open}
-        title={editing ? '编辑条目' : '新增条目'}
-        description="保存后将自动触发事件快照记录"
-        onClose={() => setOpen(false)}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={submitForm} disabled={createHoldingMutation.isPending || updateHoldingMutation.isPending}>
-              {editing ? '保存修改' : '创建条目'}
-            </Button>
-          </>
+        editingTitle="编辑条目"
+        editing={editing != null}
+        form={form}
+        error={error}
+        members={membersQuery.data ?? []}
+        pathSelectOptions={pathSelectOptions}
+        currencyOptions={currencyOptions}
+        submitting={
+          createHoldingMutation.isPending || updateHoldingMutation.isPending
         }
-      >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm text-muted-foreground">成员</label>
-            <Select
-              value={form.memberId}
-              onChange={(event) => setForm((prev) => ({ ...prev, memberId: event.target.value }))}
-              options={(membersQuery.data ?? []).map((member) => ({ label: member.name, value: member.id }))}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-muted-foreground">类型</label>
-            <Select
-              value={form.type}
-              onChange={(event) => {
-                const nextType = event.target.value as 'asset' | 'liability';
-                setForm((prev) => ({
-                  ...prev,
-                  type: nextType,
-                  pathKey: '',
-                  targetRatio: nextType === 'asset' ? prev.targetRatio : '',
-                }));
-              }}
-              options={[
-                { label: '资产', value: 'asset' },
-                { label: '负债', value: 'liability' },
-              ]}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm text-muted-foreground">名称</label>
-            <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-          </div>
-          <div className="sm:col-span-2">
-            <div className="mb-1 flex items-center gap-1.5">
-              <label className="block text-sm text-muted-foreground">三级分类路径</label>
-              <Tooltip
-                content="请选择完整的一级 / 二级 / 三级分类路径；支持输入关键词搜索，例如“权益”“住房”“信用卡”。"
-                label="三级分类路径说明"
-              />
-            </div>
-            <SearchableSelect
-              value={form.pathKey}
-              onValueChange={(value) => setForm((prev) => ({ ...prev, pathKey: value }))}
-              options={pathSelectOptions}
-              placeholder="搜索一级 / 二级 / 三级分类"
-              emptyMessage="没有匹配的分类路径"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm text-muted-foreground">币种</label>
-            <SearchableSelect
-              value={form.currency}
-              onValueChange={(value) => setForm((prev) => ({ ...prev, currency: value }))}
-              options={currencyOptions}
-              placeholder="搜索币种代码或中文名"
-              emptyMessage="没有匹配的币种"
-            />
-          </div>
-          <div>
-            <div className="mb-1 flex items-center gap-1.5">
-              <label className="block text-sm text-muted-foreground">金额</label>
-              <Tooltip content="金额仅支持输入两位小数，例如 100.00" label="金额输入说明" />
-            </div>
-            <Input
-              type="text"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              value={form.amountOriginal}
-              onChange={(event) => {
-                const nextValue = normalizeAmountInput(event.target.value);
-                if (nextValue !== null) {
-                  setForm((prev) => ({ ...prev, amountOriginal: nextValue }));
-                }
-              }}
-            />
-          </div>
-          {form.type === 'asset' ? (
-            <div>
-              <div className="mb-1 flex items-center gap-1.5">
-                <label className="block text-sm text-muted-foreground">期望占比(%)</label>
-                <Tooltip
-                  content="仅对资产生效，表示该资产希望占家庭净资产的目标比例；请输入 0 到 100 之间的百分比。"
-                  label="期望占比说明"
-                />
-              </div>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={form.targetRatio}
-                onChange={(event) => setForm((prev) => ({ ...prev, targetRatio: event.target.value }))}
-              />
-            </div>
-          ) : null}
-        </div>
-        {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
-      </Dialog>
+        setForm={setForm}
+        onClose={() => setOpen(false)}
+        onSubmit={submitForm}
+      />
     </div>
   );
 }

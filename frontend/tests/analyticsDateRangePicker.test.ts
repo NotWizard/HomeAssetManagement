@@ -4,36 +4,41 @@ import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import {
+  buildCalendarDays,
+  buildPresetOptions,
+  buildRangeSummary,
+} from '../src/components/analytics/analyticsDateRangePickerState.ts';
+
 const FRONTEND_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 function readFrontendFile(relativePath: string): string {
   return readFileSync(resolve(FRONTEND_ROOT, relativePath), 'utf8');
 }
 
-test('分析看板使用新的时间区间组件，并让整块日期卡片可点击', () => {
-  const analyticsPageSource = readFrontendFile('src/pages/AnalyticsPage.tsx');
-  const pickerSource = readFrontendFile('src/components/analytics/AnalyticsDateRangePicker.tsx');
+test('分析看板时间区间摘要与快捷范围会按行为生成', () => {
+  assert.equal(
+    buildRangeSummary('2025-01-01', '2025-12-31', '2025-01-01', '2025-12-31'),
+    '全部时间'
+  );
+  assert.equal(
+    buildRangeSummary('2025-03-15', '2025-03-15', '2025-01-01', '2025-12-31'),
+    '单日视图'
+  );
+  assert.equal(
+    buildRangeSummary('2025-03-01', '2025-03-10', '2025-01-01', '2025-12-31'),
+    '已选 10 天'
+  );
 
-  assert.match(analyticsPageSource, /AnalyticsDateRangePicker/);
-  assert.match(pickerSource, /时间区间/);
-  assert.match(pickerSource, /开始日期/);
-  assert.match(pickerSource, /结束日期/);
-  assert.match(pickerSource, /CalendarDays/);
-  assert.match(pickerSource, /buildRangeSummary/);
-  assert.match(pickerSource, /已选 \$\{dayCount\} 天/);
-  assert.match(pickerSource, /DateSegmentTrigger/);
-  assert.match(pickerSource, /useState<'start' \| 'end' \| null>/);
-  assert.match(pickerSource, /role="dialog"/);
-  assert.match(pickerSource, /DAY_LABELS/);
-  assert.match(pickerSource, /选择开始日期/);
-  assert.match(pickerSource, /选择结束日期/);
-  assert.match(pickerSource, /近3个月/);
-  assert.match(pickerSource, /近6个月/);
-  assert.match(pickerSource, /近1年/);
-  assert.match(pickerSource, /return '全部时间'/);
-  assert.doesNotMatch(pickerSource, /label:\s*'全部时间'/);
-  assert.doesNotMatch(pickerSource, /type="date"/);
-  assert.doesNotMatch(pickerSource, /showPicker/);
+  const presets = buildPresetOptions('2025-01-01', '2025-12-31');
+  assert.deepEqual(
+    presets.map((item) => item.id),
+    ['last3Months', 'last6Months', 'last1Year']
+  );
+  assert.deepEqual(
+    presets.map((item) => item.label),
+    ['近3个月', '近6个月', '近1年']
+  );
 });
 
 test('分析看板应将标题与筛选区放在同一行，并让 tab 卡片只保留视图切换', () => {
@@ -53,20 +58,17 @@ test('分析看板应将标题与筛选区放在同一行，并让 tab 卡片只
   );
 });
 
-test('分析看板时间区间组件应将快捷按钮放在日期条上方，并只保留三个快捷入口', () => {
-  const pickerSource = readFrontendFile('src/components/analytics/AnalyticsDateRangePicker.tsx');
+test('分析看板时间区间组件会生成完整日历网格并正确标记禁用日期', () => {
+  const days = buildCalendarDays(
+    new Date(2025, 3, 1),
+    '2025-04-15',
+    '2025-04-05',
+    '2025-04-25'
+  );
 
-  assert.match(pickerSource, /rounded-\[18px\] border border-slate-200\/80 bg-white\/90/);
-  assert.match(pickerSource, /group flex h-12 w-full items-center gap-2/);
-  assert.match(pickerSource, /flex h-8 items-center px-1 text-slate-300/);
-  assert.match(pickerSource, /last3Months/);
-  assert.match(pickerSource, /last6Months/);
-  assert.match(pickerSource, /last1Year/);
-  assert.doesNotMatch(pickerSource, /allTime/);
-  assert.match(pickerSource, /flex flex-wrap justify-end gap-2/);
-  assert.match(pickerSource, /presetOptions\.length > 0[\s\S]*flex flex-wrap justify-end gap-2[\s\S]*div ref=\{containerRef\} className="relative"/);
-  assert.doesNotMatch(pickerSource, /bg-slate-100\/80 p-2/);
-  assert.doesNotMatch(pickerSource, /ring-1/);
-  assert.doesNotMatch(pickerSource, /shadow-\[/);
-  assert.doesNotMatch(pickerSource, /flex-col justify-center/);
+  assert.equal(days.length, 42);
+  assert.equal(days.some((item) => item.value === '2025-04-15' && item.isSelected), true);
+  assert.equal(days.some((item) => item.value === '2025-04-01' && item.isDisabled), true);
+  assert.equal(days.some((item) => item.value === '2025-04-26' && item.isDisabled), true);
+  assert.equal(days.some((item) => item.value === '2025-04-10' && item.isDisabled), false);
 });

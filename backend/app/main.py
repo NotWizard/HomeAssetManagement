@@ -20,7 +20,7 @@ frontend_index_file = frontend_dist_dir / "index.html" if frontend_dist_dir else
 
 
 def _status_code_for_app_error(code: int) -> int:
-    if code == 4040:
+    if 4040 <= code < 4050:
         return 404
     if code == 4090:
         return 409

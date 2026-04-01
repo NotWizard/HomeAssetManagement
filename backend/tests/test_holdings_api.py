@@ -519,7 +519,8 @@ def test_update_holding_rejects_cross_family_holding_id():
         )
 
     assert response.status_code == 404
-    assert response.json()["code"] == 4040
+    assert response.json()["code"] == 4041
+    assert response.json()["message"] == "资产/负债不属于当前家庭"
 
 
 def test_update_settings_only_revalues_current_family_holdings_and_snapshots():

@@ -4,50 +4,17 @@ import { useEffect, useRef, useState } from 'react';
 import {
   getDesktopBridge,
   isDesktopRuntime,
-  type HbsDesktopUpdateState,
 } from '../../config/runtime';
+import {
+  getDesktopUpdateButtonLabel,
+  isDesktopUpdateBusy,
+  normalizeUpdateState,
+  resolveDesktopUpdateClickAction,
+  shouldShowDesktopUpdateEntry,
+} from './desktopUpdateNoticeState';
 import { Button } from '../ui/button';
 import { Dialog } from '../ui/dialog';
-
-function normalizeUpdateState(payload: unknown): HbsDesktopUpdateState | null {
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const rawState = payload as Partial<HbsDesktopUpdateState> & {
-    downloadedBytes?: number | null;
-    totalBytes?: number | null;
-    error?: string | null;
-  };
-  const state = rawState as Partial<HbsDesktopUpdateState>;
-  if (typeof state.status !== 'string') {
-    return null;
-  }
-
-  const fallbackProgress =
-    typeof rawState.downloadedBytes === 'number' &&
-    typeof rawState.totalBytes === 'number' &&
-    rawState.totalBytes > 0
-      ? Math.max(
-          0,
-          Math.min(100, Math.round((rawState.downloadedBytes / rawState.totalBytes) * 100))
-        )
-      : null;
-
-  return {
-    ...state,
-    progress: state.progress ?? fallbackProgress,
-    errorMessage: state.errorMessage ?? rawState.error ?? null,
-  } as HbsDesktopUpdateState;
-}
-
-function formatProgress(progress?: number | null): string {
-  if (typeof progress !== 'number' || Number.isNaN(progress)) {
-    return '下载中...';
-  }
-  const bounded = Math.min(100, Math.max(0, Math.round(progress)));
-  return `下载中 ${bounded}%`;
-}
+import type { HbsDesktopUpdateState } from '../../config/runtime';
 
 export function DesktopUpdateNotice() {
   const [updateState, setUpdateState] = useState<HbsDesktopUpdateState | null>(
@@ -76,7 +43,7 @@ export function DesktopUpdateNotice() {
       }
     });
 
-    const unsubscribe = desktopBridge.updates.onStateChanged((state) => {
+    const unsubscribe = desktopBridge.updates.onUpdateStateChanged((state) => {
       if (!disposed) {
         setUpdateState(normalizeUpdateState(state));
       }
@@ -106,29 +73,18 @@ export function DesktopUpdateNotice() {
   }
 
   const status = updateState?.status ?? 'idle';
-  const shouldShowButton =
-    status === 'available' ||
-    status === 'downloading' ||
-    status === 'downloaded' ||
-    status === 'error';
+  const shouldShowButton = shouldShowDesktopUpdateEntry(status);
 
   if (!shouldShowButton) {
     return null;
   }
 
-  const buttonLabel =
-    status === 'available'
-      ? '有可用更新'
-      : status === 'downloading'
-        ? formatProgress(updateState?.progress)
-        : status === 'downloaded'
-          ? '立即安装更新'
-          : '更新失败，重试';
+  const buttonLabel = getDesktopUpdateButtonLabel(updateState);
 
   const confirmDownload = async () => {
     setActionPending(true);
     try {
-      await desktopBridge.updates.download();
+      await desktopBridge.updates.downloadUpdate();
       setDownloadDialogOpen(false);
     } finally {
       setActionPending(false);
@@ -138,7 +94,7 @@ export function DesktopUpdateNotice() {
   const confirmInstall = async () => {
     setActionPending(true);
     try {
-      await desktopBridge.updates.install();
+      await desktopBridge.updates.installUpdate();
       setInstallDialogOpen(false);
     } finally {
       setActionPending(false);
@@ -150,22 +106,25 @@ export function DesktopUpdateNotice() {
       <Button
         variant={status === 'error' ? 'outline' : 'secondary'}
         className="w-full justify-start gap-2"
-        disabled={status === 'downloading' || actionPending}
+        disabled={
+          isDesktopUpdateBusy(status) || actionPending
+        }
         onClick={() => {
-          if (status === 'available') {
+          const action = resolveDesktopUpdateClickAction(updateState);
+          if (action === 'open-download-dialog') {
             setDownloadDialogOpen(true);
             return;
           }
-          if (status === 'downloaded') {
+          if (action === 'open-install-dialog') {
             setInstallDialogOpen(true);
             return;
           }
-          if (status === 'error') {
-            void desktopBridge.updates.check();
+          if (action === 'check-for-updates') {
+            void desktopBridge.updates.checkForUpdates();
           }
         }}
       >
-        {status === 'downloading' ? (
+        {isDesktopUpdateBusy(status) ? (
           <RefreshCcw className="h-4 w-4 animate-spin" />
         ) : (
           <Download className="h-4 w-4" />

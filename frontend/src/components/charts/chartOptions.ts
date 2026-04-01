@@ -6,6 +6,17 @@ import type {
   VolatilityItem,
 } from '../../services/analytics';
 import { formatCurrency, formatPercent } from '../../utils/format';
+import {
+  CORRELATION_HEATMAP_Y_AXIS_LABEL,
+  CURRENCY_BREAKDOWN_LABEL,
+  CURRENCY_BREAKDOWN_LABEL_LINE,
+  CURRENCY_EXPOSURE_CHART_GRID,
+  SANKEY_MEMBER_NODE_COLOR,
+  SANKEY_SERIES_FRAME,
+  TREND_CHART_GRID,
+  VOLATILITY_CHART_GRID,
+  VOLATILITY_Y_AXIS_NAME_GAP,
+} from './chartOptionLayout';
 
 type TrendChartArgs = {
   dates: string[];
@@ -55,7 +66,7 @@ function getNodeStage(node: SankeyNode): string {
 }
 
 function getNodeColor(node: SankeyNode): string {
-  if (node.node_type === 'member') return '#334155';
+  if (node.node_type === 'member') return SANKEY_MEMBER_NODE_COLOR;
   if (node.holding_type === 'liability') {
     return node.node_type === 'category' ? '#fb7185' : '#fecdd3';
   }
@@ -189,7 +200,7 @@ export function buildTrendChartOption({
   return {
     tooltip: { trigger: 'axis' },
     legend: { data: ['总资产', '总负债', '净资产'], top: 6, textStyle: { color: '#596087' } },
-    grid: { left: 72, right: 28, bottom: 44, top: 56, containLabel: true },
+    grid: TREND_CHART_GRID,
     xAxis: {
       type: 'category',
       data: dates,
@@ -242,7 +253,7 @@ export function buildVolatilityChartOption(data: VolatilityItem[]) {
 
   return {
     tooltip: { trigger: 'axis' },
-    grid: { left: 92, right: 28, top: 28, bottom: 76, containLabel: true },
+    grid: VOLATILITY_CHART_GRID,
     xAxis: {
       type: 'category',
       data: labels,
@@ -259,7 +270,7 @@ export function buildVolatilityChartOption(data: VolatilityItem[]) {
       type: 'value',
       name: '年化波动率(%)',
       nameLocation: 'middle',
-      nameGap: 72,
+      nameGap: VOLATILITY_Y_AXIS_NAME_GAP,
       nameTextStyle: { color: '#8b90b7' },
       axisLabel: {
         color: '#8b90b7',
@@ -324,13 +335,7 @@ export function buildCorrelationHeatmapOption(data: CorrelationData) {
       type: 'category',
       data: data.assets,
       splitArea: { show: true },
-      axisLabel: {
-        color: '#8b90b7',
-        width: 112,
-        overflow: 'break',
-        lineHeight: 14,
-        margin: 14,
-      },
+      axisLabel: CORRELATION_HEATMAP_Y_AXIS_LABEL,
     },
     visualMap: {
       min: -1,
@@ -379,7 +384,7 @@ export function buildCurrencyExposureChartOption(data: CurrencySummary[], baseCu
       },
     },
     legend: { data: ['资产', '负债', '净资产'], top: 6, textStyle: { color: '#596087' } },
-    grid: { left: 72, right: 28, top: 56, bottom: 44, containLabel: true },
+    grid: CURRENCY_EXPOSURE_CHART_GRID,
     xAxis: {
       type: 'category',
       data: labels,
@@ -462,16 +467,13 @@ export function buildCurrencyBreakdownChartOption(
         center: ['50%', '40%'],
         avoidLabelOverlap: true,
         label: {
-          color: '#4b5070',
-          width: 126,
-          overflow: 'break',
-          lineHeight: 16,
+          ...CURRENCY_BREAKDOWN_LABEL,
           formatter: ({ name, percent }: { name: string; percent: number }) => `${name}\n${percent.toFixed(1)}%`,
         },
         labelLayout: {
           hideOverlap: false,
         },
-        labelLine: { length: 14, length2: 12, maxSurfaceAngle: 80 },
+        labelLine: CURRENCY_BREAKDOWN_LABEL_LINE,
         data: items.map((item) => ({ ...item, value: item.amount_original, name: item.name })),
       },
     ],
@@ -575,10 +577,7 @@ export function buildSankeyChartOption(data: SankeyData) {
     series: [
       {
         type: 'sankey',
-        left: '9%',
-        right: '9%',
-        top: '4%',
-        bottom: '4%',
+        ...SANKEY_SERIES_FRAME,
         nodeAlign: 'justify',
         layoutIterations: 64,
         draggable: false,

@@ -104,10 +104,7 @@ function triggerDownload(
 export async function downloadImportErrors(importId: number) {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
-    const response = await desktopBridge.api.requestBinary(
-      `/imports/${importId}/errors`,
-      { method: 'GET' }
-    );
+    const response = await desktopBridge.api.binary.get(`/imports/${importId}/errors`);
     if (!response.ok) {
       throw new Error(await parseBinaryDownloadError(response));
     }

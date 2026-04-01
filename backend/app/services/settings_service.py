@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -13,6 +14,13 @@ from app.services.snapshot_service import SnapshotService
 from app.utils.fx import convert_to_base_amount
 
 DEFAULT_FX_PROVIDER = "frankfurter"
+
+
+@dataclass
+class SettingsUpdatePlan:
+    next_base_currency: str
+    rebalance_threshold_pct: float
+    base_currency_changed: bool
 
 
 class SettingsService:
@@ -42,21 +50,35 @@ class SettingsService:
         rebalance_threshold_pct: float,
     ) -> SettingsModel:
         settings = SettingsService.get_settings(session)
-        next_base_currency = base_currency.upper()
-        base_currency_changed = _apply_settings_update(
+        plan = _build_settings_update_plan(
             settings,
-            base_currency=next_base_currency,
+            base_currency=base_currency,
             rebalance_threshold_pct=rebalance_threshold_pct,
         )
+        _apply_settings_update_plan(settings, plan)
         session.flush()
 
-        if base_currency_changed:
+        if plan.base_currency_changed:
             _run_base_currency_change_pipeline(
                 session,
-                next_base_currency,
+                plan.next_base_currency,
                 allow_rate_refresh=True,
             )
         return settings
+
+
+def _build_settings_update_plan(
+    settings: SettingsModel,
+    *,
+    base_currency: str,
+    rebalance_threshold_pct: float,
+) -> SettingsUpdatePlan:
+    next_base_currency = base_currency.upper()
+    return SettingsUpdatePlan(
+        next_base_currency=next_base_currency,
+        rebalance_threshold_pct=rebalance_threshold_pct,
+        base_currency_changed=settings.base_currency.upper() != next_base_currency,
+    )
 
 
 def _revalue_all_holdings(
@@ -104,11 +126,47 @@ def _apply_settings_update(
     base_currency: str,
     rebalance_threshold_pct: float,
 ) -> bool:
-    base_currency_changed = settings.base_currency.upper() != base_currency
-    settings.base_currency = base_currency
-    settings.rebalance_threshold_pct = rebalance_threshold_pct
+    plan = _build_settings_update_plan(
+        settings,
+        base_currency=base_currency,
+        rebalance_threshold_pct=rebalance_threshold_pct,
+    )
+    _apply_settings_update_plan(settings, plan)
+    return plan.base_currency_changed
+
+
+def _apply_settings_update_plan(
+    settings: SettingsModel,
+    plan: SettingsUpdatePlan,
+) -> None:
+    settings.base_currency = plan.next_base_currency
+    settings.rebalance_threshold_pct = plan.rebalance_threshold_pct
     settings.fx_provider = DEFAULT_FX_PROVIDER
-    return base_currency_changed
+
+
+def _revalue_all_snapshots(
+    session: Session,
+    next_base_currency: str,
+    *,
+    allow_rate_refresh: bool,
+) -> None:
+    SnapshotService.revalue_all_snapshots(
+        session,
+        next_base_currency,
+        allow_rate_refresh=allow_rate_refresh,
+    )
+
+
+def _record_settings_change_snapshots(
+    session: Session,
+    next_base_currency: str,
+) -> None:
+    SnapshotService.create_event_snapshot(
+        session,
+        trigger_type="settings",
+        note=f"base_currency:{next_base_currency}",
+    )
+    SnapshotService.create_daily_snapshot(session)
 
 
 
@@ -123,14 +181,9 @@ def _run_base_currency_change_pipeline(
         next_base_currency,
         allow_rate_refresh=allow_rate_refresh,
     )
-    SnapshotService.revalue_all_snapshots(
+    _revalue_all_snapshots(
         session,
         next_base_currency,
         allow_rate_refresh=allow_rate_refresh,
     )
-    SnapshotService.create_event_snapshot(
-        session,
-        trigger_type="settings",
-        note=f"base_currency:{next_base_currency}",
-    )
-    SnapshotService.create_daily_snapshot(session)
+    _record_settings_change_snapshots(session, next_base_currency)

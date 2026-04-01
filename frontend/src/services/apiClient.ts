@@ -14,10 +14,43 @@ function normalizeResponse<T>(payload: unknown): T {
   return json.data;
 }
 
+async function requestDesktopJson<T>(
+  url: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  body?: string
+): Promise<T> {
+  const desktopBridge = getDesktopBridge();
+  if (!desktopBridge?.isDesktop) {
+    throw new Error('当前不是桌面运行时');
+  }
+
+  let payload: unknown;
+  if (method === 'GET') {
+    payload = await desktopBridge.api.json.get(url);
+  } else if (method === 'POST') {
+    payload = await desktopBridge.api.json.post(url, body ?? '{}');
+  } else if (method === 'PUT') {
+    payload = await desktopBridge.api.json.put(url, body ?? '{}');
+  } else {
+    payload = await desktopBridge.api.json.delete(url);
+  }
+
+  return normalizeResponse<T>(payload);
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
-    return normalizeResponse<T>(await desktopBridge.api.requestJson(url, options));
+    const method = (options?.method?.toUpperCase() ?? 'GET') as
+      | 'GET'
+      | 'POST'
+      | 'PUT'
+      | 'DELETE';
+    return requestDesktopJson<T>(
+      url,
+      method,
+      typeof options?.body === 'string' ? options.body : undefined
+    );
   }
 
   const response = await fetch(`${getApiBaseUrl()}${url}`, {
@@ -55,7 +88,7 @@ export async function postForm<T>(url: string, formData: FormData): Promise<T> {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
     return normalizeResponse<T>(
-      await desktopBridge.api.postForm(url, serializeFormData(formData))
+      await desktopBridge.api.form.post(url, serializeFormData(formData))
     );
   }
 

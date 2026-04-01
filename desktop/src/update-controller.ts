@@ -3,6 +3,21 @@ import { chmod, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
+import {
+  applyUpdateStateTransition,
+  compareVersions,
+  createDefaultUpdateState,
+  pickUpdateCandidate,
+  toAvailableState,
+  toDownloadedState,
+  toErrorState,
+  toInstallingState,
+  toPreparingInstallState,
+  type GithubRelease,
+  type UpdateState,
+  validateDownloadedUpdate,
+} from './update-workflow.ts';
+
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const UPDATE_SUBDIR = 'updates';
 const UPDATE_STATE_FILE = 'state.json';
@@ -17,24 +32,6 @@ export const UPDATE_IPC_CHANNELS = {
   install: `${CHANNEL_PREFIX}:install`,
   changed: `${CHANNEL_PREFIX}:changed`,
 } as const;
-
-export type UpdateState = {
-  status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error';
-  currentVersion: string;
-  latestVersion?: string;
-  releaseTag?: string;
-  releaseUrl?: string;
-  assetName?: string;
-  assetUrl?: string;
-  downloadedFilePath?: string;
-  downloadedAt?: string;
-  downloadedBytes?: number;
-  totalBytes?: number;
-  progress?: number;
-  lastCheckedAt?: number;
-  errorMessage?: string;
-  error?: string;
-};
 
 export type UpdateControllerOptions = {
   appVersion: string;
@@ -60,24 +57,6 @@ export type UpdateControllerOptions = {
 };
 
 type UpdateListener = (state: UpdateState) => void;
-
-type GithubRelease = {
-  tag_name: string;
-  name?: string;
-  html_url?: string;
-  draft: boolean;
-  prerelease: boolean;
-  published_at?: string;
-  assets: Array<{
-    name: string;
-    browser_download_url: string;
-    size?: number;
-  }>;
-};
-
-async function loadUpdateService(): Promise<typeof import('./update-service.ts')> {
-  return import(new URL('./update-service.ts', import.meta.url).href);
-}
 
 function toArch(value: string): 'arm64' | 'x64' {
   return value === 'arm64' ? 'arm64' : 'x64';
@@ -169,30 +148,37 @@ async function findAppBundleInDirectory(directory: string): Promise<string | nul
   return null;
 }
 
-function createDefaultState(appVersion: string): UpdateState {
-  return {
-    status: 'idle',
-    currentVersion: appVersion,
-  };
-}
-
 function sanitizePersistedState(appVersion: string, persisted: UpdateState | null): UpdateState {
   if (!persisted) {
-    return createDefaultState(appVersion);
+    return createDefaultUpdateState(appVersion);
   }
 
   const nextState: UpdateState = {
-    ...createDefaultState(appVersion),
+    ...createDefaultUpdateState(appVersion),
     ...persisted,
     currentVersion: appVersion,
   };
 
   if (
-    nextState.status === 'downloaded' &&
+    ['preparing', 'installing'].includes(nextState.status) &&
+    nextState.downloadedFilePath &&
+    existsSync(nextState.downloadedFilePath)
+  ) {
+    return {
+      ...nextState,
+      status: 'downloaded',
+      progress: 100,
+      errorMessage: undefined,
+      error: undefined,
+    };
+  }
+
+  if (
+    ['downloaded', 'preparing', 'installing'].includes(nextState.status) &&
     (!nextState.downloadedFilePath || !existsSync(nextState.downloadedFilePath))
   ) {
     return {
-      ...createDefaultState(appVersion),
+      ...createDefaultUpdateState(appVersion),
       lastCheckedAt: nextState.lastCheckedAt,
       latestVersion: nextState.latestVersion,
       releaseTag: nextState.releaseTag,
@@ -291,7 +277,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
     options.runCommand ??
     ((command: string, args: string[]) => spawnSync(command, args, { stdio: 'ignore' }));
 
-  let state = createDefaultState(options.appVersion);
+  let state = createDefaultUpdateState(options.appVersion);
   let pollingTimer: { dispose: () => void } | null = null;
   const listeners = new Set<UpdateListener>();
 
@@ -303,10 +289,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
   }
 
   function updateState(next: Partial<UpdateState>): UpdateState {
-    state = {
-      ...state,
-      ...next,
-    };
+    state = applyUpdateStateTransition(state, next);
     emitState();
     return state;
   }
@@ -327,8 +310,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
     try {
       const releases = (await fetchJsonReleases()) as GithubRelease[];
-      const updateService = await loadUpdateService();
-      const candidate = updateService.pickUpdateCandidate({
+      const candidate = pickUpdateCandidate({
         currentVersion: options.appVersion,
         arch,
         releases,
@@ -338,7 +320,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
         const shouldKeepDownloaded =
           previousState.status === 'downloaded' &&
           typeof previousState.latestVersion === 'string' &&
-          updateService.compareVersions(previousState.latestVersion, options.appVersion) > 0 &&
+          compareVersions(previousState.latestVersion, options.appVersion) > 0 &&
           !!previousState.downloadedFilePath &&
           existsSync(previousState.downloadedFilePath);
 
@@ -374,32 +356,35 @@ export function createUpdateController(options: UpdateControllerOptions) {
       }
 
       const shouldKeepDownloaded =
-        state.status === 'downloaded' &&
+        ['downloaded', 'preparing', 'installing'].includes(state.status) &&
         state.assetName === candidate.asset.name &&
         !!state.downloadedFilePath &&
         existsSync(state.downloadedFilePath);
 
-      return updateState({
-        status: shouldKeepDownloaded ? 'downloaded' : 'available',
-        latestVersion: candidate.version,
-        releaseTag: candidate.tagName,
-        releaseUrl: candidate.releaseUrl,
-        assetName: candidate.asset.name,
-        assetUrl: candidate.asset.url,
-        downloadedFilePath: shouldKeepDownloaded ? state.downloadedFilePath : undefined,
-        downloadedAt: shouldKeepDownloaded ? state.downloadedAt : undefined,
-        downloadedBytes: shouldKeepDownloaded ? state.downloadedBytes : undefined,
-        totalBytes: candidate.asset.size,
-        progress: shouldKeepDownloaded ? 100 : undefined,
-        errorMessage: undefined,
-      });
+      const nextState = updateState(
+        toAvailableState({
+          currentVersion: options.appVersion,
+          candidate,
+        })
+      );
+
+      if (shouldKeepDownloaded) {
+        return updateState({
+          ...nextState,
+          status: 'downloaded',
+          downloadedFilePath: state.downloadedFilePath,
+          downloadedAt: state.downloadedAt,
+          downloadedBytes: state.downloadedBytes,
+          totalBytes: candidate.asset.size,
+          progress: 100,
+        });
+      }
+
+      return nextState;
     } catch (error) {
-      return updateState({
-        status: 'error',
-        progress: undefined,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        error: error instanceof Error ? error.message : String(error),
-      });
+      return updateState(
+        toErrorState(error instanceof Error ? error.message : String(error))
+      );
     }
   }
 
@@ -408,11 +393,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
       return state;
     }
     if (!state.assetUrl || !state.assetName) {
-      return updateState({
-        status: 'error',
-        errorMessage: '当前没有可下载的更新包',
-        error: '当前没有可下载的更新包',
-      });
+      return updateState(toErrorState('当前没有可下载的更新包'));
     }
     if (state.status === 'downloaded' && state.downloadedFilePath) {
       return state;
@@ -467,21 +448,19 @@ export function createUpdateController(options: UpdateControllerOptions) {
         fileStream.end(() => resolveWrite());
       });
 
-      return updateState({
-        status: 'downloaded',
-        downloadedBytes,
-        totalBytes: totalBytes ?? state.totalBytes,
-        downloadedAt: new Date(now()).toISOString(),
-        progress: 100,
-      });
+      return updateState(
+        toDownloadedState({
+          downloadedFilePath: archivePath,
+          downloadedAt: new Date(now()).toISOString(),
+          downloadedBytes,
+          totalBytes: totalBytes ?? state.totalBytes,
+        })
+      );
     } catch (error) {
       rmSync(archivePath, { force: true });
-      return updateState({
-        status: 'error',
-        progress: undefined,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        error: error instanceof Error ? error.message : String(error),
-      });
+      return updateState(
+        toErrorState(error instanceof Error ? error.message : String(error))
+      );
     }
   }
 
@@ -490,24 +469,27 @@ export function createUpdateController(options: UpdateControllerOptions) {
       return state;
     }
     if (!state.downloadedFilePath || !existsSync(state.downloadedFilePath)) {
-      return updateState({
-        status: 'error',
-        errorMessage: '更新包不存在，请重新下载',
-        error: '更新包不存在，请重新下载',
-      });
+      return updateState(toErrorState('更新包不存在，请重新下载'));
     }
     if (platform !== 'darwin') {
-      return updateState({
-        status: 'error',
-        errorMessage: '当前仅支持 macOS 自动安装',
-        error: '当前仅支持 macOS 自动安装',
-      });
+      return updateState(toErrorState('当前仅支持 macOS 自动安装'));
+    }
+
+    const validation = validateDownloadedUpdate({
+      latestVersion: state.latestVersion,
+      arch,
+      assetName: state.assetName,
+      downloadedFilePath: state.downloadedFilePath,
+    });
+    if (!validation.ok) {
+      return updateState(toErrorState(validation.message));
     }
 
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
     const stageDir = join(updatesDir, 'staged');
     rmSync(stageDir, { force: true, recursive: true });
     mkdirSync(stageDir, { recursive: true });
+    updateState(toPreparingInstallState());
 
     const unzipResult = runCommand('ditto', [
       '-x',
@@ -516,20 +498,14 @@ export function createUpdateController(options: UpdateControllerOptions) {
       stageDir,
     ]);
     if (unzipResult.status !== 0) {
-      return updateState({
-        status: 'error',
-        errorMessage: '解压更新包失败',
-        error: '解压更新包失败',
-      });
+      rmSync(stageDir, { force: true, recursive: true });
+      return updateState(toErrorState('解压更新包失败'));
     }
 
     const sourceAppPath = await findAppBundleInDirectory(stageDir);
     if (!sourceAppPath) {
-      return updateState({
-        status: 'error',
-        errorMessage: '更新包中未找到应用程序',
-        error: '更新包中未找到应用程序',
-      });
+      rmSync(stageDir, { force: true, recursive: true });
+      return updateState(toErrorState('更新包中未找到应用程序'));
     }
 
     const targetAppPath = resolveInstallTargetPath(processExecPath);
@@ -542,6 +518,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
     await writeFile(scriptPath, scriptContent, 'utf8');
     await chmod(scriptPath, 0o755);
+    updateState(toInstallingState());
 
     const installer = spawn('sh', [scriptPath], {
       detached: true,

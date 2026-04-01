@@ -48,6 +48,13 @@ class ImportApplyResult:
     failed: int
 
 
+@dataclass
+class ImportCommitContext:
+    family_id: int
+    filename: str
+    parsed_rows: list[ParsedRow]
+
+
 class ImportService:
     @staticmethod
     def preview_csv(session: Session, content: bytes) -> dict:
@@ -56,16 +63,13 @@ class ImportService:
 
     @staticmethod
     def commit_csv(session: Session, content: bytes, filename: str) -> tuple[dict, list[ParsedRow]]:
-        parsed = _parse_csv(session, content)
-        family = get_default_family(session)
-        apply_result = _apply_parsed_rows(session, parsed)
-        import_log = _create_import_log(
+        context = _prepare_import_commit(session, content, filename)
+        apply_result = _apply_import_commit_rows(session, context)
+        import_log = _finalize_import_commit(
             session,
-            family_id=family.id,
-            filename=filename,
+            context,
             apply_result=apply_result,
         )
-        _record_import_snapshots(session, filename)
 
         return (
             {
@@ -76,7 +80,7 @@ class ImportService:
                 "failed_rows": apply_result.failed,
                 "error_report_path": None,
             },
-            parsed,
+            context.parsed_rows,
         )
 
     @staticmethod
@@ -135,6 +139,18 @@ def _parse_csv(session: Session, content: bytes) -> list[ParsedRow]:
 
     return parsed_rows
 
+
+def _prepare_import_commit(
+    session: Session,
+    content: bytes,
+    filename: str,
+) -> ImportCommitContext:
+    family = get_default_family(session)
+    return ImportCommitContext(
+        family_id=family.id,
+        filename=filename,
+        parsed_rows=_parse_csv(session, content),
+    )
 
 
 def _build_payload(session: Session, raw: dict[str, str]) -> dict:
@@ -258,6 +274,12 @@ def _apply_parsed_rows(session: Session, parsed: list[ParsedRow]) -> ImportApply
     )
 
 
+def _apply_import_commit_rows(
+    session: Session,
+    context: ImportCommitContext,
+) -> ImportApplyResult:
+    return _apply_parsed_rows(session, context.parsed_rows)
+
 
 def _create_import_log(
     session: Session,
@@ -280,6 +302,21 @@ def _create_import_log(
     session.flush()
     return import_log
 
+
+def _finalize_import_commit(
+    session: Session,
+    context: ImportCommitContext,
+    *,
+    apply_result: ImportApplyResult,
+) -> ImportLog:
+    import_log = _create_import_log(
+        session,
+        family_id=context.family_id,
+        filename=context.filename,
+        apply_result=apply_result,
+    )
+    _record_import_snapshots(session, context.filename)
+    return import_log
 
 
 def _record_import_snapshots(session: Session, filename: str) -> None:

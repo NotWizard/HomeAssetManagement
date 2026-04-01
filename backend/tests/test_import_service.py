@@ -132,6 +132,7 @@ def test_download_import_errors_uses_app_error_payload():
 
     assert response.status_code == 404
     assert response.json()["code"] == 4040
+    assert response.json()["message"] == "错误报告不存在"
 
 
 def test_import_logs_and_error_reports_are_scoped_to_current_family():
@@ -167,7 +168,8 @@ def test_import_logs_and_error_reports_are_scoped_to_current_family():
     assert logs_resp.status_code == 200
     assert logs_resp.json()["data"] == []
     assert error_resp.status_code == 404
-    assert error_resp.json()["code"] == 4040
+    assert error_resp.json()["code"] == 4041
+    assert error_resp.json()["message"] == "错误报告不属于当前家庭"
 
 
 def test_import_preview_treats_other_family_matching_holding_as_insert():

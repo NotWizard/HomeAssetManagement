@@ -17,6 +17,8 @@ export type HbsDesktopUpdateStatus =
   | 'available'
   | 'downloading'
   | 'downloaded'
+  | 'preparing'
+  | 'installing'
   | 'error';
 
 export type HbsDesktopUpdateState = {
@@ -32,22 +34,29 @@ export type HbsDesktopUpdateState = {
 export type HbsDesktopBridge = {
   isDesktop: boolean;
   api: {
-    requestJson: (path: string, init?: RequestInit) => Promise<unknown>;
-    requestBinary: (
-      path: string,
-      init?: RequestInit
-    ) => Promise<HbsDesktopBinaryResponse>;
-    postForm: (path: string, entries: DesktopFormDataEntry[]) => Promise<unknown>;
+    json: {
+      get: (path: string) => Promise<unknown>;
+      post: (path: string, body: string) => Promise<unknown>;
+      put: (path: string, body: string) => Promise<unknown>;
+      delete: (path: string) => Promise<unknown>;
+    };
+    binary: {
+      get: (path: string) => Promise<HbsDesktopBinaryResponse>;
+      post: (path: string) => Promise<HbsDesktopBinaryResponse>;
+    };
+    form: {
+      post: (path: string, entries: DesktopFormDataEntry[]) => Promise<unknown>;
+    };
   };
   bootstrap: {
     retry: () => Promise<unknown>;
   };
   updates: {
     getState: () => Promise<unknown>;
-    check: () => Promise<unknown>;
-    download: () => Promise<unknown>;
-    install: () => Promise<unknown>;
-    onStateChanged: (listener: (state: unknown) => void) => (() => void);
+    checkForUpdates: () => Promise<unknown>;
+    downloadUpdate: () => Promise<unknown>;
+    installUpdate: () => Promise<unknown>;
+    onUpdateStateChanged: (listener: (state: unknown) => void) => (() => void);
   };
 };
 

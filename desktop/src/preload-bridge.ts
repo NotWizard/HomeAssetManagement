@@ -65,16 +65,34 @@ export function serializeHeaders(headers: Headers): Record<string, string> {
   return result;
 }
 
+async function requestJson(
+  fetchImpl: typeof fetch,
+  apiBaseUrl: string | undefined,
+  path: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  body?: string
+): Promise<unknown> {
+  const headers =
+    method === 'POST' || method === 'PUT'
+      ? { 'Content-Type': 'application/json' }
+      : undefined;
+  const response = await fetchImpl(resolveApiUrl(path, apiBaseUrl), {
+    method,
+    headers,
+    body,
+  });
+
+  return response.json();
+}
+
 export async function requestBinary(
   fetchImpl: typeof fetch,
   apiBaseUrl: string | undefined,
   path: string,
-  init?: JsonRequestInit
+  method: 'GET' | 'POST' = 'GET'
 ): Promise<BinaryResponse> {
   const response = await fetchImpl(resolveApiUrl(path, apiBaseUrl), {
-    method: init?.method ?? 'GET',
-    headers: init?.headers,
-    body: init?.body,
+    method,
   });
 
   return {
@@ -91,24 +109,31 @@ export function createDesktopBridge(deps: DesktopBridgeDeps) {
   return {
     isDesktop: true,
     api: {
-      requestJson: async (path: string, init?: JsonRequestInit) => {
-        const response = await deps.fetchImpl(resolveApiUrl(path, apiBaseUrl), {
-          method: init?.method ?? 'GET',
-          headers: init?.headers,
-          body: init?.body,
-        });
-
-        return response.json();
+      json: {
+        get: (path: string) =>
+          requestJson(deps.fetchImpl, apiBaseUrl, path, 'GET'),
+        post: (path: string, body: string) =>
+          requestJson(deps.fetchImpl, apiBaseUrl, path, 'POST', body),
+        put: (path: string, body: string) =>
+          requestJson(deps.fetchImpl, apiBaseUrl, path, 'PUT', body),
+        delete: (path: string) =>
+          requestJson(deps.fetchImpl, apiBaseUrl, path, 'DELETE'),
       },
-      requestBinary: (path: string, init?: JsonRequestInit) =>
-        requestBinary(deps.fetchImpl, apiBaseUrl, path, init),
-      postForm: async (path: string, entries: FormEntries) => {
-        const response = await deps.fetchImpl(resolveApiUrl(path, apiBaseUrl), {
-          method: 'POST',
-          body: toFormData(entries),
-        });
+      binary: {
+        get: (path: string) =>
+          requestBinary(deps.fetchImpl, apiBaseUrl, path, 'GET'),
+        post: (path: string) =>
+          requestBinary(deps.fetchImpl, apiBaseUrl, path, 'POST'),
+      },
+      form: {
+        post: async (path: string, entries: FormEntries) => {
+          const response = await deps.fetchImpl(resolveApiUrl(path, apiBaseUrl), {
+            method: 'POST',
+            body: toFormData(entries),
+          });
 
-        return response.json();
+          return response.json();
+        },
       },
     },
     bootstrap: {
@@ -116,10 +141,10 @@ export function createDesktopBridge(deps: DesktopBridgeDeps) {
     },
     updates: {
       getState: () => deps.invokeIpc(UPDATE_GET_STATE_CHANNEL),
-      check: () => deps.invokeIpc(UPDATE_CHECK_CHANNEL),
-      download: () => deps.invokeIpc(UPDATE_DOWNLOAD_CHANNEL),
-      install: () => deps.invokeIpc(UPDATE_INSTALL_CHANNEL),
-      onStateChanged: (listener: UpdateListener) => deps.subscribeToUpdateState(listener),
+      checkForUpdates: () => deps.invokeIpc(UPDATE_CHECK_CHANNEL),
+      downloadUpdate: () => deps.invokeIpc(UPDATE_DOWNLOAD_CHANNEL),
+      installUpdate: () => deps.invokeIpc(UPDATE_INSTALL_CHANNEL),
+      onUpdateStateChanged: (listener: UpdateListener) => deps.subscribeToUpdateState(listener),
     },
   };
 }

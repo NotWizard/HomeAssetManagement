@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 import httpx
 from sqlalchemy import and_
@@ -238,12 +239,37 @@ def _upsert_daily_rates(
     return upserts
 
 
+# FX provider 网络容错策略
+# - 每次请求最多 5s（连接 + 读各 5s）
+# - 失败时退避重试 2 次（总尝试 3 次），间隔 0.5s → 1.0s
+# - 单 provider 总耗时上限 12s（5+0.5+5+1.0+5≈16.5s 上限，向下夹到 12s 由调用方累计判定）
+_FX_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
+_FX_RETRY_COUNT = 2
+_FX_RETRY_BACKOFF_SECONDS = (0.5, 1.0)
+
+
+def _fetch_with_retry(url: str, params: dict[str, str]) -> dict[str, Any]:
+    """同步 GET + 指数式短退避重试。失败时抛最后一次异常给调用方累计降级。"""
+    import time
+
+    last_exc: Exception | None = None
+    for attempt in range(_FX_RETRY_COUNT + 1):
+        try:
+            response = httpx.get(url, params=params, timeout=_FX_TIMEOUT)
+            response.raise_for_status()
+            return response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            last_exc = exc
+            if attempt < _FX_RETRY_COUNT:
+                time.sleep(_FX_RETRY_BACKOFF_SECONDS[attempt])
+    assert last_exc is not None
+    raise last_exc
+
+
 def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:
     settings = get_settings()
     url = f"{settings.fx_primary_url}/{rate_date.isoformat()}"
-    response = httpx.get(url, params={"from": base}, timeout=10.0)
-    response.raise_for_status()
-    data = response.json()
+    data = _fetch_with_retry(url, {"from": base})
     rates = data.get("rates", {})
     if not isinstance(rates, dict) or not rates:
         raise ValueError("frankfurter rates is empty")
@@ -253,9 +279,7 @@ def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:
 def _fetch_exchangerate_host(rate_date: date, base: str) -> dict[str, Decimal]:
     settings = get_settings()
     url = f"{settings.fx_fallback_url}/{rate_date.isoformat()}"
-    response = httpx.get(url, params={"base": base}, timeout=10.0)
-    response.raise_for_status()
-    data = response.json()
+    data = _fetch_with_retry(url, {"base": base})
     rates = data.get("rates", {})
     if not isinstance(rates, dict) or not rates:
         raise ValueError("exchangerate.host rates is empty")

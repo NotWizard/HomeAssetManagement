@@ -47,6 +47,10 @@
 - The desktop installer no longer `rm -rf`s the old app before `ditto`. It now `mv`s the previous app into `userData/updates/backup/previous-*.app`, runs `ditto` to swap in the new build, and only deletes the backup on success. Any failure restores the previous app from backup; the admin-privileged fallback is reserved for the worst case. `buildDetachedInstallScript` now requires `backupPath` and is covered by a new rollback regression test.
 - 后端 migration 导入新增 SQLite 文件级备份：在 `_restore_package` 删除并重建数据之前，先把当前 SQLite 数据库 best-effort 拷贝到 `Settings.storage_dir/backups/migration-<UTC>.db`，作为最后一道安全网；备份失败仅 `logger.warning`，不会阻塞导入主流程。新增 `_create_sqlite_backup_before_import` 工具与 2 个单测覆盖 db 存在 / db 不存在两种情况。
 - Backend migration import now creates a file-level SQLite backup before tearing down and restoring data. The current database is best-effort copied to `Settings.storage_dir/backups/migration-<UTC>.db`; failures only log a warning and never block the import. Two new unit tests cover both the "db file exists" and "db file missing" paths.
+- 后端 SQLite pragma 加固：连接时新增 `busy_timeout=5000`、`synchronous=NORMAL`，缓解 scheduler + http 并发写造成的 `SQLITE_BUSY`，并在 WAL 模式下保留崩溃安全的同时减少 fsync 频次。
+- Harden the SQLite connection PRAGMAs: enable `busy_timeout=5000` and `synchronous=NORMAL` on top of `journal_mode=WAL` to reduce `SQLITE_BUSY` under concurrent scheduler + HTTP writes while keeping crash safety.
+- 后端 APScheduler 配置：cron 作业增加 `misfire_grace_time=3600`、`coalesce=True`、`max_instances=1`，进程被休眠或断电后能至多补跑一次，且不会因为多次错过而雪崩重入；`stop_scheduler` 改为 `shutdown(wait=True)`，避免与 `SessionLocal` 关闭顺序竞态。
+- Backend APScheduler hardening: cron jobs now declare `misfire_grace_time=3600`, `coalesce=True`, `max_instances=1` so a sleeping or powered-off machine catches up at most once without re-entrant flooding. `stop_scheduler` now uses `shutdown(wait=True)` to let in-flight jobs settle before the session is closed.
 
 ### Removed
 

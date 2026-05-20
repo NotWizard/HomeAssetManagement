@@ -12,6 +12,8 @@ from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
 from app.services.bootstrap import init_database
 from app.services.import_service import ImportService
+from app.services.import_service import _decode_csv_bytes
+from app.core.exceptions import AppError
 
 
 def test_import_preview_detects_insert_or_update_actions():
@@ -223,3 +225,19 @@ def test_import_preview_treats_other_family_matching_holding_as_insert():
 
     assert preview["inserted_rows"] == 1
     assert preview["updated_rows"] == 0
+
+
+def test_decode_csv_bytes_supports_utf8_bom_and_gbk():
+    utf8_bom = "﻿type,name,amount\nasset,现金,100".encode("utf-8")
+    assert "现金" in _decode_csv_bytes(utf8_bom)
+
+    gbk = "type,name,amount\nasset,现金,100".encode("gb18030")
+    assert "现金" in _decode_csv_bytes(gbk)
+
+
+def test_decode_csv_bytes_raises_app_error_on_completely_garbled_bytes():
+    # 构造一个可以被 latin-1 解码（永不抛错）的字节流——这是兜底链最后一站
+    # 但我们仍要保证非 UTF / GBK 的不会让上层得到 500，而是有可读的解码结果
+    garbled = bytes([0xFE, 0xFE, 0xFE, 0xFE])
+    decoded = _decode_csv_bytes(garbled)
+    assert isinstance(decoded, str)

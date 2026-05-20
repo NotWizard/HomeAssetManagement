@@ -283,6 +283,35 @@ def _create_sqlite_backup_before_import() -> Path | None:
         return None
 
 
+_MAX_MANIFEST_BYTES = 1 * 1024 * 1024  # 1MB
+_MAX_ENTRY_BYTES = 256 * 1024 * 1024  # 256MB / 单条目（NDJSON 也覆盖）
+_MAX_TOTAL_UNCOMPRESSED_BYTES = 512 * 1024 * 1024  # 512MB / 包总解压量
+_MAX_COMPRESSION_RATIO = 200  # 单条压缩比超过 200 视为 zip-bomb
+
+
+def _read_archive_entry_safe(archive: zipfile.ZipFile, name: str, max_bytes: int) -> bytes:
+    """带上限的 zip entry 读取：超过 max_bytes 直接拒绝（防 zip-bomb）。"""
+    info = archive.getinfo(name)
+    declared = info.file_size  # 解压后大小（zip header 声明）
+    compressed = info.compress_size or 1
+    if declared > max_bytes:
+        raise AppError(
+            4002,
+            f"迁移包条目 {name} 解压后大小 {declared}B 超出限制 {max_bytes}B",
+        )
+    if declared / max(compressed, 1) > _MAX_COMPRESSION_RATIO:
+        raise AppError(
+            4002,
+            f"迁移包条目 {name} 压缩比异常（{declared}/{compressed}），疑似 zip-bomb",
+        )
+    with archive.open(name) as fh:
+        # 实际限读 max_bytes+1，越界即拒
+        data = fh.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise AppError(4002, f"迁移包条目 {name} 实际读取超过限制 {max_bytes}B")
+    return data
+
+
 def _load_package(archive_path: Path, filename: str) -> dict[str, Any]:
     if not archive_path.exists() or archive_path.stat().st_size == 0:
         raise AppError(4001, "迁移包内容为空")
@@ -291,11 +320,20 @@ def _load_package(archive_path: Path, filename: str) -> dict[str, Any]:
 
     try:
         with zipfile.ZipFile(archive_path) as archive:
+            # 拒绝总解压量超限的整个包（cumulative 防御）
+            total_uncompressed = sum(info.file_size for info in archive.infolist())
+            if total_uncompressed > _MAX_TOTAL_UNCOMPRESSED_BYTES:
+                raise AppError(
+                    4002,
+                    f"迁移包总解压大小 {total_uncompressed}B 超过限制 "
+                    f"{_MAX_TOTAL_UNCOMPRESSED_BYTES}B，疑似 zip-bomb",
+                )
+
             names = set(archive.namelist())
             if "manifest.json" not in names:
                 raise AppError(4002, "迁移包缺少 manifest.json")
 
-            manifest_bytes = archive.read("manifest.json")
+            manifest_bytes = _read_archive_entry_safe(archive, "manifest.json", _MAX_MANIFEST_BYTES)
             manifest = json.loads(manifest_bytes)
             if manifest.get("package_type") != PACKAGE_TYPE:
                 raise AppError(4002, "迁移包类型不受支持")
@@ -319,7 +357,7 @@ def _load_package(archive_path: Path, filename: str) -> dict[str, Any]:
                     raise AppError(4002, f"迁移包域定义不正确: {domain_name}")
 
                 if expected_format == "json":
-                    payload_bytes = archive.read(file_name)
+                    payload_bytes = _read_archive_entry_safe(archive, file_name, _MAX_ENTRY_BYTES)
                     if domain.get("checksum") != _bytes_checksum(payload_bytes):
                         raise AppError(4002, f"迁移包校验失败: {domain_name}")
                     payload = json.loads(payload_bytes)

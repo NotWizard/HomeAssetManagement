@@ -51,6 +51,8 @@
 - Harden the SQLite connection PRAGMAs: enable `busy_timeout=5000` and `synchronous=NORMAL` on top of `journal_mode=WAL` to reduce `SQLITE_BUSY` under concurrent scheduler + HTTP writes while keeping crash safety.
 - 后端 APScheduler 配置：cron 作业增加 `misfire_grace_time=3600`、`coalesce=True`、`max_instances=1`，进程被休眠或断电后能至多补跑一次，且不会因为多次错过而雪崩重入；`stop_scheduler` 改为 `shutdown(wait=True)`，避免与 `SessionLocal` 关闭顺序竞态。
 - Backend APScheduler hardening: cron jobs now declare `misfire_grace_time=3600`, `coalesce=True`, `max_instances=1` so a sleeping or powered-off machine catches up at most once without re-entrant flooding. `stop_scheduler` now uses `shutdown(wait=True)` to let in-flight jobs settle before the session is closed.
+- 后端导入加固：CSV 解码改用 `_decode_csv_bytes` 兜底链（utf-8-sig → gb18030 → gbk → latin-1），Excel 中文导出不再 500；`/api/v1/imports/preview`、`/imports/commit`、`/migration/import` 的上传读取改为分块累加并加上限（CSV 32 MB / 迁移包 256 MB），超过即返回结构化错误。`migration_service._load_package` 新增 zip-bomb 防御：单条目解压上限 256 MB、压缩比上限 200x、整包总解压上限 512 MB；`manifest.json` 单独 1 MB 上限。新增 2 个解码兜底回归测试。
+- Hardened backend imports: CSV decoding now falls back through `utf-8-sig → gb18030 → gbk → latin-1` so Excel-exported Chinese files no longer 500. The CSV and migration upload endpoints now stream into memory with hard size limits (32 MB / 256 MB) and reject anything larger with a structured error. `migration_service._load_package` enforces zip-bomb defenses: per-entry decompressed cap (256 MB), compression-ratio cap (200×), total uncompressed cap (512 MB), and a tighter 1 MB cap for `manifest.json`. Two new decoder fallback tests are included.
 
 ### Removed
 

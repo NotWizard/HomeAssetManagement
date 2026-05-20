@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.exceptions import AppError
 from app.models.holding_item import HoldingItem
 from app.models.import_log import ImportLog
 from app.models.member import Member
@@ -110,8 +111,31 @@ class ImportService:
 
 
 
+_CSV_DECODE_FALLBACKS: tuple[str, ...] = ("utf-8-sig", "gb18030", "gbk", "latin-1")
+
+
+def _decode_csv_bytes(content: bytes) -> str:
+    """按编码兜底列表逐个尝试解码 CSV 字节流。
+
+    用户常用的两类来源：UTF-8（含 BOM）+ Excel 中文导出（GBK / GB18030）；
+    `latin-1` 作为最终兜底（永不抛错）以确保用户能看到友好错误而不是 500。
+    """
+    last_error: UnicodeDecodeError | None = None
+    for encoding in _CSV_DECODE_FALLBACKS:
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise AppError(
+            4001,
+            f"CSV 文件编码无法识别（已尝试 {', '.join(_CSV_DECODE_FALLBACKS)}）",
+        ) from last_error
+    return content.decode("utf-8-sig", errors="replace")
+
+
 def _parse_csv(session: Session, content: bytes) -> list[ParsedRow]:
-    text = content.decode("utf-8-sig")
+    text = _decode_csv_bytes(content)
     reader = csv.DictReader(StringIO(text))
     if not reader.fieldnames:
         return [ParsedRow(index=1, payload=None, action="invalid", error="CSV 为空")]

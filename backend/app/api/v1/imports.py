@@ -15,16 +15,33 @@ from app.services.import_service import ImportService
 
 router = APIRouter()
 
+# CSV 上传上限：32MB 已经足够覆盖正常家庭账本，超过则视作误传或滥用。
+MAX_CSV_UPLOAD_BYTES = 32 * 1024 * 1024
+
+
+async def _read_upload_within_limit(file: UploadFile, limit: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise AppError(4001, f"上传文件过大（限制 {limit // (1024 * 1024)}MB）")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 @router.post("/preview")
 async def preview_import(file: UploadFile, db: Session = Depends(get_db)):
-    content = await file.read()
+    content = await _read_upload_within_limit(file, MAX_CSV_UPLOAD_BYTES)
     return ok(ImportService.preview_csv(db, content))
 
 
 @router.post("/commit")
 async def commit_import(file: UploadFile, db: Session = Depends(get_db)):
-    content = await file.read()
+    content = await _read_upload_within_limit(file, MAX_CSV_UPLOAD_BYTES)
     data, parsed = ImportService.commit_csv(db, content, file.filename or "import.csv")
     db.commit()
 

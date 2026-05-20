@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -605,6 +605,49 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
       if (!isPackaged) {
         return;
+      }
+
+      // 启动期清理：删除超过 7 天的 install-update-*.sh 与孤儿 backup app；
+      // 这些是上一次安装阶段产生的临时文件，留着会污染 userData/updates/。
+      try {
+        const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
+        if (existsSync(updatesDir)) {
+          const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+          const entries = await readdir(updatesDir, { withFileTypes: true });
+          for (const entry of entries) {
+            const fullPath = join(updatesDir, entry.name);
+            const isOld =
+              entry.name.startsWith('install-update-') &&
+              entry.name.endsWith('.sh');
+            if (isOld) {
+              try {
+                if (statSync(fullPath).mtimeMs < cutoff) {
+                  rmSync(fullPath, { force: true });
+                }
+              } catch {
+                // 忽略单个文件清理失败，不影响 update 主流程
+              }
+            }
+          }
+          // backup 目录里的 previous-*.app：上一次安装成功后理应被脚本 rm；保留作 fallback。
+          // 同样按 7 天阈值清理避免无限堆积。
+          const backupDir = join(updatesDir, 'backup');
+          if (existsSync(backupDir)) {
+            const backups = await readdir(backupDir, { withFileTypes: true });
+            for (const backup of backups) {
+              const fullPath = join(backupDir, backup.name);
+              try {
+                if (statSync(fullPath).mtimeMs < cutoff) {
+                  rmSync(fullPath, { force: true, recursive: true });
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }
+        }
+      } catch {
+        // 启动期清理是尽力而为，失败不阻塞 update controller
       }
 
       await checkForUpdates();

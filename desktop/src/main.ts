@@ -32,9 +32,12 @@ import {
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(currentDir, '..', '..');
-const BACKEND_READY_TIMEOUT_MS = 15_000;
+// 冷启动慢盘场景下 PyInstaller 解压 + Python import 可能 >15s；放宽到 45s 减少误判。
+const BACKEND_READY_TIMEOUT_MS = 45_000;
 const BACKEND_READY_POLL_INTERVAL_MS = 150;
 const BACKEND_HEALTH_REQUEST_TIMEOUT_MS = 1_500;
+// before-quit 阶段 SIGTERM 后再等的宽限期，超过则强制 SIGKILL 兜底，防止 PyInstaller 二进制忽略信号变僵尸。
+const BACKEND_KILL_GRACE_MS = 4_000;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;

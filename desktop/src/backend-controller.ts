@@ -7,7 +7,8 @@ export type BackendStartupResult = {
 export type BackendProcess = {
   exitCode: number | null;
   killed?: boolean;
-  kill: () => void;
+  /** 兼容 Node ChildProcess.kill；不传 signal 即默认 SIGTERM。 */
+  kill: (signal?: NodeJS.Signals | number) => void;
   stdout?: {
     on: (event: 'data', listener: (chunk: unknown) => void) => void;
   };
@@ -19,6 +20,9 @@ export type BackendProcess = {
     (event: 'error', listener: (error: Error) => void): void;
   };
 };
+
+/** before-quit 阶段 SIGTERM 后等待优雅退出的最长时间，超时即升级到 SIGKILL。 */
+export const BACKEND_FORCE_KILL_GRACE_MS = 4_000;
 
 export type BackendControllerDependencies = {
   buildApiBaseUrl: (port: number) => string;
@@ -74,8 +78,20 @@ export function createBackendController(deps: BackendControllerDependencies) {
       return;
     }
 
+    const target = processRef;
     try {
-      processRef.kill();
+      target.kill();
+      // SIGTERM 后启动 SIGKILL fallback：PyInstaller 二进制如果忽略 SIGTERM 不会变僵尸进程。
+      // 不阻塞 stop()，定时器会被忽略如果进程已退出（kill -9 在已退出 pid 上为 no-op）。
+      setTimeout(() => {
+        try {
+          if (!target.killed && target.exitCode === null) {
+            target.kill('SIGKILL');
+          }
+        } catch {
+          // 进程可能已经退出/被回收，忽略
+        }
+      }, BACKEND_FORCE_KILL_GRACE_MS).unref();
     } finally {
       clearState({ resetPort });
     }
@@ -111,8 +127,10 @@ export function createBackendController(deps: BackendControllerDependencies) {
       let rejectStartup: (error: unknown) => void = () => undefined;
 
       currentProcess.on('exit', (code, signal) => {
-        // If the process exits after becoming ready, we treat it as an unexpected crash.
+        // 启动期就 exit：通过 rejectStartup 立刻报错，避免 waitForBackendReady 轮询到超时
+        // 才返回笼统的 "backend never ready"，让用户看到真正的退出原因。
         if (!hasBeenReady) {
+          rejectStartup(new Error(formatExitMessage(code, signal)));
           return;
         }
         if (unexpectedExitHandled) {

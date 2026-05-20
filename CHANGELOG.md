@@ -67,6 +67,10 @@
 - Add `validateDesktopBridgeShape` to runtime.ts; `__HBS_DESKTOP__` is rejected unless `api.json/binary/form` are fully callable, so a partial preload implementation degrades gracefully to the web fetch path instead of throwing TypeError.
 - 抽出共享 `frontend/src/utils/formatError.ts`；`ImportPage` 把 `setError(String(e))` 替换为 `setError(formatError(e))`，错误提示不再带 `Error: ` 前缀。
 - Add a shared `frontend/src/utils/formatError.ts`. `ImportPage` now formats mutation errors via `formatError(e)` instead of `String(e)`, removing the user-unfriendly `Error: ` prefix.
+- 桌面端启动鲁棒性增强：`BACKEND_READY_TIMEOUT_MS` 由 15 s 调到 45 s（适配冷启动慢盘 + PyInstaller 解压）；sidecar 启动期 exit 通过 `rejectStartup` 立即上报真实退出码/信号，不再被 health 轮询超时吞掉；`backend-controller.stop` 在 SIGTERM 之外加 4 s 后 SIGKILL fallback，避免 PyInstaller 二进制忽略信号变僵尸。
+- Desktop startup robustness: `BACKEND_READY_TIMEOUT_MS` raised from 15 s to 45 s for cold-disk + PyInstaller boot; sidecar exits during startup now bubble the real code/signal through `rejectStartup` instead of being swallowed by the health poll timeout; `backend-controller.stop` now schedules a SIGKILL fallback 4 s after SIGTERM so a stubborn PyInstaller binary cannot leak as a zombie.
+- 桌面端启动期清理：`UpdateController.start` 现在删除 `userData/updates/` 下超过 7 天的 `install-update-*.sh` 临时脚本与 `backup/previous-*.app` 备份，长期使用不再无限堆积。
+- Desktop startup cleanup: `UpdateController.start` now deletes `install-update-*.sh` scripts and `backup/previous-*.app` directories older than 7 days under `userData/updates/`, preventing unbounded accumulation over time.
 
 ### Removed
 

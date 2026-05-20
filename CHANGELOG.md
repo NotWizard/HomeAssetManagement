@@ -55,6 +55,8 @@
 - Hardened backend imports: CSV decoding now falls back through `utf-8-sig → gb18030 → gbk → latin-1` so Excel-exported Chinese files no longer 500. The CSV and migration upload endpoints now stream into memory with hard size limits (32 MB / 256 MB) and reject anything larger with a structured error. `migration_service._load_package` enforces zip-bomb defenses: per-entry decompressed cap (256 MB), compression-ratio cap (200×), total uncompressed cap (512 MB), and a tighter 1 MB cap for `manifest.json`. Two new decoder fallback tests are included.
 - 后端 FX 调用增加重试与细粒度超时：`httpx.Timeout(connect=5, read=5, write=5, pool=5)` 替代原来一刀切的 10 s；新增 `_fetch_with_retry` 包装器，最多 2 次退避重试（0.5 s → 1.0 s），失败抛最后一次异常给调用方累计判定降级。
 - Backend FX calls now have per-phase timeouts (`connect/read/write/pool=5s`) and a small retry envelope (`_fetch_with_retry`) with two backoff attempts (0.5s → 1.0s) before bubbling the final error up to the caller for graceful degradation.
+- `SettingsService.get_settings` 隐式创建路径加并发安全：`session.add + flush` 失败抛 `IntegrityError` 时回滚并重新 `SELECT`，避免两个请求同时落到该路径时撞 UNIQUE 约束或双写。
+- `SettingsService.get_settings` now handles concurrent first-time creates safely: an `IntegrityError` triggers a rollback and a re-`SELECT` rather than failing or double-inserting.
 
 ### Removed
 

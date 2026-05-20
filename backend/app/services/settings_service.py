@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -26,22 +27,40 @@ class SettingsUpdatePlan:
 class SettingsService:
     @staticmethod
     def get_settings(session: Session) -> SettingsModel:
+        """读取当前家庭的 SettingsModel。
+
+        正常情况下 `bootstrap.ensure_seed_data` 已经在 lifespan 启动阶段创建好默认 settings；
+        这里仍保留一次"找不到则隐式创建"的兜底，但用 IntegrityError + 重新 SELECT 的并发安全模式
+        替代直接 `session.add` —— 防止两个请求同时进入兜底路径造成 UNIQUE 约束破坏或双写。
+        """
         app_settings = get_settings()
         family = get_default_family(session)
-        settings = session.scalar(
+        existing = session.scalar(
             select(SettingsModel).where(SettingsModel.family_id == family.id).limit(1)
         )
-        if settings is None:
-            settings = SettingsModel(
-                family_id=family.id,
-                base_currency=app_settings.base_currency,
-                timezone=app_settings.timezone,
-                rebalance_threshold_pct=app_settings.rebalance_threshold_pct,
-                fx_provider=DEFAULT_FX_PROVIDER,
-            )
-            session.add(settings)
+        if existing is not None:
+            return existing
+
+        candidate = SettingsModel(
+            family_id=family.id,
+            base_currency=app_settings.base_currency,
+            timezone=app_settings.timezone,
+            rebalance_threshold_pct=app_settings.rebalance_threshold_pct,
+            fx_provider=DEFAULT_FX_PROVIDER,
+        )
+        try:
+            session.add(candidate)
             session.flush()
-        return settings
+            return candidate
+        except IntegrityError:
+            session.rollback()
+            # 另一个请求已经创建 → 重新读
+            settled = session.scalar(
+                select(SettingsModel).where(SettingsModel.family_id == family.id).limit(1)
+            )
+            if settled is None:
+                raise
+            return settled
 
     @staticmethod
     def update_settings(

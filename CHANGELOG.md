@@ -28,6 +28,8 @@
 - Backend lifespan side effects now run in independent transactions: `ensure_seed_data` and `create_daily_snapshot` no longer share a session, and the boot snapshot / scheduler start are best-effort — failures log a warning instead of aborting application startup. Covered by two new tests.
 - 前端波动率图修复 N/A 一致性：`volatility==null`（样本不足）保持为 `null`，ECharts 留空不画柱体，tooltip 提示"样本不足"；不再强转为 `0`，避免与"真零波动"在 UI 上无法区分。逻辑抽到 `volatilityValues.ts`，新增 `buildVolatilityValues` 与 `formatVolatilityTooltip`，并加单测覆盖。
 - Frontend volatility chart now keeps `volatility==null` (insufficient sample) as `null` — ECharts skips the bar and the tooltip shows "样本不足" — instead of coercing to `0`, which previously made "true zero volatility" indistinguishable from "no data". Logic extracted to `volatilityValues.ts` and covered by a unit test.
+- 前端 `apiClient` 加固：每个请求挂 `AbortController` + 默认 30s 超时（可配置 `timeoutMs`）；外部传入 `signal` 能与超时合并，超时以 `ApiTimeoutError` 抛出便于上层区分；非 JSON 响应（如反向代理 502 HTML）不再让 `response.json()` 抛 `SyntaxError`，而是统一封装为 `ApiError`（带 `status`/`code`/`message`/响应片段）。新增 `apiTransport.ts` 抽离纯网络底层，`apiClient.ts` 仅做组装；新增 5 个单测覆盖超时、外部取消、非 JSON、合法 JSON、空响应。
+- Frontend `apiClient` hardened: every request now sets up an `AbortController` and a default 30 s timeout (overridable via `timeoutMs`); external signals are merged so user cancellation propagates, while timeouts surface as a distinguishable `ApiTimeoutError`. Non-JSON responses (e.g. a 502 HTML page from an upstream proxy) no longer throw `SyntaxError` — they're wrapped as `ApiError` carrying status / code / message / a snippet. The pure transport primitives are split into a new `apiTransport.ts` and covered by five new unit tests.
 
 ### Security
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
 import {
   spawn,
   spawnSync,
@@ -215,6 +215,81 @@ function showWindowError(window: BrowserWindow, message: string): void {
     .catch(() => undefined);
 }
 
+/**
+ * 拦截一切试图离开本应用边界的导航 / 新窗口请求。
+ *
+ * - `will-navigate`：拒绝渲染端尝试导航到非 file:// 或非 127.0.0.1 sidecar 的 URL；外链一律 `shell.openExternal`
+ * - `setWindowOpenHandler`：拒绝任何 window.open / target=_blank，直接 deny + 通过系统浏览器打开白名单 URL
+ * - `web-contents-created`：上面两条对将来创建的任何 webContents 同样生效
+ */
+function wireNavigationGuards(): void {
+  const isInternalUrl = (url: string): boolean => {
+    if (url.startsWith('file://')) return true;
+    try {
+      const parsed = new URL(url);
+      return (
+        parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const isExternalHttpUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-navigate', (event, url) => {
+      if (!isInternalUrl(url)) {
+        event.preventDefault();
+        if (isExternalHttpUrl(url)) {
+          void shell.openExternal(url);
+        }
+      }
+    });
+
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isExternalHttpUrl(url)) {
+        void shell.openExternal(url);
+      }
+      return { action: 'deny' };
+    });
+  });
+}
+
+/**
+ * 在默认 session 上注入 Content-Security-Policy 头：
+ * - default-src 'self'：只允许同源（file:// 在 Electron 下被视为 'self'）
+ * - connect-src 同源 + http://127.0.0.1:* 用于 sidecar 调用
+ * - img-src 'self' data:（图标 / 内嵌 base64）
+ * - 拒绝 eval / inline script（'unsafe-inline' 仅留给 style，因 React 内联样式）
+ */
+function wireContentSecurityPolicy(): void {
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "connect-src 'self' http://127.0.0.1:* http://localhost:*",
+    "img-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ].join('; ');
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...(details.responseHeaders ?? {}) };
+    responseHeaders['Content-Security-Policy'] = [csp];
+    callback({ responseHeaders });
+  });
+}
+
 function wireWindowDiagnostics(window: BrowserWindow): void {
   window.webContents.on(
     'did-fail-load',
@@ -356,6 +431,8 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.whenReady().then(async () => {
+    wireNavigationGuards();
+    wireContentSecurityPolicy();
     const updateStartup = updateController.start().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`[hbs-update] ${message}\n`);

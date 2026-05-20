@@ -241,13 +241,16 @@ test('createDesktopBridge 会按能力域暴露 api、bootstrap、updates', asyn
   ]);
 });
 
-test('buildMainWindowWebPreferences 会固定 CommonJS preload 与隔离配置', () => {
+test('buildMainWindowWebPreferences 会固定 CommonJS preload + 沙箱 + Web 安全约束', () => {
   assert.deepEqual(
     buildMainWindowWebPreferences('/tmp/desktop', ['--hbs-api-base-url=http://127.0.0.1:18991/api/v1']),
     {
       preload: '/tmp/desktop/preload.cjs',
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       additionalArguments: ['--hbs-api-base-url=http://127.0.0.1:18991/api/v1'],
     }
   );

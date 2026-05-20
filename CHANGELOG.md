@@ -71,6 +71,10 @@
 - Desktop startup robustness: `BACKEND_READY_TIMEOUT_MS` raised from 15 s to 45 s for cold-disk + PyInstaller boot; sidecar exits during startup now bubble the real code/signal through `rejectStartup` instead of being swallowed by the health poll timeout; `backend-controller.stop` now schedules a SIGKILL fallback 4 s after SIGTERM so a stubborn PyInstaller binary cannot leak as a zombie.
 - 桌面端启动期清理：`UpdateController.start` 现在删除 `userData/updates/` 下超过 7 天的 `install-update-*.sh` 临时脚本与 `backup/previous-*.app` 备份，长期使用不再无限堆积。
 - Desktop startup cleanup: `UpdateController.start` now deletes `install-update-*.sh` scripts and `backup/previous-*.app` directories older than 7 days under `userData/updates/`, preventing unbounded accumulation over time.
+- 后端 `Settings.app_version` 与 `/health` 暴露版本：`/health` 响应除 `status` 外现在还返回 `app_name / app_version / app_env`，便于桌面更新链路与运维做版本自检；`alembic env.py` 强制读 `Settings.database_url`，不再受 `alembic.ini` 中硬编码相对路径影响。
+- Backend now exposes the application version through `/health` (`app_name / app_version / app_env`) and forces Alembic's `env.py` to use `Settings.database_url` instead of the hard-coded relative path in `alembic.ini`. Smoke / static-hosting / auth tests updated accordingly.
+- 文档修正：`AGENTS.md` 删除了对不存在模型 `gpt-5.4` 的硬编码引用，改为遵循 harness/CLI 默认。
+- Docs: remove the bogus `gpt-5.4` model pin from `AGENTS.md`; subagent model selection now follows the harness/CLI default.
 
 ### Removed
 

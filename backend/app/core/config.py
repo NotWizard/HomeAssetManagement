@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     app_host: str = "127.0.0.1"
     app_port: int = 8000
+    # 与 frontend/package.json + desktop/package.json 同步；用于 /health 暴露给运维与桌面更新链路自检。
+    app_version: str = "0.1.3"
 
     # Local SQLite database path.
     database_url: str = "sqlite:///./backend/data/app.db"

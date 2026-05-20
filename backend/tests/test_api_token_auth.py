@@ -74,7 +74,9 @@ def test_health_endpoint_remains_public(auth_app):
     with TestClient(auth_app) as client:
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+        body = response.json()
+        assert body["status"] == "ok"
+        assert "app_version" in body
 
 
 def test_misconfigured_require_auth_without_token_returns_500(monkeypatch, tmp_path: Path):

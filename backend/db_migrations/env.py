@@ -6,6 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 
+from app.core.config import get_settings
 from app.core.database import Base
 import app.models  # noqa: F401
 
@@ -13,6 +14,10 @@ config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# 强制使用 Settings 解析得到的 database_url，让桌面打包 / 测试 / dev 三种场景共用同一个真理来源；
+# 不再依赖 alembic.ini 里硬编码的相对路径（那会随 cwd 漂移）。
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 target_metadata = Base.metadata
 

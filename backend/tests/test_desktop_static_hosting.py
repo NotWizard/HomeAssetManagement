@@ -56,7 +56,9 @@ def test_backend_can_serve_frontend_dist_for_desktop_shell(tmp_path: Path, load_
 
         health_response = client.get("/health")
         assert health_response.status_code == 200
-        assert health_response.json() == {"status": "ok"}
+        body = health_response.json()
+        assert body["status"] == "ok"
+        assert "app_version" in body
 
 
 def test_unmatched_api_paths_do_not_fall_through_to_frontend(tmp_path: Path, load_app):

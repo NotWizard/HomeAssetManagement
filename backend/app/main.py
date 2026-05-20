@@ -62,7 +62,12 @@ async def app_error_handler(request, exc: AppError):  # type: ignore[no-untyped-
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "app_name": settings.app_name,
+        "app_version": settings.app_version,
+        "app_env": settings.app_env,
+    }
 
 
 app.include_router(api_router)

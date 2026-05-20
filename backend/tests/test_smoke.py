@@ -8,7 +8,9 @@ def test_health_endpoint():
     client = TestClient(app)
     response = client.get('/health')
     assert response.status_code == 200
-    assert response.json() == {'status': 'ok'}
+    body = response.json()
+    assert body['status'] == 'ok'
+    assert 'app_version' in body and isinstance(body['app_version'], str)
 
 
 def test_test_runtime_disables_scheduler_and_bootstrap_snapshot():

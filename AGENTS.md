@@ -61,5 +61,5 @@ This repository is a local-first monorepo with three app layers:
 ## Agent-Specific Instructions
 - All conversation, status updates, and final responses for this repository must be in Chinese.
 - Any feature change, bug fix, or code modification in this repository must be done in a newly created git worktree first; do not edit directly in the primary workspace.
-- Unless the user explicitly requests otherwise, all spawned subagents in this repository must use the `gpt-5.4` model by default.
+- Subagent model selection follows the harness/CLI default; do not pin a specific model name in this guidance file (the previous reference to a non-existent `gpt-5.4` was removed).
 - When a task can be safely parallelized or delegated, prefer using subagents as much as practical to improve execution efficiency.

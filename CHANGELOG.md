@@ -26,6 +26,8 @@
 - Backend `/{full_path:path}` catch-all no longer swallows `/api/*`, `/docs`, `/openapi.json`, `/redoc`, or `/health`; mistyped API paths now correctly return 404 instead of silently 200 with the frontend index. Covered by a new regression test `test_unmatched_api_paths_do_not_fall_through_to_frontend`.
 - 后端 lifespan 启动副作用拆事务：`ensure_seed_data` 与 `create_daily_snapshot` 各自独立 session/事务；boot snapshot 与 scheduler 启动改为 best-effort，失败仅 `logger.warning` 记录，不再阻断整个应用上线。新增 `test_boot_snapshot_failure_is_swallowed_and_does_not_block_startup` 与 `test_scheduler_failure_does_not_block_startup`。
 - Backend lifespan side effects now run in independent transactions: `ensure_seed_data` and `create_daily_snapshot` no longer share a session, and the boot snapshot / scheduler start are best-effort — failures log a warning instead of aborting application startup. Covered by two new tests.
+- 前端波动率图修复 N/A 一致性：`volatility==null`（样本不足）保持为 `null`，ECharts 留空不画柱体，tooltip 提示"样本不足"；不再强转为 `0`，避免与"真零波动"在 UI 上无法区分。逻辑抽到 `volatilityValues.ts`，新增 `buildVolatilityValues` 与 `formatVolatilityTooltip`，并加单测覆盖。
+- Frontend volatility chart now keeps `volatility==null` (insufficient sample) as `null` — ECharts skips the bar and the tooltip shows "样本不足" — instead of coercing to `0`, which previously made "true zero volatility" indistinguishable from "no data". Logic extracted to `volatilityValues.ts` and covered by a unit test.
 
 ### Security
 

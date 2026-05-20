@@ -247,12 +247,33 @@ export function buildTrendChartOption({
   };
 }
 
+export {
+  buildVolatilityValues,
+  formatVolatilityTooltip,
+} from './volatilityValues';
+import {
+  buildVolatilityValues,
+  formatVolatilityTooltip,
+} from './volatilityValues';
+
 export function buildVolatilityChartOption(data: VolatilityItem[]) {
   const labels = data.map((item) => item.asset);
-  const values = data.map((item) => (item.volatility == null ? 0 : Number((item.volatility * 100).toFixed(2))));
+  const values = buildVolatilityValues(data);
 
   return {
-    tooltip: { trigger: 'axis' },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (
+        params: Array<{ axisValueLabel?: string; name?: string; value: number | null }>
+      ) => {
+        const head = params[0];
+        if (!head) {
+          return '';
+        }
+        const label = head.axisValueLabel ?? head.name ?? '';
+        return formatVolatilityTooltip(label, head.value);
+      },
+    },
     grid: VOLATILITY_CHART_GRID,
     xAxis: {
       type: 'category',

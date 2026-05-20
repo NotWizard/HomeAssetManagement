@@ -47,6 +47,30 @@ test('热力图和桑基图不会继续默认截断左侧文本', () => {
   assert.equal(SANKEY_MEMBER_NODE_COLOR, '#334155');
 });
 
+test('波动率图遇到样本不足（volatility=null）不会强转 0，tooltip 显示 N/A', async () => {
+  // 直接 import 工具函数，避免触发 chartOptions.ts 整文件的 ECharts 间接依赖
+  const { buildVolatilityValues, formatVolatilityTooltip } = await import(
+    '../src/components/charts/volatilityValues.ts'
+  );
+
+  const values = buildVolatilityValues([
+    { asset: '现金', volatility: 0.0, sample_size: 250, insufficient_data: false },
+    { asset: '新加资产', volatility: null, sample_size: 3, insufficient_data: true },
+    { asset: 'A 股', volatility: 0.18, sample_size: 220, insufficient_data: false },
+  ]);
+
+  assert.equal(values[0], 0, '真零波动应保留 0');
+  assert.equal(
+    values[1],
+    null,
+    '样本不足必须保持 null，不可强转为 0；零波动与样本不足在 UI 上必须可区分',
+  );
+  assert.equal(values[2], 18);
+
+  assert.match(formatVolatilityTooltip('新加资产', null), /样本不足/);
+  assert.match(formatVolatilityTooltip('A 股', 18), /18%/);
+});
+
 test('波动率图和币种拆分图为长标签保留可读布局', () => {
   assert.deepEqual(VOLATILITY_CHART_GRID, {
     left: 92,

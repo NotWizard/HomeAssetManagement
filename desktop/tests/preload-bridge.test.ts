@@ -3,12 +3,15 @@ import test from 'node:test';
 
 import {
   API_BASE_ARG_PREFIX,
+  API_TOKEN_ARG_PREFIX,
+  API_TOKEN_HEADER,
   UPDATE_CHECK_CHANNEL,
   UPDATE_DOWNLOAD_CHANNEL,
   UPDATE_GET_STATE_CHANNEL,
   UPDATE_INSTALL_CHANNEL,
   createDesktopBridge,
   resolveApiBaseUrl,
+  resolveApiToken,
   resolveApiUrl,
   serializeHeaders,
 } from '../src/preload-bridge.ts';
@@ -24,6 +27,98 @@ test('resolveApiBaseUrl 与 resolveApiUrl 会正确拼接桌面 sidecar 地址',
   assert.equal(resolveApiUrl('/health', apiBaseUrl), 'http://127.0.0.1:18991/api/v1/health');
   assert.equal(resolveApiUrl('holdings', apiBaseUrl), 'http://127.0.0.1:18991/api/v1/holdings');
   assert.throws(() => resolveApiUrl('/health', undefined), /未检测到桌面运行时 API 基地址/);
+});
+
+test('resolveApiToken 解析 --hbs-api-token 参数', () => {
+  assert.equal(
+    resolveApiToken(['electron', `${API_TOKEN_ARG_PREFIX}abc-123`]),
+    'abc-123'
+  );
+  assert.equal(resolveApiToken(['electron']), undefined);
+  assert.equal(
+    resolveApiToken(['electron', `${API_TOKEN_ARG_PREFIX}`]),
+    undefined,
+    '空 token 视为未注入'
+  );
+});
+
+test('createDesktopBridge 在每次后端调用时都会附加 X-HBS-Token 头', async () => {
+  type FetchCall = {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+  };
+  const fetchCalls: FetchCall[] = [];
+
+  const bridge = createDesktopBridge({
+    argv: [
+      'electron',
+      `${API_BASE_ARG_PREFIX}http://127.0.0.1:18991/api/v1`,
+      `${API_TOKEN_ARG_PREFIX}secret-token-99`,
+    ],
+    fetchImpl: async (input, init) => {
+      const headers: Record<string, string> = {};
+      const incoming = init?.headers as
+        | Record<string, string>
+        | Headers
+        | undefined;
+      if (incoming instanceof Headers) {
+        incoming.forEach((value, key) => {
+          headers[key.toLowerCase()] = value;
+        });
+      } else if (incoming) {
+        for (const [key, value] of Object.entries(incoming)) {
+          headers[key.toLowerCase()] = value;
+        }
+      }
+      fetchCalls.push({
+        url: String(input),
+        method: init?.method ?? 'GET',
+        headers,
+      });
+      return new Response(
+        JSON.stringify({ code: 0, message: 'ok', data: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    },
+    invokeIpc: async () => undefined,
+    subscribeToUpdateState: () => () => undefined,
+  });
+
+  await bridge.api.json.get('/settings');
+  await bridge.api.json.post('/members', '{}');
+  await bridge.api.binary.get('/imports/1/errors');
+  await bridge.api.form.post('/imports/preview', [['file', 'csv']]);
+
+  assert.equal(fetchCalls.length, 4);
+  for (const call of fetchCalls) {
+    assert.equal(
+      call.headers[API_TOKEN_HEADER.toLowerCase()],
+      'secret-token-99',
+      `${call.method} ${call.url} 缺少 X-HBS-Token 头`
+    );
+  }
+});
+
+test('createDesktopBridge 未注入 token 时不附加 X-HBS-Token 头', async () => {
+  let captured: Record<string, string> = {};
+  const bridge = createDesktopBridge({
+    argv: ['electron', `${API_BASE_ARG_PREFIX}http://127.0.0.1:18991/api/v1`],
+    fetchImpl: async (_input, init) => {
+      const incoming = init?.headers as Record<string, string> | undefined;
+      captured = { ...(incoming ?? {}) };
+      return new Response(
+        JSON.stringify({ code: 0, message: 'ok', data: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    },
+    invokeIpc: async () => undefined,
+    subscribeToUpdateState: () => () => undefined,
+  });
+
+  await bridge.api.json.get('/settings');
+  assert.equal(captured[API_TOKEN_HEADER], undefined);
+  assert.equal(captured[API_TOKEN_HEADER.toLowerCase()], undefined);
 });
 
 test('serializeHeaders 会统一输出小写 header 键名', () => {

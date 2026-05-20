@@ -4,6 +4,7 @@ import {
   spawnSync,
   type ChildProcessWithoutNullStreams,
 } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
@@ -37,6 +38,11 @@ const BACKEND_HEALTH_REQUEST_TIMEOUT_MS = 1_500;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
+
+// 进程级一次性 API token：每次 Electron 主进程启动时随机生成，注入 sidecar env，
+// 同时通过 webPreferences.additionalArguments 传给 preload，使 renderer 在每次
+// 调用 backend 时携带 X-HBS-Token 头；任何意外抓到 sidecar 端口的本机进程都无法仿冒。
+const apiToken = randomBytes(32).toString('hex');
 const updateController = createUpdateController({
   appVersion: app.getVersion(),
   arch: process.arch === 'arm64' ? 'arm64' : 'x64',
@@ -105,6 +111,8 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
       port,
       storageDir: desktopPaths.storageDir,
       databaseUrl: desktopPaths.databaseUrl,
+      apiToken,
+      requireAuth: true,
     }),
   };
 
@@ -170,7 +178,10 @@ function buildWindowArguments(): string[] {
     return [];
   }
 
-  return [`--hbs-api-base-url=${buildApiBaseUrl(port)}`];
+  return [
+    `--hbs-api-base-url=${buildApiBaseUrl(port)}`,
+    `--hbs-api-token=${apiToken}`,
+  ];
 }
 
 function isWindowAvailable(window: BrowserWindow | null): window is BrowserWindow {

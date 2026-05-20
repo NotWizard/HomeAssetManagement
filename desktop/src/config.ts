@@ -14,6 +14,8 @@ export type BackendEnvironmentOptions = {
   storageDir: string;
   databaseUrl: string;
   frontendDistDir?: string;
+  apiToken?: string;
+  requireAuth?: boolean;
 };
 
 export type DesktopPaths = {
@@ -69,10 +71,20 @@ export function buildBackendEnvironment(
     HBS_APP_PORT: String(options.port),
     HBS_DATABASE_URL: options.databaseUrl,
     HBS_STORAGE_DIR: options.storageDir,
+    // 桌面同源场景：CORSMiddleware 不挂载，避免对 sidecar 进行不必要的预检/凭据匹配。
+    HBS_CORS_ORIGINS: '',
   };
 
   if (options.frontendDistDir) {
     env.HBS_FRONTEND_DIST_DIR = options.frontendDistDir;
+  }
+
+  if (options.apiToken) {
+    env.HBS_API_TOKEN = options.apiToken;
+  }
+
+  if (options.requireAuth) {
+    env.HBS_REQUIRE_AUTH = 'true';
   }
 
   return env;

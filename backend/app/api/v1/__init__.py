@@ -1,5 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.api.security import verify_api_token
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.fx import router as fx_router
@@ -10,7 +11,7 @@ from app.api.v1.migration import router as migration_router
 from app.api.v1.settings import router as settings_router
 from app.api.v1.snapshots import router as snapshots_router
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(verify_api_token)])
 router.include_router(members_router, prefix="/members", tags=["members"])
 router.include_router(categories_router, prefix="/categories", tags=["categories"])
 router.include_router(holdings_router, prefix="/holdings", tags=["holdings"])

@@ -29,6 +29,8 @@
 
 - 后端 CORS 收紧：`allow_methods` 与 `allow_headers` 改为显式白名单（GET/POST/PUT/PATCH/DELETE/OPTIONS；Accept/Authorization/Content-Type/X-Request-Id），不再使用 `*`+`allow_credentials=True` 反模式。允许的源通过 `HBS_CORS_ORIGINS`（逗号分隔）覆盖；空字符串则不挂载 CORS（适配桌面同源场景）。新增 `test_cors_policy.py` 4 个用例锁定行为。
 - Backend CORS hardened: replace the `allow_methods=["*"]+allow_credentials=True` anti-pattern with explicit allow-lists for both methods and headers. Allowed origins are now overridable via `HBS_CORS_ORIGINS` (comma-separated); an empty value disables CORS entirely for the desktop same-origin packaging case. Covered by four new tests in `test_cors_policy.py`.
+- 后端引入本机 API Token 鉴权：`Settings.require_auth=true` 时所有 `/api/v1/*` 端点必须携带 `X-HBS-Token` 头，使用 `hmac.compare_digest` 防时序攻击；`/health` 公开。桌面打包模式自动启用：Electron 主进程启动时随机生成 32 字节 token，通过环境变量注入 sidecar，并通过 preload 桥接的 `additionalArguments` 透给渲染端，每次后端调用自动附加。新增 `test_api_token_auth.py` 5 个用例与桌面 `preload-bridge` / `config` 共 4 个新用例。
+- Add a local API token authentication layer: when `Settings.require_auth=true`, every `/api/v1/*` endpoint requires an `X-HBS-Token` header matched via `hmac.compare_digest`; `/health` stays public. Desktop packaging enables it automatically — Electron main generates a per-process 32-byte token, injects it into the sidecar env, and passes it through preload `additionalArguments` so the renderer sends `X-HBS-Token` on every backend call. Covered by five new backend tests and four new desktop tests.
 
 ### Removed
 

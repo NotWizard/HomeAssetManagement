@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # 留空字符串表示禁用 CORS（适用于桌面打包同源场景）。
     cors_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
 
+    # 本机 API 鉴权：require_auth=True 时所有 /api/v1 端点都需要 X-HBS-Token 头匹配 api_token。
+    # 桌面打包模式应启用；dev/test 默认关闭以减少摩擦。
+    require_auth: bool = False
+    api_token: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="HBS_")
 
     def ensure_storage_dirs(self) -> None:

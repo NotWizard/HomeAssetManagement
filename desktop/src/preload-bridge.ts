@@ -1,4 +1,6 @@
 export const API_BASE_ARG_PREFIX = '--hbs-api-base-url=';
+export const API_TOKEN_ARG_PREFIX = '--hbs-api-token=';
+export const API_TOKEN_HEADER = 'X-HBS-Token';
 export const RETRY_BOOTSTRAP_CHANNEL = 'hbs:retry-bootstrap';
 export const UPDATE_STATE_CHANNEL = 'hbs:update:changed';
 export const UPDATE_GET_STATE_CHANNEL = 'hbs:update:get-state';
@@ -35,6 +37,22 @@ export function resolveApiBaseUrl(argv: string[]): string | undefined {
   return argument?.slice(API_BASE_ARG_PREFIX.length);
 }
 
+export function resolveApiToken(argv: string[]): string | undefined {
+  const argument = argv.find((value) => value.startsWith(API_TOKEN_ARG_PREFIX));
+  const token = argument?.slice(API_TOKEN_ARG_PREFIX.length);
+  return token && token.length > 0 ? token : undefined;
+}
+
+function mergeAuthHeaders(
+  headers: Record<string, string> | undefined,
+  apiToken: string | undefined
+): Record<string, string> | undefined {
+  if (!apiToken) {
+    return headers;
+  }
+  return { ...(headers ?? {}), [API_TOKEN_HEADER]: apiToken };
+}
+
 export function resolveApiUrl(path: string, apiBaseUrl?: string): string {
   if (!apiBaseUrl) {
     throw new Error('未检测到桌面运行时 API 基地址');
@@ -68,14 +86,16 @@ export function serializeHeaders(headers: Headers): Record<string, string> {
 async function requestJson(
   fetchImpl: typeof fetch,
   apiBaseUrl: string | undefined,
+  apiToken: string | undefined,
   path: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   body?: string
 ): Promise<unknown> {
-  const headers =
+  const baseHeaders =
     method === 'POST' || method === 'PUT'
       ? { 'Content-Type': 'application/json' }
       : undefined;
+  const headers = mergeAuthHeaders(baseHeaders, apiToken);
   const response = await fetchImpl(resolveApiUrl(path, apiBaseUrl), {
     method,
     headers,
@@ -88,11 +108,14 @@ async function requestJson(
 export async function requestBinary(
   fetchImpl: typeof fetch,
   apiBaseUrl: string | undefined,
+  apiToken: string | undefined,
   path: string,
   method: 'GET' | 'POST' = 'GET'
 ): Promise<BinaryResponse> {
+  const headers = mergeAuthHeaders(undefined, apiToken);
   const response = await fetchImpl(resolveApiUrl(path, apiBaseUrl), {
     method,
+    headers,
   });
 
   return {
@@ -105,30 +128,32 @@ export async function requestBinary(
 
 export function createDesktopBridge(deps: DesktopBridgeDeps) {
   const apiBaseUrl = resolveApiBaseUrl(deps.argv);
+  const apiToken = resolveApiToken(deps.argv);
 
   return {
     isDesktop: true,
     api: {
       json: {
         get: (path: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, path, 'GET'),
+          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'GET'),
         post: (path: string, body: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, path, 'POST', body),
+          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'POST', body),
         put: (path: string, body: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, path, 'PUT', body),
+          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'PUT', body),
         delete: (path: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, path, 'DELETE'),
+          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'DELETE'),
       },
       binary: {
         get: (path: string) =>
-          requestBinary(deps.fetchImpl, apiBaseUrl, path, 'GET'),
+          requestBinary(deps.fetchImpl, apiBaseUrl, apiToken, path, 'GET'),
         post: (path: string) =>
-          requestBinary(deps.fetchImpl, apiBaseUrl, path, 'POST'),
+          requestBinary(deps.fetchImpl, apiBaseUrl, apiToken, path, 'POST'),
       },
       form: {
         post: async (path: string, entries: FormEntries) => {
           const response = await deps.fetchImpl(resolveApiUrl(path, apiBaseUrl), {
             method: 'POST',
+            headers: mergeAuthHeaders(undefined, apiToken),
             body: toFormData(entries),
           });
 

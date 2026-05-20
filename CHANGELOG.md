@@ -24,6 +24,8 @@
 
 - 后端 `/{full_path:path}` catch-all 不再吞掉 `/api/*`、`/docs`、`/openapi.json`、`/redoc`、`/health` 等保留前缀；拼写错误的 API 路径会返回 404 而不是静默回 200 + 前端 index。新增 `test_unmatched_api_paths_do_not_fall_through_to_frontend` 回归用例。
 - Backend `/{full_path:path}` catch-all no longer swallows `/api/*`, `/docs`, `/openapi.json`, `/redoc`, or `/health`; mistyped API paths now correctly return 404 instead of silently 200 with the frontend index. Covered by a new regression test `test_unmatched_api_paths_do_not_fall_through_to_frontend`.
+- 后端 lifespan 启动副作用拆事务：`ensure_seed_data` 与 `create_daily_snapshot` 各自独立 session/事务；boot snapshot 与 scheduler 启动改为 best-effort，失败仅 `logger.warning` 记录，不再阻断整个应用上线。新增 `test_boot_snapshot_failure_is_swallowed_and_does_not_block_startup` 与 `test_scheduler_failure_does_not_block_startup`。
+- Backend lifespan side effects now run in independent transactions: `ensure_seed_data` and `create_daily_snapshot` no longer share a session, and the boot snapshot / scheduler start are best-effort — failures log a warning instead of aborting application startup. Covered by two new tests.
 
 ### Security
 

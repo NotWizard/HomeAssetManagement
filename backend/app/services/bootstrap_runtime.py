@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from collections.abc import Callable
 
@@ -10,6 +11,8 @@ from app.jobs.scheduler import stop_scheduler
 from app.services.bootstrap import ensure_database_schema
 from app.services.bootstrap import ensure_seed_data
 from app.services.snapshot_service import SnapshotService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -39,21 +42,45 @@ def run_application_startup(
     session_factory: SessionFactory = SessionLocal,
     scheduler_start: Callable[[], None] = start_scheduler,
 ) -> None:
+    """启动副作用编排，每一阶段使用独立事务且尽量互不阻塞。
+
+    阶段顺序：
+      1. schema 初始化（必须成功；失败直接抛出阻断启动）
+      2. seed 默认数据（必须成功；失败直接抛出阻断启动）
+      3. boot snapshot（best-effort：失败仅日志告警，不影响应用上线）
+      4. scheduler 启动（best-effort：失败仅日志告警，桌面 UI 仍可用）
+    """
     startup_options = options or resolve_startup_runtime_options()
 
     if startup_options.run_schema:
         ensure_database_schema()
 
-    if startup_options.run_seed_data or startup_options.run_bootstrap_snapshot:
+    if startup_options.run_seed_data:
         with session_factory() as session:
-            if startup_options.run_seed_data:
-                ensure_seed_data(session)
-            if startup_options.run_bootstrap_snapshot:
-                SnapshotService.create_daily_snapshot(session)
+            ensure_seed_data(session)
             session.commit()
 
+    if startup_options.run_bootstrap_snapshot:
+        try:
+            with session_factory() as session:
+                SnapshotService.create_daily_snapshot(session)
+                session.commit()
+        except Exception as exc:  # pragma: no cover - best-effort path
+            logger.warning(
+                "boot snapshot 失败，已跳过：%s",
+                exc,
+                exc_info=True,
+            )
+
     if startup_options.run_scheduler:
-        scheduler_start()
+        try:
+            scheduler_start()
+        except Exception as exc:  # pragma: no cover - best-effort path
+            logger.warning(
+                "scheduler 启动失败，已跳过：%s",
+                exc,
+                exc_info=True,
+            )
 
 
 def run_application_shutdown(

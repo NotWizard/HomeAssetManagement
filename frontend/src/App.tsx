@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
+import { AppErrorBoundary } from './components/layout/AppErrorBoundary';
 import { AppShell } from './components/layout/AppShell';
 
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage })));
@@ -20,18 +21,22 @@ function RouteFallback() {
 
 export default function App() {
   return (
-    <AppShell>
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/" element={<OverviewPage />} />
-          <Route path="/entry" element={<EntryPage />} />
-          <Route path="/members" element={<MembersPage />} />
-          <Route path="/import" element={<ImportPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
-    </AppShell>
+    <AppErrorBoundary>
+      <AppShell>
+        <AppErrorBoundary>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<OverviewPage />} />
+              <Route path="/entry" element={<EntryPage />} />
+              <Route path="/members" element={<MembersPage />} />
+              <Route path="/import" element={<ImportPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </AppErrorBoundary>
+      </AppShell>
+    </AppErrorBoundary>
   );
 }

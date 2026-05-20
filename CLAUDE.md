@@ -10,21 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 提交信息必须简洁、规范，并使用中英双语。
 - Git commit message 必须包含：本次修改的总结性概述，以及结构化、有序的正文说明。
 - Git commit message 正文必须使用真实换行、空行和空格排版，严禁使用 `\n`、`\t` 等转义字符模拟格式。
-- 本项目中只要任务适合使用 Agent Teams，就尽量使用；team 与 agents 必须根据任务实际需要动态创建，不得固定预设成员。
-- Agent Teams 中的 Teammates 在完成任务后要及时清理/关闭，避免保留无效或陈旧的协作进程。
 
-## Agent team guidance
+## Changelog 规范
 
-- 本项目中，凡是任务能够合理使用 Agent Teams，就尽量使用。
-- team 规模和 agent 类型必须根据当前任务动态决定：先判断任务需要哪些能力，再创建最小但足够的 team。
-- 不要为所有任务机械地创建固定角色；简单且不值得拆分的任务可直接单 agent 完成。
-- 适合拆分时，优先按职责分配，例如：
-  - 代码库探索 / 文档核对
-  - 实现改动
-  - 测试与验证
-  - 构建或打包检查
-- 如果某个子任务只是定向读 1-2 个文件或一次简单搜索，不必为了形式使用 team。
-- 使用 team 时，保持任务边界清晰，避免多个 agent 修改同一处代码而产生冲突。
+- 仓库根目录维护一份 `CHANGELOG.md`，作为全部代码变更的唯一记录入口。
+- 采用 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 风格：按版本/日期分组，使用 `Added`、`Changed`、`Fixed`、`Removed`、`Deprecated`、`Security` 等分类条目。
+- 所有代码变更（含功能新增、功能调整、Bug 修复、重构、依赖或配置变化）都必须同步更新 `CHANGELOG.md`，与本次代码改动一并提交，不允许后补或漏写。
+- 未发布的变更先记录在 `## [Unreleased]` 段落下；正式发版时再迁移到对应版本号与日期的小节。
+- 条目描述需简洁、面向读者，必要时附加相关 Issue / PR 链接，避免出现 `\n`、`\t` 等转义字符。
+
 ## Common commands
 
 ### Backend

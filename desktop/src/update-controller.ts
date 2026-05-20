@@ -101,10 +101,15 @@ export function buildDetachedInstallScript(options: {
   pid: number;
   sourceAppPath: string;
   targetAppPath: string;
+  /** 安装失败时回滚旧 app 的备份目录路径。 */
+  backupPath: string;
 }): string {
   const sourceApp = shellQuote(options.sourceAppPath);
   const targetApp = shellQuote(options.targetAppPath);
-  const adminCommand = `rm -rf ${targetApp} && ditto ${sourceApp} ${targetApp}`;
+  const backupPath = shellQuote(options.backupPath);
+  // 提权 fallback 路径：直接对目标做覆盖；如果上一步常规路径已经移除/还原过 backup，
+  // 这里仅在常规路径完全失败且 backup 不存在时才走（极端情况）。
+  const adminCommand = `ditto ${sourceApp} ${targetApp}`;
 
   return `#!/bin/sh
 set -eu
@@ -112,16 +117,38 @@ set -eu
 TARGET_PID="${options.pid}"
 SOURCE_APP=${sourceApp}
 TARGET_APP=${targetApp}
+BACKUP_APP=${backupPath}
 
 while kill -0 "$TARGET_PID" 2>/dev/null; do
   sleep 1
 done
 
-if rm -rf "$TARGET_APP" && ditto "$SOURCE_APP" "$TARGET_APP"; then
+# 1) 把旧 app 移到备份位置（保留可还原状态），不做 rm
+rm -rf "$BACKUP_APP"
+if [ -d "$TARGET_APP" ]; then
+  if ! mv "$TARGET_APP" "$BACKUP_APP"; then
+    osascript -e "do shell script \\"${escapeForAppleScript(
+      adminCommand
+    )}\\" with administrator privileges"
+    open "$TARGET_APP"
+    exit 0
+  fi
+fi
+
+# 2) 把新 app 落到目标位置；失败 → 还原 BACKUP_APP，绝不留下"被删却没装上"的状态
+if ditto "$SOURCE_APP" "$TARGET_APP"; then
+  rm -rf "$BACKUP_APP"
   open "$TARGET_APP"
   exit 0
 fi
 
+# 3) ditto 失败：尝试还原备份
+rm -rf "$TARGET_APP"
+if [ -d "$BACKUP_APP" ]; then
+  mv "$BACKUP_APP" "$TARGET_APP"
+fi
+
+# 4) 提权 fallback：用 osascript 重做 ditto
 osascript -e "do shell script \\"${escapeForAppleScript(
     adminCommand
   )}\\" with administrator privileges"
@@ -545,11 +572,14 @@ export function createUpdateController(options: UpdateControllerOptions) {
     }
 
     const targetAppPath = resolveInstallTargetPath(processExecPath);
+    const backupPath = join(updatesDir, 'backup', `previous-${Date.now()}.app`);
+    mkdirSync(dirname(backupPath), { recursive: true });
     const scriptPath = join(updatesDir, `install-update-${Date.now()}.sh`);
     const scriptContent = buildDetachedInstallScript({
       pid: processPid,
       sourceAppPath,
       targetAppPath,
+      backupPath,
     });
 
     await writeFile(scriptPath, scriptContent, 'utf8');

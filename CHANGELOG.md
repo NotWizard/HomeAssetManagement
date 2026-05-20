@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 后端 `/{full_path:path}` catch-all 不再吞掉 `/api/*`、`/docs`、`/openapi.json`、`/redoc`、`/health` 等保留前缀；拼写错误的 API 路径会返回 404 而不是静默回 200 + 前端 index。新增 `test_unmatched_api_paths_do_not_fall_through_to_frontend` 回归用例。
+- Backend `/{full_path:path}` catch-all no longer swallows `/api/*`, `/docs`, `/openapi.json`, `/redoc`, or `/health`; mistyped API paths now correctly return 404 instead of silently 200 with the frontend index. Covered by a new regression test `test_unmatched_api_paths_do_not_fall_through_to_frontend`.
+
 ### Removed
 
 ### Deprecated

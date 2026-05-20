@@ -57,3 +57,30 @@ def test_backend_can_serve_frontend_dist_for_desktop_shell(tmp_path: Path, load_
         health_response = client.get("/health")
         assert health_response.status_code == 200
         assert health_response.json() == {"status": "ok"}
+
+
+def test_unmatched_api_paths_do_not_fall_through_to_frontend(tmp_path: Path, load_app):
+    """未命中的 /api/* 与 backend 保留路径不能被 catch-all 吞掉返回前端 index。"""
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    index_marker = "FRONTEND_INDEX_SENTINEL_8a13"
+    (dist_dir / "index.html").write_text(
+        f"<!doctype html><html><body>{index_marker}</body></html>",
+        encoding="utf-8",
+    )
+
+    app = load_app(dist_dir)
+
+    with TestClient(app) as client:
+        for path in ("/api/v2/typo", "/api/anything", "/api"):
+            response = client.get(path)
+            assert response.status_code == 404, f"{path} should 404, got {response.status_code}"
+            assert index_marker not in response.text, (
+                f"{path} 不应返回前端 index 内容"
+            )
+
+        for path in ("/docs", "/openapi.json", "/redoc"):
+            response = client.get(path)
+            assert index_marker not in response.text, (
+                f"{path} 不应被 catch-all 吞掉成前端 index"
+            )

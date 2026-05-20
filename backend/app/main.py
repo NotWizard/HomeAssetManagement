@@ -65,6 +65,15 @@ def health() -> dict[str, str]:
 app.include_router(api_router)
 
 
+_BACKEND_RESERVED_PREFIXES: tuple[str, ...] = (
+    "api",
+    "health",
+    "docs",
+    "redoc",
+    "openapi.json",
+)
+
+
 def _resolve_frontend_file(full_path: str) -> Path:
     if frontend_dist_dir is None or frontend_index_file is None or not frontend_index_file.exists():
         raise HTTPException(status_code=404, detail="Not Found")
@@ -72,6 +81,10 @@ def _resolve_frontend_file(full_path: str) -> Path:
     requested_path = full_path.strip("/")
     if not requested_path:
         return frontend_index_file
+
+    head = requested_path.split("/", 1)[0]
+    if head in _BACKEND_RESERVED_PREFIXES:
+        raise HTTPException(status_code=404, detail="Not Found")
 
     candidate = (frontend_dist_dir / requested_path).resolve()
     try:

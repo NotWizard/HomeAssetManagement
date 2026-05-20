@@ -12,6 +12,8 @@
 - Add project-scoped Claude Code subagents `security-reviewer` and `migration-guard` under `.claude/agents/` to guard security-sensitive surfaces and database migration / data-lifecycle changes.
 - 新增 `backend/requirements.lock`：完整 transitive 依赖锁定文件，与 `requirements.txt` 配套，保证可复现构建。
 - Add `backend/requirements.lock` capturing the full transitive dependency lock alongside the human-edited `requirements.txt` for reproducible builds.
+- 新增 `.github/workflows/ci.yml`：在 push/PR 上跑 backend pytest、frontend typecheck+build+`node --test`、desktop typecheck+`node --test` 三个 job，作为最低门禁。
+- Add `.github/workflows/ci.yml` to run backend pytest, frontend typecheck/build/`node --test`, and desktop typecheck/`node --test` as the minimum gate on every push and pull request.
 
 ### Changed
 

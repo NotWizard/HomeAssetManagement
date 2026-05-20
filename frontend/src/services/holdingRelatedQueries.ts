@@ -85,6 +85,12 @@ export const SETTINGS_QUERY_KEYS = [
   ...HOLDING_RELATED_QUERY_KEYS,
 ] as const;
 
+/**
+ * 轻量 settings 失效集：仅刷新 settings 自身缓存。
+ * 用于 base_currency 不变、仅修改阈值等"对持仓估值无影响"的更新，避免雪崩重算 trend / correlation 等重端点。
+ */
+export const LIGHT_SETTINGS_QUERY_KEYS = [queryKeys.settings.all()] as const;
+
 export const HOLDINGS_QUERY_KEYS = [queryKeys.holdings.all()] as const;
 
 export const MEMBER_QUERY_KEYS = [queryKeys.members.all()] as const;
@@ -104,6 +110,12 @@ export async function invalidateHoldingRelatedQueries(
 
 export async function invalidateSettingsQueries(queryClient: QueryClientLike) {
   await invalidateQueryKeys(queryClient, SETTINGS_QUERY_KEYS);
+}
+
+export async function invalidateLightSettingsQueries(
+  queryClient: QueryClientLike
+) {
+  await invalidateQueryKeys(queryClient, LIGHT_SETTINGS_QUERY_KEYS);
 }
 
 export async function invalidateHoldingQueries(queryClient: QueryClientLike) {

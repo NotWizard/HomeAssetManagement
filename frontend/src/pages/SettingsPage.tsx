@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import {
+  invalidateLightSettingsQueries,
   invalidateMemberQueries,
   invalidateSettingsQueries,
   queryKeys,
@@ -66,9 +67,17 @@ export function SettingsPage() {
 
   const mutation = useMutation({
     mutationFn: updateSettings,
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       setError(null);
-      await invalidateSettingsQueries(queryClient);
+      // base_currency 改变会触发后端 holding 重估值 → 必须刷新所有分析端点；
+      // 否则只是阈值类调整 → 用 light invalidation 避免雪崩重计算 trend / correlation 等重端点。
+      const baseCurrencyChanged =
+        settingsQuery.data?.base_currency !== variables.base_currency;
+      if (baseCurrencyChanged) {
+        await invalidateSettingsQueries(queryClient);
+      } else {
+        await invalidateLightSettingsQueries(queryClient);
+      }
     },
     onError: (e) => setError(formatError(e)),
   });

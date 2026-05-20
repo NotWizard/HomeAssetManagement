@@ -61,6 +61,8 @@
 - Make `CategoryService.resolve_path_by_name` deterministic by adding explicit `order_by(Category.id.asc()).limit(1)` to each level lookup.
 - `app/core/logging.py` 改造：日志 root logger 仅初始化一次（`_logging_initialized` 守护），日志级别支持通过 `HBS_LOG_LEVEL` 环境变量覆盖（默认 `INFO`），不再每次 `get_logger` 调用 `basicConfig` 造成语义混乱。
 - Refactor `app/core/logging.py`: initialize the root logger exactly once, honor the `HBS_LOG_LEVEL` env var (default `INFO`), and stop calling `basicConfig` from every `get_logger` invocation.
+- 前端 `OverviewPage.holdingsQuery` 改用 `holdings.all()`，与 `EntryPage` 共用缓存，避免页面切换时各自重复请求；新增 `LIGHT_SETTINGS_QUERY_KEYS` / `invalidateLightSettingsQueries`，`SettingsPage` 在 `base_currency` 未变化（仅修改阈值）时使用轻量 invalidate，避免连带刷新 trend / volatility / correlation 等重端点。
+- Frontend `OverviewPage.holdingsQuery` now uses the shared `holdings.all()` cache, eliminating duplicate fetches between Overview and Entry. Added `LIGHT_SETTINGS_QUERY_KEYS` and `invalidateLightSettingsQueries`; `SettingsPage` now invalidates only the settings cache when `base_currency` is unchanged so threshold-only edits no longer cascade into trend / volatility / correlation refetches.
 
 ### Removed
 

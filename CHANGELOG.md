@@ -63,6 +63,10 @@
 - Refactor `app/core/logging.py`: initialize the root logger exactly once, honor the `HBS_LOG_LEVEL` env var (default `INFO`), and stop calling `basicConfig` from every `get_logger` invocation.
 - 前端 `OverviewPage.holdingsQuery` 改用 `holdings.all()`，与 `EntryPage` 共用缓存，避免页面切换时各自重复请求；新增 `LIGHT_SETTINGS_QUERY_KEYS` / `invalidateLightSettingsQueries`，`SettingsPage` 在 `base_currency` 未变化（仅修改阈值）时使用轻量 invalidate，避免连带刷新 trend / volatility / correlation 等重端点。
 - Frontend `OverviewPage.holdingsQuery` now uses the shared `holdings.all()` cache, eliminating duplicate fetches between Overview and Entry. Added `LIGHT_SETTINGS_QUERY_KEYS` and `invalidateLightSettingsQueries`; `SettingsPage` now invalidates only the settings cache when `base_currency` is unchanged so threshold-only edits no longer cascade into trend / volatility / correlation refetches.
+- 前端新增 `validateDesktopBridgeShape`，在使用 `__HBS_DESKTOP__` 之前显式校验 `api.json/binary/form` 各方法是否可调用；preload 部分实现时调用方降级到 web fetch 路径，不再直接 TypeError。
+- Add `validateDesktopBridgeShape` to runtime.ts; `__HBS_DESKTOP__` is rejected unless `api.json/binary/form` are fully callable, so a partial preload implementation degrades gracefully to the web fetch path instead of throwing TypeError.
+- 抽出共享 `frontend/src/utils/formatError.ts`；`ImportPage` 把 `setError(String(e))` 替换为 `setError(formatError(e))`，错误提示不再带 `Error: ` 前缀。
+- Add a shared `frontend/src/utils/formatError.ts`. `ImportPage` now formats mutation errors via `formatError(e)` instead of `String(e)`, removing the user-unfriendly `Error: ` prefix.
 
 ### Removed
 

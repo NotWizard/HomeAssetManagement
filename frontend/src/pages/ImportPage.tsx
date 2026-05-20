@@ -13,6 +13,7 @@ import {
   queryKeys,
 } from '../services/holdingRelatedQueries';
 import { commitImport, downloadImportErrors, fetchImportLogs, previewImport, type ImportPreview } from '../services/imports';
+import { formatError } from '../utils/formatError';
 
 export function ImportPage() {
   const queryClient = useQueryClient();
@@ -31,7 +32,7 @@ export function ImportPage() {
       setPreview(data);
       setError(null);
     },
-    onError: (e) => setError(String(e)),
+    onError: (e) => setError(formatError(e)),
   });
 
   const commitMutation = useMutation({
@@ -41,7 +42,7 @@ export function ImportPage() {
       await invalidateImportLogQueries(queryClient);
       await invalidateHoldingRelatedQueries(queryClient);
     },
-    onError: (e) => setError(String(e)),
+    onError: (e) => setError(formatError(e)),
   });
 
   const handleDownloadErrors = async (importId: number) => {

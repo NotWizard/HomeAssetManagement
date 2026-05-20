@@ -84,14 +84,54 @@ function readRuntimeConfig(): HbsRuntimeConfig | undefined {
   return runtimeHost.__HBS_RUNTIME_CONFIG__;
 }
 
+function isCallable(value: unknown): value is (...args: unknown[]) => unknown {
+  return typeof value === 'function';
+}
+
+/** 在断言为 HbsDesktopBridge 之前对关键路径做形状校验，避免 preload 部分实现时
+ * 上层调用直接 TypeError；返回 false 时调用方应回退到 web fetch 路径。 */
+export function validateDesktopBridgeShape(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const bridge = value as Record<string, unknown>;
+  if (bridge.isDesktop !== true) {
+    return false;
+  }
+  const api = bridge.api as Record<string, unknown> | undefined;
+  if (!api) return false;
+  const json = api.json as Record<string, unknown> | undefined;
+  const binary = api.binary as Record<string, unknown> | undefined;
+  const form = api.form as Record<string, unknown> | undefined;
+  if (
+    !json ||
+    !isCallable(json.get) ||
+    !isCallable(json.post) ||
+    !isCallable(json.put) ||
+    !isCallable(json.delete)
+  ) {
+    return false;
+  }
+  if (!binary || !isCallable(binary.get) || !isCallable(binary.post)) {
+    return false;
+  }
+  if (!form || !isCallable(form.post)) {
+    return false;
+  }
+  return true;
+}
+
 function readDesktopBridge(
   host: unknown = globalThis
 ): HbsDesktopBridge | undefined {
   const runtimeHost = host as {
-    __HBS_DESKTOP__?: HbsDesktopBridge;
+    __HBS_DESKTOP__?: unknown;
   };
-
-  return runtimeHost.__HBS_DESKTOP__;
+  const candidate = runtimeHost.__HBS_DESKTOP__;
+  if (!validateDesktopBridgeShape(candidate)) {
+    return undefined;
+  }
+  return candidate as HbsDesktopBridge;
 }
 
 export function resolveApiBaseUrl(
@@ -132,5 +172,8 @@ export function getDesktopBridge(
 }
 
 export function isDesktopRuntime(host: unknown = globalThis): boolean {
-  return getDesktopBridge(host)?.isDesktop === true;
+  // 这里只做最轻校验：注入了 __HBS_DESKTOP__.isDesktop===true 即认为是桌面运行时；
+  // 实际拿桥执行调用时再走 validateDesktopBridgeShape 严格校验，避免单元测试 mock 必须穷举所有方法。
+  const runtimeHost = host as { __HBS_DESKTOP__?: { isDesktop?: unknown } };
+  return runtimeHost.__HBS_DESKTOP__?.isDesktop === true;
 }

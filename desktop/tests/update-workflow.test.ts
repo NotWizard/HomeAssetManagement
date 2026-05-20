@@ -1,6 +1,88 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+test('parseSha256File 接受纯摘要与 "摘要+空格+文件名" 两种格式，拒绝非法值', async () => {
+  const workflow = await import('../src/update-workflow.ts');
+  const valid = 'abcd'.repeat(16);
+
+  assert.equal(workflow.parseSha256File(`${valid}\n`), valid);
+  assert.equal(
+    workflow.parseSha256File(`${valid}  HouseholdBalanceSheet.zip\n`),
+    valid
+  );
+  assert.equal(workflow.parseSha256File('not-hex'), null);
+  assert.equal(workflow.parseSha256File('abc'), null, '长度不足应被拒绝');
+});
+
+test('verifySha256 对大小写不敏感且拒绝非 64 位摘要', async () => {
+  const workflow = await import('../src/update-workflow.ts');
+  const lower = 'a'.repeat(64);
+  const upper = lower.toUpperCase();
+
+  assert.equal(workflow.verifySha256(lower, upper), true);
+  assert.equal(workflow.verifySha256('a'.repeat(63), 'a'.repeat(64)), false);
+  assert.equal(workflow.verifySha256('zzz', 'a'.repeat(64)), false);
+});
+
+test('findSha256AssetUrl 在 release 资产列表中找到配套 .sha256 文件', async () => {
+  const workflow = await import('../src/update-workflow.ts');
+  const release = {
+    tag_name: 'v0.2.0',
+    draft: false,
+    prerelease: false,
+    assets: [
+      {
+        name: 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip',
+        browser_download_url: 'https://example.com/zip',
+      },
+      {
+        name: 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip.sha256',
+        browser_download_url: 'https://example.com/sha256',
+      },
+    ],
+  };
+  assert.equal(
+    workflow.findSha256AssetUrl(
+      release,
+      'HouseholdBalanceSheet-0.2.0-macos-arm64.zip'
+    ),
+    'https://example.com/sha256'
+  );
+  assert.equal(
+    workflow.findSha256AssetUrl(release, 'no-such-file.zip'),
+    null
+  );
+});
+
+test('pickUpdateCandidate 在 release 中带回 sha256AssetUrl', async () => {
+  const workflow = await import('../src/update-workflow.ts');
+
+  const candidate = workflow.pickUpdateCandidate({
+    currentVersion: '0.1.0',
+    arch: 'arm64',
+    releases: [
+      {
+        tag_name: 'v0.2.0',
+        draft: false,
+        prerelease: false,
+        assets: [
+          {
+            name: 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip',
+            browser_download_url: 'https://example.com/zip',
+          },
+          {
+            name: 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip.sha256',
+            browser_download_url: 'https://example.com/sha256',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.ok(candidate, 'candidate 应被选中');
+  assert.equal(candidate?.sha256AssetUrl, 'https://example.com/sha256');
+});
+
 test('更新工作流会为下载和安装阶段提供显式状态迁移', async () => {
   const workflow = await import('../src/update-workflow.ts');
 

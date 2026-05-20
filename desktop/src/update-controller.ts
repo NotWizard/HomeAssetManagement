@@ -1,5 +1,6 @@
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { chmod, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 
@@ -7,12 +8,14 @@ import {
   applyUpdateStateTransition,
   compareVersions,
   createDefaultUpdateState,
+  parseSha256File,
   pickUpdateCandidate,
   toAvailableState,
   toDownloadedState,
   toErrorState,
   toInstallingState,
   toPreparingInstallState,
+  verifySha256,
   type GithubRelease,
   type UpdateState,
   validateDownloadedUpdate,
@@ -399,6 +402,15 @@ export function createUpdateController(options: UpdateControllerOptions) {
       return state;
     }
 
+    // Hard gate：必须提供配套 .sha256 校验文件，否则拒绝下载（防 MITM/注入恶意更新包）。
+    if (!state.sha256AssetUrl) {
+      return updateState(
+        toErrorState(
+          '更新包缺少完整性校验文件（.sha256），出于安全考虑已拒绝下载，请等待官方修复后再尝试'
+        )
+      );
+    }
+
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
     await mkdir(updatesDir, { recursive: true });
     const archivePath = join(updatesDir, state.assetName);
@@ -413,10 +425,21 @@ export function createUpdateController(options: UpdateControllerOptions) {
     });
 
     try {
+      // 1) 先取期望摘要（短文本，独立请求，失败即拒绝下载）
+      const shaResponse = await fetch(state.sha256AssetUrl, {
+        headers: { 'User-Agent': 'HouseholdBalanceSheet-Updater' },
+      });
+      if (!shaResponse.ok) {
+        throw new Error(`无法获取 SHA-256 校验文件: HTTP ${shaResponse.status}`);
+      }
+      const expectedSha256 = parseSha256File(await shaResponse.text());
+      if (!expectedSha256) {
+        throw new Error('SHA-256 校验文件格式不合法');
+      }
+
+      // 2) 下载主资产并同步增量计算 SHA-256
       const response = await fetch(state.assetUrl, {
-        headers: {
-          'User-Agent': 'HouseholdBalanceSheet-Updater',
-        },
+        headers: { 'User-Agent': 'HouseholdBalanceSheet-Updater' },
       });
       if (!response.ok || !response.body) {
         throw new Error(`下载更新失败: HTTP ${response.status}`);
@@ -426,6 +449,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
       const totalBytes = totalBytesHeader ? Number(totalBytesHeader) : undefined;
       const fileStream = createWriteStream(archivePath);
       const reader = response.body.getReader();
+      const hasher = createHash('sha256');
       let downloadedBytes = 0;
 
       while (true) {
@@ -433,8 +457,10 @@ export function createUpdateController(options: UpdateControllerOptions) {
         if (chunk.done) {
           break;
         }
+        const buf = Buffer.from(chunk.value);
+        hasher.update(buf);
         downloadedBytes += chunk.value.byteLength;
-        fileStream.write(Buffer.from(chunk.value));
+        fileStream.write(buf);
         updateState({
           status: 'downloading',
           downloadedBytes,
@@ -448,12 +474,22 @@ export function createUpdateController(options: UpdateControllerOptions) {
         fileStream.end(() => resolveWrite());
       });
 
+      // 3) 校验：实际 vs 期望，不一致立刻丢弃下载
+      const actualSha256 = hasher.digest('hex');
+      if (!verifySha256(actualSha256, expectedSha256)) {
+        rmSync(archivePath, { force: true });
+        throw new Error(
+          `更新包 SHA-256 校验失败（expected=${expectedSha256.slice(0, 12)}…，actual=${actualSha256.slice(0, 12)}…），已丢弃下载`
+        );
+      }
+
       return updateState(
         toDownloadedState({
           downloadedFilePath: archivePath,
           downloadedAt: new Date(now()).toISOString(),
           downloadedBytes,
           totalBytes: totalBytes ?? state.totalBytes,
+          verifiedSha256: actualSha256,
         })
       );
     } catch (error) {

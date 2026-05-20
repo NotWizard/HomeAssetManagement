@@ -29,6 +29,8 @@ export type UpdateCandidate = {
   releaseUrl?: string;
   publishedAt?: string;
   asset: UpdateAssetCandidate;
+  /** 可选：与 asset 同名的 .sha256 校验文件 URL，用于下载后做完整性校验。 */
+  sha256AssetUrl?: string;
 };
 
 export type PickUpdateCandidateOptions = {
@@ -55,6 +57,10 @@ export type UpdateState = {
   releaseUrl?: string;
   assetName?: string;
   assetUrl?: string;
+  /** 与 assetUrl 同一 release 中 `<assetName>.sha256` 配套校验文件的下载 URL。 */
+  sha256AssetUrl?: string;
+  /** 下载阶段计算并校验通过的 SHA-256，便于安装阶段二次确认。 */
+  verifiedSha256?: string;
   downloadedFilePath?: string;
   downloadedAt?: string;
   downloadedBytes?: number;
@@ -130,6 +136,53 @@ function findMatchingAsset(
   };
 }
 
+/**
+ * 在 release 资产列表中找到 `<assetName>.sha256` 配套校验文件（不区分大小写）。
+ *
+ * 该校验文件应仅包含 64 位十六进制 SHA-256 摘要（可选附文件名），由发版流水线生成并上传。
+ * 找不到时返回 null，调用方可决定是否拒绝此 release 或继续宽松接收。
+ */
+export function findSha256AssetUrl(
+  release: GithubRelease,
+  assetName: string
+): string | null {
+  const expected = `${assetName}.sha256`.toLowerCase();
+  const match = release.assets.find(
+    (item) => item.name?.toLowerCase() === expected
+  );
+  return match?.browser_download_url ?? null;
+}
+
+/**
+ * 解析 `.sha256` 文件内容为纯小写 64 位十六进制摘要。
+ *
+ * 支持以下两种常见格式：
+ *   "abc...def\n"
+ *   "abc...def  HouseholdBalanceSheet-1.2.3-macos-arm64.zip\n"
+ */
+export function parseSha256File(content: string): string | null {
+  const firstToken = content.trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  if (!/^[0-9a-f]{64}$/.test(firstToken)) {
+    return null;
+  }
+  return firstToken;
+}
+
+/**
+ * 比较计算得到的 SHA-256 与期望摘要。大小写不敏感；任一侧不是合法 64 位十六进制时返回 false。
+ */
+export function verifySha256(actual: string, expected: string): boolean {
+  const normalizedActual = actual.toLowerCase();
+  const normalizedExpected = expected.toLowerCase();
+  if (
+    !/^[0-9a-f]{64}$/.test(normalizedActual) ||
+    !/^[0-9a-f]{64}$/.test(normalizedExpected)
+  ) {
+    return false;
+  }
+  return normalizedActual === normalizedExpected;
+}
+
 export function pickUpdateCandidate(
   options: PickUpdateCandidateOptions
 ): UpdateCandidate | null {
@@ -155,6 +208,8 @@ export function pickUpdateCandidate(
       continue;
     }
 
+    const sha256AssetUrl = findSha256AssetUrl(item.release, asset.name);
+
     return {
       version: item.version,
       tagName: item.release.tag_name,
@@ -162,6 +217,7 @@ export function pickUpdateCandidate(
       releaseUrl: item.release.html_url,
       publishedAt: item.release.published_at,
       asset,
+      sha256AssetUrl: sha256AssetUrl ?? undefined,
     };
   }
 
@@ -197,6 +253,8 @@ export function toAvailableState(options: {
     releaseUrl: options.candidate.releaseUrl,
     assetName: options.candidate.asset.name,
     assetUrl: options.candidate.asset.url,
+    sha256AssetUrl: options.candidate.sha256AssetUrl,
+    verifiedSha256: undefined,
     totalBytes: options.candidate.asset.size,
     errorMessage: undefined,
     error: undefined,
@@ -208,6 +266,7 @@ export function toDownloadedState(options: {
   downloadedAt: string;
   downloadedBytes?: number;
   totalBytes?: number;
+  verifiedSha256?: string;
 }): Partial<UpdateState> {
   return {
     status: 'downloaded',
@@ -215,6 +274,7 @@ export function toDownloadedState(options: {
     downloadedAt: options.downloadedAt,
     downloadedBytes: options.downloadedBytes,
     totalBytes: options.totalBytes,
+    verifiedSha256: options.verifiedSha256,
     progress: 100,
     errorMessage: undefined,
     error: undefined,

@@ -22,5 +22,14 @@ echarts.use([
 type Props = Omit<EChartsReactProps, 'echarts'>;
 
 export function ECharts(props: Props) {
-  return <ReactEChartsCore echarts={echarts} {...props} />;
+  // 默认 notMerge=true：避免分析筛选切换时残留旧 series；
+  // 显式覆盖时 (props.notMerge !== undefined) 使用调用方指定的值。
+  return (
+    <ReactEChartsCore
+      echarts={echarts}
+      notMerge
+      lazyUpdate
+      {...props}
+    />
+  );
 }

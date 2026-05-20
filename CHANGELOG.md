@@ -75,6 +75,8 @@
 - Backend now exposes the application version through `/health` (`app_name / app_version / app_env`) and forces Alembic's `env.py` to use `Settings.database_url` instead of the hard-coded relative path in `alembic.ini`. Smoke / static-hosting / auth tests updated accordingly.
 - 文档修正：`AGENTS.md` 删除了对不存在模型 `gpt-5.4` 的硬编码引用，改为遵循 harness/CLI 默认。
 - Docs: remove the bogus `gpt-5.4` model pin from `AGENTS.md`; subagent model selection now follows the harness/CLI default.
+- 杂项清理：`backend/app/api/v1/categories.py` 删除被 `Query.pattern` 已覆盖的死代码二次校验；`frontend/src/components/charts/ECharts.tsx` 默认开启 `notMerge` + `lazyUpdate`，分析筛选切换时不再残留旧 series；`.gitignore` 补全 `.venv-x64/`、`.coverage`、`htmlcov/`、`*.egg-info/`；`backend/pytest.ini` 加 `--strict-markers`、`testpaths=tests` 与 `-ra`，过滤无关 DeprecationWarning。
+- Misc cleanup: drop unreachable second-pass validation in `categories.py` (already gated by `Query.pattern`); enable `notMerge` + `lazyUpdate` by default in the shared `ECharts` wrapper so analytics filter switches don't leave stale series; broaden `.gitignore` (`.venv-x64/`, `.coverage`, `htmlcov/`, `*.egg-info/`); expand `backend/pytest.ini` with `--strict-markers`, `testpaths=tests`, `-ra`, and a clean `filterwarnings`.
 
 ### Removed
 

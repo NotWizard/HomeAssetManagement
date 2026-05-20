@@ -57,6 +57,10 @@
 - Backend FX calls now have per-phase timeouts (`connect/read/write/pool=5s`) and a small retry envelope (`_fetch_with_retry`) with two backoff attempts (0.5s → 1.0s) before bubbling the final error up to the caller for graceful degradation.
 - `SettingsService.get_settings` 隐式创建路径加并发安全：`session.add + flush` 失败抛 `IntegrityError` 时回滚并重新 `SELECT`，避免两个请求同时落到该路径时撞 UNIQUE 约束或双写。
 - `SettingsService.get_settings` now handles concurrent first-time creates safely: an `IntegrityError` triggers a rollback and a re-`SELECT` rather than failing or double-inserting.
+- `CategoryService.resolve_path_by_name` 在每个层级 SELECT 上显式 `order_by(Category.id.asc()).limit(1)`，行为不再依赖 SQL 引擎隐式顺序。
+- Make `CategoryService.resolve_path_by_name` deterministic by adding explicit `order_by(Category.id.asc()).limit(1)` to each level lookup.
+- `app/core/logging.py` 改造：日志 root logger 仅初始化一次（`_logging_initialized` 守护），日志级别支持通过 `HBS_LOG_LEVEL` 环境变量覆盖（默认 `INFO`），不再每次 `get_logger` 调用 `basicConfig` 造成语义混乱。
+- Refactor `app/core/logging.py`: initialize the root logger exactly once, honor the `HBS_LOG_LEVEL` env var (default `INFO`), and stop calling `basicConfig` from every `get_logger` invocation.
 
 ### Removed
 

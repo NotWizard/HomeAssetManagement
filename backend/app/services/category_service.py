@@ -57,32 +57,41 @@ class CategoryService:
     def resolve_path_by_name(
         session: Session, ctype: str, l1_name: str, l2_name: str, l3_name: str
     ) -> tuple[Category, Category, Category]:
+        # 显式 order_by id ASC + limit 1：万一有同名重复（异常情况），保证行为可预测，
+        # 不再依赖 SQL 引擎隐式选择。
         l1 = session.scalar(
-            select(Category).where(
-                Category.type == ctype, Category.level == 1, Category.name == l1_name
-            )
+            select(Category)
+            .where(Category.type == ctype, Category.level == 1, Category.name == l1_name)
+            .order_by(Category.id.asc())
+            .limit(1)
         )
         if l1 is None:
             raise ValueError(f"找不到一级分类: {l1_name}")
 
         l2 = session.scalar(
-            select(Category).where(
+            select(Category)
+            .where(
                 Category.type == ctype,
                 Category.level == 2,
                 Category.name == l2_name,
                 Category.parent_id == l1.id,
             )
+            .order_by(Category.id.asc())
+            .limit(1)
         )
         if l2 is None:
             raise ValueError(f"找不到二级分类: {l2_name}")
 
         l3 = session.scalar(
-            select(Category).where(
+            select(Category)
+            .where(
                 Category.type == ctype,
                 Category.level == 3,
                 Category.name == l3_name,
                 Category.parent_id == l2.id,
             )
+            .order_by(Category.id.asc())
+            .limit(1)
         )
         if l3 is None:
             raise ValueError(f"找不到三级分类: {l3_name}")

@@ -25,6 +25,11 @@
 - 后端 `/{full_path:path}` catch-all 不再吞掉 `/api/*`、`/docs`、`/openapi.json`、`/redoc`、`/health` 等保留前缀；拼写错误的 API 路径会返回 404 而不是静默回 200 + 前端 index。新增 `test_unmatched_api_paths_do_not_fall_through_to_frontend` 回归用例。
 - Backend `/{full_path:path}` catch-all no longer swallows `/api/*`, `/docs`, `/openapi.json`, `/redoc`, or `/health`; mistyped API paths now correctly return 404 instead of silently 200 with the frontend index. Covered by a new regression test `test_unmatched_api_paths_do_not_fall_through_to_frontend`.
 
+### Security
+
+- 后端 CORS 收紧：`allow_methods` 与 `allow_headers` 改为显式白名单（GET/POST/PUT/PATCH/DELETE/OPTIONS；Accept/Authorization/Content-Type/X-Request-Id），不再使用 `*`+`allow_credentials=True` 反模式。允许的源通过 `HBS_CORS_ORIGINS`（逗号分隔）覆盖；空字符串则不挂载 CORS（适配桌面同源场景）。新增 `test_cors_policy.py` 4 个用例锁定行为。
+- Backend CORS hardened: replace the `allow_methods=["*"]+allow_credentials=True` anti-pattern with explicit allow-lists for both methods and headers. Allowed origins are now overridable via `HBS_CORS_ORIGINS` (comma-separated); an empty value disables CORS entirely for the desktop same-origin packaging case. Covered by four new tests in `test_cors_policy.py`.
+
 ### Removed
 
 ### Deprecated

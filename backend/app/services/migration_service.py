@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import shutil
 import tempfile
 import zipfile
@@ -16,7 +17,10 @@ from sqlalchemy.orm import Session
 from app.core.clock import format_utc_iso_z
 from app.core.clock import normalize_utc_naive
 from app.core.clock import utc_now_naive
+from app.core.config import get_settings
 from app.core.exceptions import AppError
+
+logger = logging.getLogger(__name__)
 from app.models.category import Category
 from app.models.holding_item import HoldingItem
 from app.models.member import Member
@@ -220,6 +224,9 @@ class MigrationService:
     def import_package(session: Session, file_obj: BinaryIO, filename: str) -> dict[str, Any]:
         import_dir = Path(tempfile.mkdtemp(prefix="ham-migration-import-"))
         archive_path = import_dir / (Path(filename).name or "migration.zip")
+        # 在删除并重建之前先做 SQLite 文件级备份，作为最后一道安全网。
+        # 即使 _restore_package 内部部分失败而事务回滚不彻底，用户仍可从这份备份手动恢复。
+        backup_file = _create_sqlite_backup_before_import()
 
         try:
             if hasattr(file_obj, "seek"):
@@ -240,6 +247,40 @@ class MigrationService:
                 raise AppError(4002, f"迁移包导入失败: {exc}") from exc
         finally:
             shutil.rmtree(import_dir, ignore_errors=True)
+            if backup_file is not None:
+                logger.info("migration import: SQLite 备份已保留于 %s", backup_file)
+
+
+def _create_sqlite_backup_before_import() -> Path | None:
+    """在迁移导入开始前对 SQLite 数据库文件做 best-effort 备份。
+
+    返回备份文件路径；非 SQLite / 备份失败则返回 None（不抛错以免中断主流程）。
+    备份默认放在 `Settings.storage_dir/backups/migration-<UTC>.db`，由用户自行清理。
+    """
+    settings = get_settings()
+    db_url = settings.database_url
+    if not db_url.startswith("sqlite"):
+        return None
+
+    try:
+        # sqlite:///./relative/path  或  sqlite:////absolute/path
+        path_part = db_url.split("sqlite://", 1)[1]
+        if path_part.startswith("/"):
+            db_path = Path(path_part[1:]) if path_part.startswith("/./") else Path(path_part)
+        else:
+            db_path = Path(path_part.lstrip("/"))
+        if not db_path.exists():
+            return None
+
+        backups_dir = Path(settings.storage_dir) / "backups"
+        backups_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = utc_now_naive().strftime("%Y-%m-%dT%H-%M-%S")
+        backup_path = backups_dir / f"migration-{timestamp}.db"
+        shutil.copy2(db_path, backup_path)
+        return backup_path
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("migration import: 创建 SQLite 备份失败：%s", exc, exc_info=True)
+        return None
 
 
 def _load_package(archive_path: Path, filename: str) -> dict[str, Any]:

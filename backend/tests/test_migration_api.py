@@ -257,6 +257,58 @@ def test_import_migration_replaces_existing_data():
     assert state['snapshot_payloads'][-1] == snapshots[-1]['payload']
 
 
+def test_create_sqlite_backup_before_import_writes_file_to_storage_dir(tmp_path, monkeypatch):
+    """直接测 _create_sqlite_backup_before_import：模拟一个 sqlite db 文件，验证备份目录与命名。"""
+    import importlib
+
+    fake_db_file = tmp_path / "fake.db"
+    fake_db_file.write_bytes(b"fake-sqlite-content")
+    monkeypatch.setenv("HBS_DATABASE_URL", f"sqlite:///{fake_db_file}")
+    monkeypatch.setenv("HBS_STORAGE_DIR", str(tmp_path))
+
+    import app.core.config as config_module
+    import app.services.migration_service as migration_module
+
+    config_module.get_settings.cache_clear()
+    importlib.reload(config_module)
+    importlib.reload(migration_module)
+
+    try:
+        backup_path = migration_module._create_sqlite_backup_before_import()
+        assert backup_path is not None, "应该成功生成备份"
+        assert backup_path.exists()
+        assert backup_path.parent == tmp_path / "backups"
+        assert backup_path.name.startswith("migration-")
+        assert backup_path.name.endswith(".db")
+        assert backup_path.read_bytes() == b"fake-sqlite-content"
+    finally:
+        config_module.get_settings.cache_clear()
+        importlib.reload(config_module)
+        importlib.reload(migration_module)
+
+
+def test_create_sqlite_backup_before_import_returns_none_when_db_missing(tmp_path, monkeypatch):
+    """db 文件不存在时不抛错，返回 None，避免阻塞主流程。"""
+    import importlib
+
+    monkeypatch.setenv("HBS_DATABASE_URL", f"sqlite:///{tmp_path}/no-such.db")
+    monkeypatch.setenv("HBS_STORAGE_DIR", str(tmp_path))
+
+    import app.core.config as config_module
+    import app.services.migration_service as migration_module
+
+    config_module.get_settings.cache_clear()
+    importlib.reload(config_module)
+    importlib.reload(migration_module)
+
+    try:
+        assert migration_module._create_sqlite_backup_before_import() is None
+    finally:
+        config_module.get_settings.cache_clear()
+        importlib.reload(config_module)
+        importlib.reload(migration_module)
+
+
 def test_import_migration_rolls_back_on_invalid_package():
     with TestClient(app) as client:
         _seed_exportable_data(client)

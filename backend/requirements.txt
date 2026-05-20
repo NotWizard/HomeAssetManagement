@@ -1,9 +1,12 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-alembic
-pydantic-settings
-apscheduler
-httpx
-python-multipart
-pytest
+# 直接依赖 / direct dependencies
+# 完整 transitive 锁定见 backend/requirements.lock
+# Full transitive lock lives at backend/requirements.lock
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+sqlalchemy==2.0.49
+alembic==1.18.4
+pydantic-settings==2.14.1
+apscheduler==3.11.2
+httpx==0.28.1
+python-multipart==0.0.29
+pytest==9.0.3

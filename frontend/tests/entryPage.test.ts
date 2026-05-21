@@ -6,7 +6,9 @@ import {
   buildNormalizationPlan,
   buildPathOptions,
   buildTargetRatioStatus,
+  formatAllocationDeviation,
   formatTargetRatioSummary,
+  hasMemberAllocationImbalance,
   hasValidTwoDecimalAmount,
   normalizeAmountInput,
   summarizeHoldings,
@@ -207,6 +209,65 @@ test('summarizeMemberAllocations 会统计达标/未达标/超出/无资产', ()
   assert.equal(overview.underAllocated, 1);
   assert.equal(overview.overAllocated, 1);
   assert.equal(overview.withoutAssets, 1);
+});
+
+test('hasMemberAllocationImbalance 仅当存在未达标或已超出时返回 true', () => {
+  // 全部达标稳态：不应弹出顶部概览
+  assert.equal(
+    hasMemberAllocationImbalance({
+      total: 3,
+      balanced: 3,
+      underAllocated: 0,
+      overAllocated: 0,
+      withoutAssets: 0,
+    }),
+    false
+  );
+  // 没有任何成员有资产：也属于"无需提醒"的稳态
+  assert.equal(
+    hasMemberAllocationImbalance({
+      total: 2,
+      balanced: 0,
+      underAllocated: 0,
+      overAllocated: 0,
+      withoutAssets: 2,
+    }),
+    false
+  );
+  // 出现未达标：应展开
+  assert.equal(
+    hasMemberAllocationImbalance({
+      total: 3,
+      balanced: 2,
+      underAllocated: 1,
+      overAllocated: 0,
+      withoutAssets: 0,
+    }),
+    true
+  );
+  // 出现已超出：应展开
+  assert.equal(
+    hasMemberAllocationImbalance({
+      total: 3,
+      balanced: 2,
+      underAllocated: 0,
+      overAllocated: 1,
+      withoutAssets: 0,
+    }),
+    true
+  );
+});
+
+test('formatAllocationDeviation 把 delta 渲染为带正负号的偏差量徽章文本', () => {
+  // 达标视为零偏差，返回 null 让卡片显示"已达标"占位文案
+  assert.equal(formatAllocationDeviation(0), null);
+  assert.equal(formatAllocationDeviation(0.00005), null);
+  // delta > 0 表示总和不足 100%（少了多少），徽章用减号
+  assert.equal(formatAllocationDeviation(3.5), '-3.5%');
+  assert.equal(formatAllocationDeviation(0.05), '-0.05%');
+  // delta < 0 表示总和超过 100%（多了多少），徽章用加号
+  assert.equal(formatAllocationDeviation(-5.2), '+5.2%');
+  assert.equal(formatAllocationDeviation(-0.05), '+0.05%');
 });
 
 test('buildNormalizationPlan 会按当前比例缩放至合计 100%', () => {

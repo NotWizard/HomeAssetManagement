@@ -225,6 +225,30 @@ export function summarizeMemberAllocations(
   return overview;
 }
 
+/**
+ * 是否存在成员配比偏离 100% 的情况。
+ *
+ * 用于驱动「成员目标占比配平」概览区的折叠 / 展开行为：全部达标的稳态下整块返回 null，
+ * 出现 未达标 / 已超出 时才把概览展示出来，避免稳态下大量"装饰性"卡片侵占表格视野。
+ */
+export function hasMemberAllocationImbalance(overview: MemberAllocationOverview): boolean {
+  return overview.underAllocated > 0 || overview.overAllocated > 0;
+}
+
+/**
+ * 把 delta（= 100 - totalRatio）格式化成卡片状态徽章里的偏差量文本：
+ *   未达标 → "-3.5%"（少了多少）
+ *   已超出 → "+5.2%"（多了多少）
+ *   达标   → null（调用方自行决定显示"已达标"还是省略）
+ */
+export function formatAllocationDeviation(delta: number): string | null {
+  if (Math.abs(delta) <= TARGET_RATIO_EPSILON) {
+    return null;
+  }
+  const sign = delta > 0 ? '-' : '+';
+  return `${sign}${formatTargetRatioDelta(delta)}`;
+}
+
 export type NormalizationItem = {
   id: number;
   name: string;

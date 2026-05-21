@@ -12,6 +12,7 @@ import {
   invalidateImportLogQueries,
   queryKeys,
 } from '../services/holdingRelatedQueries';
+import { PageHeader } from '../components/layout/PageHeader';
 import { commitImport, downloadImportErrors, fetchImportLogs, previewImport, type ImportPreview } from '../services/imports';
 import { formatError } from '../utils/formatError';
 
@@ -58,11 +59,12 @@ export function ImportPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold">CSV 导入中心</h2>
-        <p className="text-sm text-muted-foreground">上传、预检、提交三步完成资产负债批量同步</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="IMPORT"
+        title="CSV 导入中心"
+        description="上传、预检、提交三步完成资产负债批量同步。"
+      />
 
       <Card>
         <CardHeader className="pb-2">

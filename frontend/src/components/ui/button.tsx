@@ -4,20 +4,27 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
+  // 基础：圆角 xl、柔和过渡、focus ring 用 box-shadow.ring（更现代）
+  'inline-flex items-center justify-center whitespace-nowrap rounded-xl text-sm font-medium transition-all focus-visible:outline-none focus-visible:shadow-ring disabled:pointer-events-none disabled:opacity-50 active:translate-y-px',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground shadow-soft hover:brightness-95',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/90',
-        ghost: 'hover:bg-secondary',
-        outline: 'border bg-card hover:bg-secondary',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        default:
+          'bg-primary text-primary-foreground shadow-soft hover:bg-primary/92',
+        secondary:
+          'bg-secondary text-secondary-foreground border border-border/60 hover:bg-surface-strong',
+        ghost: 'text-foreground hover:bg-secondary',
+        outline:
+          'border border-border bg-card text-foreground hover:bg-secondary',
+        destructive:
+          'bg-destructive text-destructive-foreground shadow-soft hover:bg-destructive/90',
+        subtle:
+          'bg-accent text-accent-foreground hover:bg-accent/80',
       },
       size: {
         default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
-        lg: 'h-11 rounded-lg px-6',
+        sm: 'h-9 rounded-lg px-3',
+        lg: 'h-11 rounded-xl px-6',
         icon: 'h-10 w-10',
       },
     },

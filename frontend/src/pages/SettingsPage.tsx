@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
+import { PageHeader } from '../components/layout/PageHeader';
 import {
   invalidateLightSettingsQueries,
   invalidateMemberQueries,
@@ -141,11 +142,12 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold">系统设置</h2>
-        <p className="text-sm text-muted-foreground">配置基准币种、服务端业务时区、再平衡阈值、汇率提供方与迁移备份能力</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="SETTINGS"
+        title="系统设置"
+        description="配置基准币种、业务时区、再平衡阈值、汇率提供方与迁移备份能力。"
+      />
 
       <Card>
         <CardHeader className="pb-2">

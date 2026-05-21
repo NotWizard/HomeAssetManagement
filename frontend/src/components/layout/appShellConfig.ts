@@ -14,4 +14,4 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
 ];
 
 export const APP_SHELL_UPDATE_SECTION_CLASS =
-  'mt-auto border-t border-slate-200/70 p-3';
+  'mt-auto border-t border-border/60 px-3 py-4';

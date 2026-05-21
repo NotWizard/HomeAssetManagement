@@ -6,6 +6,8 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { PageHeader } from '../components/layout/PageHeader';
+import { cn } from '../lib/cn';
 import { queryKeys } from '../services/holdingRelatedQueries';
 import { fetchRebalance, fetchTrend } from '../services/analytics';
 import { fetchHoldings } from '../services/holdings';
@@ -103,17 +105,18 @@ export function OverviewPage() {
   const topAssetsError = holdingsUnavailable ? holdingsErrorMessage ?? '请求失败' : null;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">Overview</h2>
-          <p className="text-sm text-muted-foreground">家庭资产与负债关键指标概览</p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-          <Badge variant="secondary">基准币 {baseCurrencyBadge}</Badge>
-          <Badge variant="secondary">汇率源 {fxProviderBadge}</Badge>
-        </div>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="OVERVIEW"
+        title="家庭资产负债总览"
+        description="一眼看清净资产、总资产、总负债的关键指标与近期趋势，发现异常即时跟进。"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline">基准币 {baseCurrencyBadge}</Badge>
+            <Badge variant="outline">汇率源 {fxProviderBadge}</Badge>
+          </div>
+        }
+      />
 
       {hasQueryWarning ? (
         <Card className="border-rose-200 bg-rose-50/50">
@@ -267,14 +270,26 @@ export function OverviewPage() {
           {rebalanceUnavailable ? null : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {(rebalanceQuery.data ?? []).slice(0, 6).map((item) => (
-                <div key={item.id} className="rounded-lg border bg-secondary/45 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <p className="font-medium">{item.name}</p>
-                    <Badge variant={item.status === '超配' ? 'danger' : 'success'}>{item.status}</Badge>
+                <div
+                  key={item.id}
+                  className="group rounded-2xl border border-border/60 bg-surface-subtle p-4 transition-all hover:bg-card hover:shadow-card"
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold">{item.name}</p>
+                    <Badge variant={item.status === '超配' ? 'danger' : 'success'}>
+                      {item.status}
+                    </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">目标占比 {formatPercent(item.target_ratio)}</p>
-                  <p className="text-xs text-muted-foreground">当前占比 {formatPercent(item.current_ratio)}</p>
-                  <p className="mt-2 text-sm font-semibold">偏离 {formatPercent(item.deviation)}</p>
+                  <div className="flex items-center justify-between text-[12px] text-muted-foreground">
+                    <span>目标 {formatPercent(item.target_ratio)}</span>
+                    <span>当前 {formatPercent(item.current_ratio)}</span>
+                  </div>
+                  <div className="mt-3 flex items-baseline gap-1.5">
+                    <span className="text-xs text-muted-foreground">偏离</span>
+                    <span className="text-base font-semibold tabular-nums text-foreground">
+                      {formatPercent(item.deviation)}
+                    </span>
+                  </div>
                 </div>
               ))}
               {(rebalanceQuery.data ?? []).length === 0 ? (
@@ -304,19 +319,37 @@ function MetricCard({
   loading: boolean;
 }) {
   return (
-    <Card>
+    <Card className="surface-card-interactive">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-          <div className="rounded-md bg-secondary p-2 text-primary">{icon}</div>
+          <CardTitle className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {title}
+          </CardTitle>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+            {icon}
+          </div>
         </div>
       </CardHeader>
       <CardContent>
-        {loading ? <Skeleton className="h-8 w-28" /> : <p className="text-2xl font-semibold">{value}</p>}
-        <p className="mt-2 text-xs">
-          <span className={positive ? 'text-emerald-600' : 'text-rose-600'}>{delta}</span>
-          <span className="ml-1 text-muted-foreground">对比上期</span>
-        </p>
+        {loading ? (
+          <Skeleton className="h-9 w-32" />
+        ) : (
+          <p className="text-3xl font-semibold tracking-tight tabular-nums text-foreground">{value}</p>
+        )}
+        <div className="mt-3 flex items-center gap-2 text-xs">
+          <span
+            className={cn(
+              'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 font-medium',
+              positive
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-rose-50 text-rose-700'
+            )}
+          >
+            {positive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+            {delta}
+          </span>
+          <span className="text-muted-foreground">对比上期</span>
+        </div>
       </CardContent>
     </Card>
   );

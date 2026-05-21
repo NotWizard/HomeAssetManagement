@@ -29,6 +29,7 @@ import {
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { SearchableSelect, type SearchableSelectOption } from '../components/ui/searchable-select';
+import { PageHeader } from '../components/layout/PageHeader';
 import { fetchCategories } from '../services/categories';
 import {
   invalidateHoldingRelatedQueries,
@@ -346,17 +347,18 @@ export function EntryPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">资产与负债录入</h2>
-          <p className="text-sm text-muted-foreground">固定三级分类与多币种金额录入，成员由“成员管理”菜单统一维护</p>
-        </div>
-        <Button onClick={openCreateDialog} disabled={!hasMembers}>
-          <Plus className="mr-2 h-4 w-4" />
-          新增条目
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="ENTRY"
+        title="资产与负债录入"
+        description={'固定三级分类与多币种金额录入，成员由“成员管理”菜单统一维护。'}
+        actions={
+          <Button onClick={openCreateDialog} disabled={!hasMembers}>
+            <Plus className="mr-2 h-4 w-4" />
+            新增条目
+          </Button>
+        }
+      />
 
       {!hasMembers ? (
         <Card className="border-amber-200 bg-amber-50/60">

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
+import { PageHeader } from '../components/layout/PageHeader';
 import { invalidateMemberHoldingRelatedQueries, invalidateMemberQueries, queryKeys } from '../services/holdingRelatedQueries';
 import { createMember, deleteMember, fetchMembers } from '../services/members';
 
@@ -58,11 +59,12 @@ export function MembersPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-xl font-semibold">成员管理</h2>
-        <p className="text-sm text-muted-foreground">独立维护家庭成员，便于后续资产与负债归属录入</p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="MEMBERS"
+        title="成员管理"
+        description="独立维护家庭成员，便于后续资产与负债归属录入。"
+      />
 
       <Card className="max-w-3xl">
         <CardHeader className="pb-2">

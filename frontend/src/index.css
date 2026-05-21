@@ -2,27 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- Design tokens (灵感来自 OutcomeIQ 风格 dashboard：浅灰底、白色卡片、柔和阴影、克制色彩) ---- */
 :root {
-  --background: 222 56% 98%;
-  --foreground: 222 30% 15%;
+  /* 应用底色：极浅冷灰，让卡片自然浮起 */
+  --background: 226 30% 96.5%;
+  --foreground: 226 32% 14%;
+
   --card: 0 0% 100%;
-  --card-foreground: 222 25% 16%;
+  --card-foreground: 226 32% 14%;
+
   --popover: 0 0% 100%;
-  --popover-foreground: 222 25% 16%;
-  --primary: 245 90% 67%;
+  --popover-foreground: 226 32% 14%;
+
+  /* 主色：现代深蓝（按钮 / 主操作 / 选中态高亮） */
+  --primary: 222 89% 58%;
   --primary-foreground: 210 40% 98%;
-  --secondary: 235 30% 96%;
-  --secondary-foreground: 230 28% 28%;
-  --muted: 230 26% 94%;
-  --muted-foreground: 225 15% 45%;
-  --accent: 249 95% 95%;
-  --accent-foreground: 246 65% 42%;
-  --destructive: 0 84% 60%;
+
+  /* 次级：极浅蓝灰，用于 hover 和静态 chip */
+  --secondary: 226 30% 95%;
+  --secondary-foreground: 226 32% 26%;
+
+  /* 静默色：副标题 / placeholder / 图表轴 */
+  --muted: 226 22% 94%;
+  --muted-foreground: 226 12% 45%;
+
+  /* 强调色：选中态浅蓝高亮（侧栏当前项 / KPI 趋势条） */
+  --accent: 222 88% 96%;
+  --accent-foreground: 222 80% 38%;
+
+  --destructive: 0 78% 60%;
   --destructive-foreground: 210 40% 98%;
-  --border: 225 30% 88%;
-  --input: 225 30% 88%;
-  --ring: 245 90% 67%;
-  --radius: 0.9rem;
+
+  /* 边线极浅，主要靠阴影分层 */
+  --border: 226 25% 91%;
+  --input: 226 25% 91%;
+  --ring: 222 89% 58%;
+
+  --radius: 1rem;
+
+  /* 自定义：表层颜色（不同层级灰阶） */
+  --surface-subtle: 226 30% 98%;
+  --surface-strong: 226 25% 92%;
+
+  /* KPI / 图表彩盘 */
+  --chart-1: 222 89% 58%; /* primary blue */
+  --chart-2: 168 76% 42%; /* teal */
+  --chart-3: 24 96% 60%;  /* warm orange */
+  --chart-4: 262 83% 65%; /* violet */
+  --chart-5: 350 85% 62%; /* rose */
+  --chart-6: 210 12% 30%; /* slate (深) */
 }
 
 * {
@@ -38,14 +66,67 @@ body,
 body {
   @apply bg-background text-foreground antialiased;
   margin: 0;
+  font-feature-settings: "cv11", "ss01", "ss03";
 }
 
+/* 文字层级 */
+h1, h2, h3, h4 {
+  letter-spacing: -0.01em;
+}
+
+/* 滚动条更细更浅 */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: rgba(105, 110, 160, 0.35);
+  background: hsl(var(--surface-strong));
   border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(226 18% 80%);
+  background-clip: padding-box;
+}
+
+/* 卡片专用：标准面板视觉 */
+.surface-card {
+  @apply rounded-2xl border border-border/60 bg-card shadow-card;
+}
+
+/* hover 略微抬升的可点击卡片 */
+.surface-card-interactive {
+  @apply surface-card transition-all hover:shadow-elevated hover:-translate-y-0.5;
+}
+
+/* 仪表盘 chip / 数据小标 */
+.chip {
+  @apply inline-flex items-center gap-1 rounded-full border border-border/70 bg-secondary px-2.5 py-1 text-xs font-medium text-secondary-foreground;
+}
+
+/* mini sparkline 网格 */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+/* 选中态：当前路由 / pill */
+.nav-pill-active {
+  @apply bg-accent text-accent-foreground;
+  box-shadow: inset 0 0 0 1px hsl(var(--accent-foreground) / 0.12);
+}
+
+/* 标题区：与设计图一致的"一行两列"统一 spacing */
+.section-header {
+  @apply flex flex-wrap items-center justify-between gap-3;
+}
+
+/* 数字字体：让 KPI 大数更好读 */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }

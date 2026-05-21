@@ -150,11 +150,16 @@ export function AnalyticsPage() {
   }, [analyticsView, currencySummaries, selectedCurrency, setSelectedAnalyticsCurrency]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold">分析看板</h2>
-          <p className="text-sm text-muted-foreground">从整体概览、风险配置和币种总览三个视角查看家庭资产负债</p>
+        <div className="space-y-1.5">
+          <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+            ANALYTICS
+          </div>
+          <h1 className="text-[22px] font-semibold tracking-tight md:text-2xl">分析看板</h1>
+          <p className="max-w-3xl text-sm text-muted-foreground">
+            从整体概览、风险配置和币种总览三个视角查看家庭资产负债。
+          </p>
         </div>
 
         <div className="min-w-0 xl:ml-6 xl:flex xl:flex-shrink-0 xl:justify-end">

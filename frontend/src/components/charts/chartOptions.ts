@@ -346,10 +346,10 @@ export function buildCorrelationHeatmapOption(data: CorrelationData) {
       },
     },
     grid: {
-      left: 112,
-      right: 24,
-      top: 20,
-      bottom: 104,
+      left: 88,
+      right: 16,
+      top: 8,
+      bottom: 92,
       containLabel: true,
     },
     xAxis: {

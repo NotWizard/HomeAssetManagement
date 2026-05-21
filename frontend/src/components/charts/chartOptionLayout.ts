@@ -14,18 +14,18 @@ export const TREND_CHART_GRID = {
 } as const;
 
 export const VOLATILITY_CHART_GRID = {
-  left: 80,
-  right: 24,
-  top: 16,
-  bottom: 60,
+  left: 64,
+  right: 16,
+  top: 8,
+  bottom: 44,
   containLabel: true,
 } as const;
 
-export const VOLATILITY_Y_AXIS_NAME_GAP = 56;
+export const VOLATILITY_Y_AXIS_NAME_GAP = 44;
 
 export const CORRELATION_HEATMAP_Y_AXIS_LABEL = {
   color: '#8b90b7',
-  width: 112,
+  width: 88,
   overflow: 'break',
   lineHeight: 14,
   margin: 14,

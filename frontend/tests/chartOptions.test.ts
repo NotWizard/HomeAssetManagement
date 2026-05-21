@@ -33,7 +33,7 @@ test('折线图和币种柱状图收紧 grid，避免与 containLabel 形成双�
 test('热力图和桑基图不会继续默认截断左侧文本', () => {
   assert.deepEqual(CORRELATION_HEATMAP_Y_AXIS_LABEL, {
     color: '#8b90b7',
-    width: 112,
+    width: 88,
     overflow: 'break',
     lineHeight: 14,
     margin: 14,
@@ -73,13 +73,13 @@ test('波动率图遇到样本不足（volatility=null）不会强转 0，toolti
 
 test('波动率图和币种拆分图为长标签保留可读布局', () => {
   assert.deepEqual(VOLATILITY_CHART_GRID, {
-    left: 80,
-    right: 24,
-    top: 16,
-    bottom: 60,
+    left: 64,
+    right: 16,
+    top: 8,
+    bottom: 44,
     containLabel: true,
   });
-  assert.equal(VOLATILITY_Y_AXIS_NAME_GAP, 56);
+  assert.equal(VOLATILITY_Y_AXIS_NAME_GAP, 44);
   assert.deepEqual(CURRENCY_BREAKDOWN_LABEL, {
     color: '#4b5070',
     width: 126,

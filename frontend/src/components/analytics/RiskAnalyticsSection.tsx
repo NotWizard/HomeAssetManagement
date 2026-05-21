@@ -38,6 +38,9 @@ export function RiskAnalyticsSection({
 }: RiskAnalyticsSectionProps) {
   return (
     <div className="space-y-4">
+      {/* 上排两图表：波动率 + 相关性矩阵。两者高度都有上限（柱图 ~320-420px、热力图 ~420-820px），
+          左右等宽对齐不会出现大块留白。再平衡表格因为行数随资产规模线性增长（无上限），独占下排
+          全宽，避免它把高度有限的图表卡片拖成同步长度。 */}
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader className="pb-1">
@@ -59,58 +62,59 @@ export function RiskAnalyticsSection({
 
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-sm">再平衡提醒</CardTitle>
-            <CardDescription>查看哪些资产当前偏离了设定的目标占比。</CardDescription>
+            <CardTitle className="text-sm">相关性矩阵</CardTitle>
+            <CardDescription>观察资产之间的联动程度，辅助分散配置决策。</CardDescription>
           </CardHeader>
           <CardContent>
-            {rebalanceIsError ? (
-              <ErrorState text={`再平衡提醒加载失败：${formatError(rebalanceError)}`} />
-            ) : (rebalanceData ?? []).length === 0 ? (
-              <EmptyState icon={<Sparkles className="h-5 w-5 text-primary" />} text="当前配置在阈值范围内。" />
+            {correlationIsError ? (
+              <ErrorState text={`相关性矩阵加载失败：${formatError(correlationError)}`} />
+            ) : (correlationData?.assets.length ?? 0) < 2 ? (
+              <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，无法计算相关性矩阵。" />
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>资产</TableHead>
-                    <TableHead>目标占比</TableHead>
-                    <TableHead>当前占比</TableHead>
-                    <TableHead>偏离</TableHead>
-                    <TableHead>状态</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(rebalanceData ?? []).map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell className="font-medium">{row.name}</TableCell>
-                      <TableCell>{formatPercent(row.target_ratio)}</TableCell>
-                      <TableCell>{formatPercent(row.current_ratio)}</TableCell>
-                      <TableCell>{formatPercent(row.deviation)}</TableCell>
-                      <TableCell>
-                        <Badge variant={row.status === '超配' ? 'danger' : 'success'}>{row.status}</Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
+                <CorrelationHeatmap data={correlationData!} />
+              </Suspense>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* 再平衡提醒：作为"行动导向"卡片独占下排全宽。资产数多时表格自然向下延伸，不会牵动其他卡片。 */}
       <Card>
         <CardHeader className="pb-1">
-          <CardTitle className="text-sm">相关性矩阵</CardTitle>
-          <CardDescription>观察资产之间的联动程度，辅助分散配置决策。</CardDescription>
+          <CardTitle className="text-sm">再平衡提醒</CardTitle>
+          <CardDescription>查看哪些资产当前偏离了设定的目标占比。</CardDescription>
         </CardHeader>
         <CardContent>
-          {correlationIsError ? (
-            <ErrorState text={`相关性矩阵加载失败：${formatError(correlationError)}`} />
-          ) : (correlationData?.assets.length ?? 0) < 2 ? (
-            <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，无法计算相关性矩阵。" />
+          {rebalanceIsError ? (
+            <ErrorState text={`再平衡提醒加载失败：${formatError(rebalanceError)}`} />
+          ) : (rebalanceData ?? []).length === 0 ? (
+            <EmptyState icon={<Sparkles className="h-5 w-5 text-primary" />} text="当前配置在阈值范围内。" />
           ) : (
-            <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
-              <CorrelationHeatmap data={correlationData!} />
-            </Suspense>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>资产</TableHead>
+                  <TableHead>目标占比</TableHead>
+                  <TableHead>当前占比</TableHead>
+                  <TableHead>偏离</TableHead>
+                  <TableHead>状态</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(rebalanceData ?? []).map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="font-medium">{row.name}</TableCell>
+                    <TableCell>{formatPercent(row.target_ratio)}</TableCell>
+                    <TableCell>{formatPercent(row.current_ratio)}</TableCell>
+                    <TableCell>{formatPercent(row.deviation)}</TableCell>
+                    <TableCell>
+                      <Badge variant={row.status === '超配' ? 'danger' : 'success'}>{row.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

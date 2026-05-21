@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 桌面 macOS DMG 打包链路改造：移除 `@electron-forge/maker-dmg`（依赖 `electron-installer-dmg → appdmg → macos-alias` 这条原生编译链，在较新 Node 上会因 `nan`/V8 ABI 失配在 `node-gyp rebuild` 阶段直接挂掉，使 `make:dmg` 失败），dmg 这一步改由新的 `desktop/scripts/build-dmg.mjs` 通过 macOS 自带的 `hdiutil` + `osascript` 自制：包含 `/Applications` 软链、品牌背景图、卷名 `家庭资产负债表`、Finder 窗口图标位置与大小、ULFO 压缩。`forge.config.ts` 现在只挂 `maker-zip`，并新增导出 `dmgVisualConfig` 作为 dmg 视觉真理源；`make-macos-release.mjs` 在 forge 完成后调用 `buildDmgArtifact`，端到端 `npm --prefix desktop run make:dmg:arm64` 已恢复可用。新增 4 例 `build-dmg.test.ts` 单测覆盖路径解析、暂存目录命名与 AppleScript 字符串构造；改写 4 例 `forge-config.test.ts` 同步新结构。
+- Rework the macOS DMG packaging pipeline: drop `@electron-forge/maker-dmg` (which transitively depends on `electron-installer-dmg → appdmg → macos-alias`, a native module that fails `node-gyp rebuild` against newer Node versions due to `nan`/V8 ABI drift, breaking `make:dmg`). The dmg step is now produced by a new `desktop/scripts/build-dmg.mjs` that drives macOS's own `hdiutil` + `osascript`: it stages the `.app` with an `/Applications` symlink, lays in the branded background image, sets the volume name (`家庭资产负债表`), arranges the Finder icon positions/size, and compresses with ULFO. `forge.config.ts` only registers `maker-zip` now and exports a new `dmgVisualConfig` as the visual source of truth; `make-macos-release.mjs` calls `buildDmgArtifact` after Forge finishes. End-to-end `npm --prefix desktop run make:dmg:arm64` is green again. Covered by four new `build-dmg.test.ts` cases (path resolution, staging directory naming, AppleScript construction) and four reworked `forge-config.test.ts` cases.
+
 ### Added
 
 - 资产负债录入页新增"按成员的目标占比配平"工作流：顶部用每位成员一张迷你卡片展示该成员资产 `target_ratio` 合计、状态徽章（已达标/未达标/已超出）、距离 100% 的差值与进度条；点击卡片可聚焦并把表格筛选到该成员；表格本身改为按成员分组渲染，每组组首显示合计/状态/折叠按钮，组内 `target_ratio` 列在超配时按贡献度染色。新增"一键归一化" Dialog：以现有比例为权重等比例缩放至合计 100%（全 0 时退化为 1/N 平均），逐条预览 `当前% → 建议%` 与变化量，确认后通过新接口 `POST /api/v1/holdings/bulk-update-target-ratio` 原子批量更新并刷新快照。配套 `entryPageLogic` 新增 `buildMemberAllocationSummaries` / `summarizeMemberAllocations` / `buildNormalizationPlan` 纯函数，单测扩到 8 例。

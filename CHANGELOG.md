@@ -19,6 +19,10 @@
 
 - `backend/requirements.txt` 与 `backend/requirements-desktop.txt` 全部依赖改为精确版本 pin（`fastapi==0.136.1`、`sqlalchemy==2.0.49`、`pyinstaller==6.20.0` 等），消除"任意一次重装都可能拉到含 CVE / 破坏性更新版本"的风险。
 - Pin every dependency in `backend/requirements.txt` and `backend/requirements-desktop.txt` to exact versions so reinstalls cannot silently pull a vulnerable or breaking release.
+- 分析看板的相关性矩阵与资产波动率柱图改为按数据规模自适应：相关性矩阵的高度按资产数量动态计算（最低 420，最高 820），坐标轴字号、X 轴旋转角度随资产数收紧；当资产数 > 12 时关闭单元格内数值标签（数值仍保留在 tooltip 中）。波动率柱图按数据条目数动态调整高度（320/380/420）、X 轴标签字号与旋转角度。修复在 23+ 资产场景下两图标签严重重叠、单元格被压扁不可读的问题。
+- Make the correlation heatmap and volatility bar chart on the analytics dashboard scale with the data set: heatmap height is now derived from the asset count (clamped between 420 and 820), axis label font size and X-axis rotation tighten as the count grows, and the in-cell numeric labels are hidden once asset count exceeds 12 (precise values remain in the tooltip). The volatility chart adopts the same approach for height and X-axis labels. Resolves the unreadable axis-label collision and squashed-cell rendering observed once the household held 20+ assets.
+- 共用 `ECharts` 包装组件追加 `ResizeObserver`：父容器因 tab 切换、卡片折叠或窗口尺寸变化而 reflow 时，图表会自动调用 `resize()`，避免延用旧画布导致绘制区域被截断。
+- The shared `ECharts` wrapper now installs a `ResizeObserver` on its host element so charts call `resize()` whenever the parent reflows (tab switches, card collapsing, viewport changes), preventing the previously observed clipped drawing region after layout updates.
 
 ### Fixed
 

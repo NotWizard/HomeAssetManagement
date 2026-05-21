@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import type { EChartsReactProps } from 'echarts-for-react/lib/types';
 import * as echarts from 'echarts/core';
@@ -22,14 +23,37 @@ echarts.use([
 type Props = Omit<EChartsReactProps, 'echarts'>;
 
 export function ECharts(props: Props) {
-  // 默认 notMerge=true：避免分析筛选切换时残留旧 series；
-  // 显式覆盖时 (props.notMerge !== undefined) 使用调用方指定的值。
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<ReactEChartsCore | null>(null);
+
+  const setRef = useCallback((node: ReactEChartsCore | null) => {
+    chartRef.current = node;
+  }, []);
+
+  // echarts-for-react 默认仅监听 window resize；当父容器因 tab 切换、布局回流改变宽高时，
+  // 图表会保留首次挂载尺寸导致绘制区被截断。这里追加 ResizeObserver，让图表跟随容器自适应。
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper || typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      chartRef.current?.getEchartsInstance().resize();
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <ReactEChartsCore
-      echarts={echarts}
-      notMerge
-      lazyUpdate
-      {...props}
-    />
+    <div ref={wrapperRef} style={{ width: '100%', height: '100%' }}>
+      <ReactEChartsCore
+        ref={setRef}
+        echarts={echarts}
+        notMerge
+        lazyUpdate
+        {...props}
+      />
+    </div>
   );
 }

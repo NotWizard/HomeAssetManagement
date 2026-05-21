@@ -259,6 +259,11 @@ import {
 export function buildVolatilityChartOption(data: VolatilityItem[]) {
   const labels = data.map((item) => item.asset);
   const values = buildVolatilityValues(data);
+  const count = data.length;
+  // 数据项越多，标签越拥挤——动态收紧字体并加大旋转角度。
+  const labelFontSize = count >= 20 ? 9 : count >= 14 ? 10 : 11;
+  const labelRotate = count >= 20 ? 38 : count >= 14 ? 30 : 22;
+  const labelWidth = count >= 20 ? 70 : count >= 14 ? 80 : 92;
 
   return {
     tooltip: {
@@ -279,12 +284,13 @@ export function buildVolatilityChartOption(data: VolatilityItem[]) {
       type: 'category',
       data: labels,
       axisLabel: {
-        rotate: 22,
+        rotate: labelRotate,
         color: '#8b90b7',
         interval: 0,
-        width: 92,
+        width: labelWidth,
         overflow: 'break',
-        lineHeight: 14,
+        lineHeight: 13,
+        fontSize: labelFontSize,
       },
     },
     yAxis: {
@@ -322,6 +328,13 @@ export function buildCorrelationHeatmapOption(data: CorrelationData) {
     });
   });
 
+  const count = data.assets.length;
+  // 资产数量较多时缩字号、加大旋转角度，并隐藏单元格内的数值标签——避免拥挤；
+  // tooltip 仍保留精确数值，光标悬停可见。
+  const axisFontSize = count >= 18 ? 9 : count >= 12 ? 10 : 11;
+  const xRotate = count >= 18 ? 50 : count >= 12 ? 36 : 24;
+  const showCellLabel = count <= 12;
+
   return {
     tooltip: {
       formatter: (params: { data: [number, number, number] }) => {
@@ -346,17 +359,18 @@ export function buildCorrelationHeatmapOption(data: CorrelationData) {
       axisLabel: {
         color: '#8b90b7',
         interval: 0,
-        rotate: 24,
+        rotate: xRotate,
         width: 104,
         overflow: 'break',
-        lineHeight: 14,
+        lineHeight: 13,
+        fontSize: axisFontSize,
       },
     },
     yAxis: {
       type: 'category',
       data: data.assets,
       splitArea: { show: true },
-      axisLabel: CORRELATION_HEATMAP_Y_AXIS_LABEL,
+      axisLabel: { ...CORRELATION_HEATMAP_Y_AXIS_LABEL, fontSize: axisFontSize },
     },
     visualMap: {
       min: -1,
@@ -377,13 +391,29 @@ export function buildCorrelationHeatmapOption(data: CorrelationData) {
         type: 'heatmap',
         data: matrixData,
         label: {
-          show: true,
+          show: showCellLabel,
+          fontSize: 10,
           formatter: (params: { value: [number, number, number] }) =>
             params.value[2] === MISSING_CORRELATION ? 'N/A' : params.value[2].toFixed(2),
         },
       },
     ],
   };
+}
+
+export function getCorrelationHeatmapHeight(assetCount: number): number {
+  // 单元格至少 22px，再加上 X 轴旋转标签所需的底部空间和上下间距。
+  // 资产数较多时高度自适应增长，避免单元格被压成一条线、Y 轴标签互相遮挡。
+  const cellSize = assetCount >= 18 ? 22 : assetCount >= 12 ? 26 : 32;
+  const reserved = 200; // 顶部 + 底部 axis label + visualMap
+  return Math.min(820, Math.max(420, assetCount * cellSize + reserved));
+}
+
+export function getVolatilityChartHeight(itemCount: number): number {
+  // 标签鸡毛蒜皮地堆在 X 轴时也能露出 y 轴和柱体——通过抬高图表高度给标签留白。
+  if (itemCount >= 20) return 420;
+  if (itemCount >= 14) return 380;
+  return 320;
 }
 
 export function buildCurrencyExposureChartOption(data: CurrencySummary[], baseCurrency = 'CNY') {

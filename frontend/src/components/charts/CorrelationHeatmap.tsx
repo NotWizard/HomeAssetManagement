@@ -1,5 +1,5 @@
 import { ECharts } from './ECharts';
-import { buildCorrelationHeatmapOption } from './chartOptions';
+import { buildCorrelationHeatmapOption, getCorrelationHeatmapHeight } from './chartOptions';
 import type { CorrelationData } from '../../services/analytics';
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
 
 export function CorrelationHeatmap({ data }: Props) {
   const option = buildCorrelationHeatmapOption(data);
+  const height = getCorrelationHeatmapHeight(data.assets.length);
 
-  return <ECharts option={option} style={{ height: 420 }} />;
+  return <ECharts option={option} style={{ height }} />;
 }

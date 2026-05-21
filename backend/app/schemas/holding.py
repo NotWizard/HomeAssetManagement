@@ -39,6 +39,21 @@ class HoldingBulkDeleteResult(BaseModel):
     snapshot_refreshed: bool = True
 
 
+class HoldingTargetRatioItem(BaseModel):
+    id: int
+    target_ratio: Decimal = Field(ge=0, le=100)
+
+
+class HoldingBulkUpdateTargetRatio(BaseModel):
+    items: list[HoldingTargetRatioItem] = Field(min_length=1)
+
+
+class HoldingBulkUpdateTargetRatioResult(BaseModel):
+    updated_count: int
+    updated_ids: list[int]
+    snapshot_refreshed: bool = True
+
+
 class HoldingOut(BaseModel):
     id: int
     family_id: int

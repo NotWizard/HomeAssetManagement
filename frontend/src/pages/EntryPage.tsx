@@ -6,15 +6,16 @@ import { useNavigate } from 'react-router-dom';
 import { EntryBulkDeleteDialogs } from '../components/entry/EntryBulkDeleteDialogs';
 import {
   buildBulkErrorMessage,
+  buildMemberAllocationSummaries,
+  buildNormalizationPlan,
   buildPathOptions,
-  buildTargetRatioStatus,
-  formatTargetRatioSummary,
   summarizeHoldings,
-  sumAssetTargetRatio,
+  summarizeMemberAllocations,
 } from '../components/entry/entryPageLogic';
 import { EntryFiltersBar } from '../components/entry/EntryFiltersBar';
 import { EntryHoldingFormDialog } from '../components/entry/EntryHoldingFormDialog';
 import { EntryHoldingsTable } from '../components/entry/EntryHoldingsTable';
+import { EntryNormalizeDialog } from '../components/entry/EntryNormalizeDialog';
 import { EntryTargetRatioSummary } from '../components/entry/EntryTargetRatioSummary';
 import {
   buildCreateEntryForm,
@@ -28,7 +29,7 @@ import {
 } from '../components/entry/entryPageController';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { SearchableSelect, type SearchableSelectOption } from '../components/ui/searchable-select';
+import { type SearchableSelectOption } from '../components/ui/searchable-select';
 import { PageHeader } from '../components/layout/PageHeader';
 import { fetchCategories } from '../services/categories';
 import {
@@ -37,6 +38,7 @@ import {
 } from '../services/holdingRelatedQueries';
 import {
   bulkDeleteHoldings,
+  bulkUpdateHoldingTargetRatio,
   createHolding,
   deleteHolding,
   fetchHoldings,
@@ -47,7 +49,6 @@ import {
 import { fetchMembers } from '../services/members';
 import { fetchSettings } from '../services/settings';
 import type { Holding } from '../types';
-import { formatCurrency } from '../utils/format';
 
 type HoldingFilterType = 'all' | 'asset' | 'liability';
 
@@ -81,6 +82,9 @@ export function EntryPage() {
   const [memberDeleteOpen, setMemberDeleteOpen] = useState(false);
   const [memberDeleteId, setMemberDeleteId] = useState('');
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
+  const [focusedMemberId, setFocusedMemberId] = useState<number | null>(null);
+  const [normalizeMemberId, setNormalizeMemberId] = useState<number | null>(null);
+  const [normalizeError, setNormalizeError] = useState<string | null>(null);
 
   const membersQuery = useQuery({ queryKey: queryKeys.members.all(), queryFn: fetchMembers });
   const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
@@ -143,6 +147,20 @@ export function EntryPage() {
     },
   });
 
+  const normalizeMutation = useMutation({
+    mutationFn: bulkUpdateHoldingTargetRatio,
+    onSuccess: async () => {
+      setNormalizeMemberId(null);
+      setNormalizeError(null);
+      await invalidateHoldingRelatedQueries(queryClient);
+    },
+    onError: (mutationError) => {
+      setNormalizeError(
+        mutationError instanceof Error ? mutationError.message : '归一化失败，请稍后重试'
+      );
+    },
+  });
+
   const allPathOptions = useMemo(() => {
     if (form.type === 'asset') {
       return buildPathOptions(assetCategoryQuery.data ?? []);
@@ -183,9 +201,22 @@ export function EntryPage() {
   const hasMembers = (membersQuery.data ?? []).length > 0;
   const hasLoadedHoldings = holdingsQuery.data != null;
 
+  const memberSummaries = useMemo(
+    () => buildMemberAllocationSummaries(allHoldings, membersQuery.data ?? []),
+    [allHoldings, membersQuery.data]
+  );
+
+  const memberAllocationOverview = useMemo(
+    () => summarizeMemberAllocations(memberSummaries),
+    [memberSummaries]
+  );
+
   const filteredHoldings = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
     return allHoldings.filter((row) => {
+      if (focusedMemberId != null && row.member_id !== focusedMemberId) {
+        return false;
+      }
       if (memberFilter !== 'all' && row.member_id !== Number(memberFilter)) {
         return false;
       }
@@ -199,12 +230,29 @@ export function EntryPage() {
       const searchText = [row.name, memberName, row.currency, row.type === 'asset' ? '资产' : '负债'].join(' ').toLowerCase();
       return searchText.includes(normalizedKeyword);
     });
-  }, [allHoldings, keyword, memberFilter, typeFilter, memberNameMap]);
+  }, [allHoldings, keyword, memberFilter, typeFilter, memberNameMap, focusedMemberId]);
 
-  const totalAssetTargetRatio = useMemo(() => sumAssetTargetRatio(allHoldings), [allHoldings]);
-  const filteredAssetTargetRatio = useMemo(() => sumAssetTargetRatio(filteredHoldings), [filteredHoldings]);
-  const targetRatioStatus = useMemo(() => buildTargetRatioStatus(totalAssetTargetRatio), [totalAssetTargetRatio]);
-  const hasAssetHoldings = useMemo(() => allHoldings.some((row) => row.type === 'asset'), [allHoldings]);
+  const normalizeMember = useMemo(
+    () =>
+      normalizeMemberId == null
+        ? null
+        : memberSummaries.find((summary) => summary.memberId === normalizeMemberId) ?? null,
+    [memberSummaries, normalizeMemberId]
+  );
+
+  const normalizeMemberAssets = useMemo(() => {
+    if (normalizeMemberId == null) {
+      return [];
+    }
+    return allHoldings.filter(
+      (row) => row.type === 'asset' && row.member_id === normalizeMemberId
+    );
+  }, [allHoldings, normalizeMemberId]);
+
+  const normalizationPlan = useMemo(
+    () => buildNormalizationPlan(normalizeMemberAssets),
+    [normalizeMemberAssets]
+  );
 
   const selectedIdSet = useMemo(() => new Set(selectedHoldingIds), [selectedHoldingIds]);
 
@@ -384,10 +432,22 @@ export function EntryPage() {
           ) : null}
           <EntryTargetRatioSummary
             hasLoadedHoldings={hasLoadedHoldings}
-            hasAssetHoldings={hasAssetHoldings}
-            targetRatioStatus={targetRatioStatus}
-            totalAssetTargetRatioSummary={formatTargetRatioSummary(totalAssetTargetRatio)}
-            filteredAssetTargetRatioSummary={formatTargetRatioSummary(filteredAssetTargetRatio)}
+            memberSummaries={memberSummaries}
+            overview={memberAllocationOverview}
+            focusedMemberId={focusedMemberId}
+            onFocusMember={(memberId) => {
+              setFocusedMemberId(memberId);
+              if (memberId != null) {
+                const target = document.getElementById(`entry-group-${memberId}`);
+                if (target) {
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }
+            }}
+            onOpenNormalize={(memberId) => {
+              setNormalizeError(null);
+              setNormalizeMemberId(memberId);
+            }}
           />
           <EntryFiltersBar
             keyword={keyword}
@@ -416,10 +476,16 @@ export function EntryPage() {
             memberNameMap={memberNameMap}
             baseCurrency={baseCurrency}
             deletePending={deleteHoldingMutation.isPending}
+            memberSummaries={memberSummaries}
+            focusedMemberId={focusedMemberId}
             onToggleSelectAllVisible={toggleSelectAllVisible}
             onToggleHoldingSelection={toggleHoldingSelection}
             onOpenEditDialog={openEditDialog}
             onDeleteHolding={(holdingId) => deleteHoldingMutation.mutate(holdingId)}
+            onOpenNormalize={(memberId) => {
+              setNormalizeError(null);
+              setNormalizeMemberId(memberId);
+            }}
           />
         </CardContent>
       </Card>
@@ -462,6 +528,29 @@ export function EntryPage() {
         setForm={setForm}
         onClose={() => setOpen(false)}
         onSubmit={submitForm}
+      />
+
+      <EntryNormalizeDialog
+        open={normalizeMember != null}
+        memberName={normalizeMember?.memberName ?? ''}
+        plan={normalizationPlan}
+        pending={normalizeMutation.isPending}
+        error={normalizeError}
+        onClose={() => {
+          setNormalizeMemberId(null);
+          setNormalizeError(null);
+        }}
+        onSubmit={() => {
+          if (normalizationPlan.items.length === 0) {
+            return;
+          }
+          normalizeMutation.mutate({
+            items: normalizationPlan.items.map((item) => ({
+              id: item.id,
+              target_ratio: item.proposed.toFixed(2),
+            })),
+          });
+        }}
       />
     </div>
   );

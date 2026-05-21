@@ -193,6 +193,60 @@ class HoldingService:
 
         raise AppError(4001, "批量删除模式无效")
 
+    @staticmethod
+    def bulk_update_target_ratio(session: Session, payload: dict) -> dict:
+        raw_items = payload.get("items") or []
+        if not raw_items:
+            raise AppError(4001, "请至少提供一条期望占比调整")
+
+        normalized: dict[int, Decimal] = {}
+        for raw in raw_items:
+            holding_id = raw.get("id") if isinstance(raw, dict) else None
+            target_ratio = raw.get("target_ratio") if isinstance(raw, dict) else None
+            if holding_id is None or target_ratio is None:
+                raise AppError(4001, "期望占比调整缺少 id 或 target_ratio")
+            try:
+                holding_id_int = int(holding_id)
+            except (TypeError, ValueError) as exc:
+                raise AppError(4001, "holding id 必须为整数") from exc
+            ratio_decimal = Decimal(str(target_ratio))
+            if ratio_decimal < 0 or ratio_decimal > 100:
+                raise AppError(4001, "期望占比必须在 0 到 100 之间")
+            normalized[holding_id_int] = ratio_decimal
+
+        family = get_default_family(session)
+        stmt = (
+            select(HoldingItem)
+            .where(
+                HoldingItem.family_id == family.id,
+                HoldingItem.is_deleted.is_(False),
+                HoldingItem.id.in_(list(normalized.keys())),
+            )
+            .order_by(HoldingItem.id.asc())
+        )
+        rows = list(session.scalars(stmt))
+        if len(rows) != len(normalized):
+            raise AppError(4040, "存在无法匹配的资产记录，请刷新后重试")
+
+        for row in rows:
+            if row.type != "asset":
+                raise AppError(4001, "仅资产类条目可调整期望占比")
+            row.target_ratio = normalized[row.id]
+
+        session.flush()
+        _refresh_snapshots(
+            session,
+            trigger_type="update",
+            note=f"bulk-update-target-ratio:{len(rows)}",
+        )
+
+        updated_ids = [row.id for row in rows]
+        return {
+            "updated_count": len(updated_ids),
+            "updated_ids": updated_ids,
+            "snapshot_refreshed": True,
+        }
+
 
 def _refresh_snapshots(session: Session, trigger_type: str, note: str | None = None) -> None:
     SnapshotService.create_event_snapshot(session, trigger_type=trigger_type, note=note)

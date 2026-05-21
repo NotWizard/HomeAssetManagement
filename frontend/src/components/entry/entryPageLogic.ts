@@ -1,4 +1,4 @@
-import type { CategoryNode, Holding } from '../../types';
+import type { CategoryNode, Holding, Member } from '../../types';
 
 export type PathOption = {
   key: string;
@@ -129,5 +129,190 @@ export function buildTargetRatioStatus(totalRatio: number): TargetRatioStatus {
     detail: `超出 ${formatTargetRatioDelta(delta)}`,
     badgeClassName: 'border-rose-200 bg-rose-50 text-rose-700',
     detailClassName: 'text-rose-700',
+  };
+}
+
+export type MemberAllocationSummary = {
+  memberId: number;
+  memberName: string;
+  assetCount: number;
+  withTargetCount: number;
+  totalRatio: number;
+  status: TargetRatioStatus;
+  delta: number;
+  needsAdjustment: boolean;
+  hasAssets: boolean;
+};
+
+export function buildMemberAllocationSummaries(
+  holdings: Holding[],
+  members: Member[]
+): MemberAllocationSummary[] {
+  const orderedMembers = [...members].sort((a, b) => a.id - b.id);
+  const fallbackIds = new Set(orderedMembers.map((member) => member.id));
+  const orphanIds = Array.from(
+    new Set(
+      holdings
+        .filter((row) => row.type === 'asset' && !fallbackIds.has(row.member_id))
+        .map((row) => row.member_id)
+    )
+  ).sort((a, b) => a - b);
+
+  const orphanEntries = orphanIds.map<Member>((memberId) => ({
+    id: memberId,
+    family_id: 0,
+    name: `成员 ${memberId}`,
+    created_at: '',
+    updated_at: '',
+  }));
+
+  return [...orderedMembers, ...orphanEntries].map((member) => {
+    const memberAssets = holdings.filter(
+      (row) => row.type === 'asset' && row.member_id === member.id
+    );
+    const totalRatio = sumAssetTargetRatio(memberAssets);
+    const status = buildTargetRatioStatus(totalRatio);
+    const delta = 100 - totalRatio;
+    const withTargetCount = memberAssets.filter((row) => row.target_ratio != null).length;
+
+    return {
+      memberId: member.id,
+      memberName: member.name,
+      assetCount: memberAssets.length,
+      withTargetCount,
+      totalRatio,
+      status,
+      delta,
+      needsAdjustment: status.label !== '已达标' && memberAssets.length > 0,
+      hasAssets: memberAssets.length > 0,
+    };
+  });
+}
+
+export type MemberAllocationOverview = {
+  total: number;
+  balanced: number;
+  underAllocated: number;
+  overAllocated: number;
+  withoutAssets: number;
+};
+
+export function summarizeMemberAllocations(
+  summaries: MemberAllocationSummary[]
+): MemberAllocationOverview {
+  const overview: MemberAllocationOverview = {
+    total: summaries.length,
+    balanced: 0,
+    underAllocated: 0,
+    overAllocated: 0,
+    withoutAssets: 0,
+  };
+
+  summaries.forEach((summary) => {
+    if (!summary.hasAssets) {
+      overview.withoutAssets += 1;
+      return;
+    }
+    if (summary.status.label === '已达标') {
+      overview.balanced += 1;
+    } else if (summary.status.label === '未达标') {
+      overview.underAllocated += 1;
+    } else {
+      overview.overAllocated += 1;
+    }
+  });
+
+  return overview;
+}
+
+export type NormalizationItem = {
+  id: number;
+  name: string;
+  current: number | null;
+  proposed: number;
+  delta: number;
+};
+
+export type NormalizationPlan = {
+  items: NormalizationItem[];
+  beforeTotal: number;
+  afterTotal: number;
+  reason?: 'all_zero';
+};
+
+export const NORMALIZATION_FRACTION_DIGITS = 2;
+
+function roundRatio(value: number, digits = NORMALIZATION_FRACTION_DIGITS): number {
+  const factor = 10 ** digits;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+export function buildNormalizationPlan(memberAssets: Holding[]): NormalizationPlan {
+  const eligible = memberAssets.filter((row) => row.type === 'asset');
+  const beforeTotal = sumAssetTargetRatio(eligible);
+
+  if (eligible.length === 0) {
+    return { items: [], beforeTotal: 0, afterTotal: 0 };
+  }
+
+  const totalForScaling = eligible.reduce(
+    (sum, row) => sum + Math.max(Number(row.target_ratio ?? 0), 0),
+    0
+  );
+
+  if (totalForScaling <= TARGET_RATIO_EPSILON) {
+    const evenShare = roundRatio(100 / eligible.length);
+    let remaining = 100;
+    const items: NormalizationItem[] = eligible.map((row, index) => {
+      const isLast = index === eligible.length - 1;
+      const proposed = isLast ? roundRatio(remaining) : evenShare;
+      remaining -= proposed;
+      const current = row.target_ratio == null ? null : Number(row.target_ratio);
+      return {
+        id: row.id,
+        name: row.name,
+        current,
+        proposed,
+        delta: proposed - (current ?? 0),
+      };
+    });
+    return {
+      items,
+      beforeTotal,
+      afterTotal: items.reduce((sum, item) => sum + item.proposed, 0),
+      reason: 'all_zero',
+    };
+  }
+
+  const scale = 100 / totalForScaling;
+  let remaining = 100;
+  const items: NormalizationItem[] = eligible.map((row, index) => {
+    const original = Math.max(Number(row.target_ratio ?? 0), 0);
+    let proposed = roundRatio(original * scale);
+    const isLast = index === eligible.length - 1;
+    if (isLast) {
+      proposed = roundRatio(remaining);
+    }
+    if (proposed < 0) {
+      proposed = 0;
+    }
+    if (proposed > 100) {
+      proposed = 100;
+    }
+    remaining -= proposed;
+    const current = row.target_ratio == null ? null : Number(row.target_ratio);
+    return {
+      id: row.id,
+      name: row.name,
+      current,
+      proposed,
+      delta: proposed - (current ?? 0),
+    };
+  });
+
+  return {
+    items,
+    beforeTotal,
+    afterTotal: items.reduce((sum, item) => sum + item.proposed, 0),
   };
 }

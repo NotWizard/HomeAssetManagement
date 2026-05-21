@@ -2,15 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildMemberAllocationSummaries,
+  buildNormalizationPlan,
   buildPathOptions,
   buildTargetRatioStatus,
   formatTargetRatioSummary,
   hasValidTwoDecimalAmount,
   normalizeAmountInput,
   summarizeHoldings,
+  summarizeMemberAllocations,
   sumAssetTargetRatio,
 } from '../src/components/entry/entryPageLogic.ts';
-import type { CategoryNode, Holding } from '../src/types/index.ts';
+import type { CategoryNode, Holding, Member } from '../src/types/index.ts';
 
 const sampleHoldings: Holding[] = [
   {
@@ -132,4 +135,118 @@ test('summarizeHoldings 会输出批量删除摘要', () => {
     totalBase: 170,
     previewNames: ['活期存款', '指数基金', '信用卡'],
   });
+});
+
+const sampleMembers: Member[] = [
+  {
+    id: 10,
+    family_id: 1,
+    name: '爸爸',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 11,
+    family_id: 1,
+    name: '妈妈',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+  {
+    id: 12,
+    family_id: 1,
+    name: '我',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+];
+
+const overflowAssetForMember12: Holding = {
+  id: 4,
+  family_id: 1,
+  member_id: 12,
+  type: 'asset',
+  name: '股票账户',
+  category_l1_id: 1,
+  category_l2_id: 2,
+  category_l3_id: 3,
+  currency: 'CNY',
+  amount_original: 200,
+  amount_base: 200,
+  target_ratio: 130,
+  source: 'manual',
+  updated_at: '2026-03-31T00:00:00Z',
+};
+
+test('buildMemberAllocationSummaries 会按成员聚合并打 status 标记', () => {
+  const summaries = buildMemberAllocationSummaries(
+    [...sampleHoldings, overflowAssetForMember12],
+    sampleMembers
+  );
+  assert.equal(summaries.length, 3);
+  const dad = summaries.find((row) => row.memberId === 10);
+  const mom = summaries.find((row) => row.memberId === 11);
+  const me = summaries.find((row) => row.memberId === 12);
+  assert.ok(dad && mom && me);
+  assert.equal(dad.status.label, '未达标');
+  assert.equal(dad.assetCount, 2);
+  assert.equal(mom.hasAssets, false);
+  assert.equal(mom.assetCount, 0);
+  assert.equal(me.status.label, '已超出');
+  assert.equal(me.delta < 0, true);
+});
+
+test('summarizeMemberAllocations 会统计达标/未达标/超出/无资产', () => {
+  const summaries = buildMemberAllocationSummaries(
+    [...sampleHoldings, overflowAssetForMember12],
+    sampleMembers
+  );
+  const overview = summarizeMemberAllocations(summaries);
+  assert.equal(overview.total, 3);
+  assert.equal(overview.balanced, 0);
+  assert.equal(overview.underAllocated, 1);
+  assert.equal(overview.overAllocated, 1);
+  assert.equal(overview.withoutAssets, 1);
+});
+
+test('buildNormalizationPlan 会按当前比例缩放至合计 100%', () => {
+  const memberAssets = sampleHoldings.filter(
+    (row) => row.type === 'asset' && row.member_id === 10
+  );
+  const plan = buildNormalizationPlan(memberAssets);
+  assert.equal(plan.items.length, 2);
+  const total = plan.items.reduce((sum, item) => sum + item.proposed, 0);
+  assert.ok(Math.abs(total - 100) < 0.0001);
+  // 60 / 99.96 * 100 ≈ 60.024 → 取小数位 2 → 60.02
+  assert.equal(plan.items[0].proposed, 60.02);
+  assert.equal(plan.items[1].proposed, 39.98);
+  assert.equal(plan.reason, undefined);
+});
+
+test('buildNormalizationPlan 在所有当前占比为 0 时按等分平分 100%', () => {
+  const zeroHoldings: Holding[] = [
+    {
+      ...sampleHoldings[0],
+      id: 100,
+      target_ratio: 0,
+    },
+    {
+      ...sampleHoldings[0],
+      id: 101,
+      target_ratio: 0,
+    },
+    {
+      ...sampleHoldings[0],
+      id: 102,
+      target_ratio: 0,
+    },
+  ];
+  const plan = buildNormalizationPlan(zeroHoldings);
+  assert.equal(plan.reason, 'all_zero');
+  const total = plan.items.reduce((sum, item) => sum + item.proposed, 0);
+  assert.ok(Math.abs(total - 100) < 0.0001);
+  // 100 / 3 = 33.33 + 33.33 + 33.34
+  assert.equal(plan.items[0].proposed, 33.33);
+  assert.equal(plan.items[1].proposed, 33.33);
+  assert.equal(plan.items[2].proposed, 33.34);
 });

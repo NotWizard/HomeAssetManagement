@@ -624,3 +624,132 @@ def test_update_settings_only_revalues_current_family_holdings_and_snapshots():
     assert '"amount_base":700.0' in untouched_event.payload_json
     assert all(row["family_id"] == 1 for row in daily_resp.json()["data"])
     assert all(row["family_id"] == 1 for row in event_resp.json()["data"])
+
+
+def _seed_two_assets_for_member(client: TestClient, name: str) -> tuple[int, int, int]:
+    member_resp = client.post("/api/v1/members", json={"name": name})
+    assert member_resp.status_code == 200
+    member_id = member_resp.json()["data"]["id"]
+
+    asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
+    l1, l2, l3 = _find_category_path(asset_tree, ("现金与存款", "银行存款", "活期存款"))
+
+    payload = {
+        "member_id": member_id,
+        "type": "asset",
+        "name": f"{name}-备用金",
+        "category_l1_id": l1["id"],
+        "category_l2_id": l2["id"],
+        "category_l3_id": l3["id"],
+        "currency": "CNY",
+        "amount_original": "100",
+        "target_ratio": "60",
+    }
+    first = client.post("/api/v1/holdings", json=payload)
+    assert first.status_code == 200
+
+    payload["name"] = f"{name}-应急金"
+    payload["target_ratio"] = "80"
+    second = client.post("/api/v1/holdings", json=payload)
+    assert second.status_code == 200
+
+    return member_id, first.json()["data"]["id"], second.json()["data"]["id"]
+
+
+def test_bulk_update_target_ratio_normalizes_member_assets():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        _, first_id, second_id = _seed_two_assets_for_member(client, "Aria")
+
+        resp = client.post(
+            "/api/v1/holdings/bulk-update-target-ratio",
+            json={
+                "items": [
+                    {"id": first_id, "target_ratio": "42.86"},
+                    {"id": second_id, "target_ratio": "57.14"},
+                ]
+            },
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()["data"]
+        assert body["updated_count"] == 2
+        assert sorted(body["updated_ids"]) == sorted([first_id, second_id])
+        assert body["snapshot_refreshed"] is True
+
+        listing = client.get("/api/v1/holdings").json()["data"]
+        ratio_map = {row["id"]: row["target_ratio"] for row in listing}
+        assert ratio_map[first_id] == 42.86
+        assert ratio_map[second_id] == 57.14
+
+        events = client.get("/api/v1/snapshots/events").json()["data"]
+        assert any(
+            "bulk-update-target-ratio" in str(row.get("payload", {}).get("note", ""))
+            for row in events
+        )
+
+
+def test_bulk_update_target_ratio_rejects_out_of_range_value():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        _, first_id, _ = _seed_two_assets_for_member(client, "Bria")
+
+        resp = client.post(
+            "/api/v1/holdings/bulk-update-target-ratio",
+            json={"items": [{"id": first_id, "target_ratio": "120"}]},
+        )
+
+    assert resp.status_code == 422
+
+
+def test_bulk_update_target_ratio_rejects_liability_holding():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        member_resp = client.post("/api/v1/members", json={"name": "Cody"})
+        member_id = member_resp.json()["data"]["id"]
+
+        liability_tree = client.get("/api/v1/categories", params={"type": "liability"}).json()["data"]
+        l1, l2, l3 = _find_category_path(liability_tree, ("消费负债", "信用卡", "已出账单"))
+
+        liability = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "liability",
+                "name": "Cody 信用卡账单",
+                "category_l1_id": l1["id"],
+                "category_l2_id": l2["id"],
+                "category_l3_id": l3["id"],
+                "currency": "CNY",
+                "amount_original": "200",
+                "target_ratio": None,
+            },
+        )
+        assert liability.status_code == 200
+
+        resp = client.post(
+            "/api/v1/holdings/bulk-update-target-ratio",
+            json={"items": [{"id": liability.json()["data"]["id"], "target_ratio": "30"}]},
+        )
+
+    assert resp.status_code == 400
+    assert resp.json()["message"] == "仅资产类条目可调整期望占比"
+
+
+def test_bulk_update_target_ratio_rejects_unknown_holding():
+    _reset_runtime_data()
+    with TestClient(app) as client:
+        _, first_id, _ = _seed_two_assets_for_member(client, "Dora")
+
+        resp = client.post(
+            "/api/v1/holdings/bulk-update-target-ratio",
+            json={
+                "items": [
+                    {"id": first_id, "target_ratio": "50"},
+                    {"id": 999999, "target_ratio": "50"},
+                ]
+            },
+        )
+
+    assert resp.status_code == 404
+    assert resp.json()["message"] == "存在无法匹配的资产记录，请刷新后重试"

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.response import ok
 from app.schemas.holding import HoldingBulkDelete
+from app.schemas.holding import HoldingBulkUpdateTargetRatio
 from app.schemas.holding import HoldingCreate
 from app.schemas.holding import HoldingUpdate
 from app.services.holding_service import HoldingService
@@ -47,6 +48,13 @@ def list_holdings(
 @router.post("/bulk-delete")
 def bulk_delete_holdings(payload: HoldingBulkDelete, db: Session = Depends(get_db)):
     result = HoldingService.bulk_soft_delete(db, payload.model_dump())
+    db.commit()
+    return ok(result)
+
+
+@router.post("/bulk-update-target-ratio")
+def bulk_update_target_ratio(payload: HoldingBulkUpdateTargetRatio, db: Session = Depends(get_db)):
+    result = HoldingService.bulk_update_target_ratio(db, payload.model_dump())
     db.commit()
     return ok(result)
 

@@ -30,6 +30,21 @@ export type HoldingBulkDeleteResult = {
   snapshot_refreshed: boolean;
 };
 
+export type HoldingTargetRatioItem = {
+  id: number;
+  target_ratio: string;
+};
+
+export type HoldingBulkUpdateTargetRatioPayload = {
+  items: HoldingTargetRatioItem[];
+};
+
+export type HoldingBulkUpdateTargetRatioResult = {
+  updated_count: number;
+  updated_ids: number[];
+  snapshot_refreshed: boolean;
+};
+
 export function fetchHoldings() {
   return getJSON<Holding[]>('/holdings');
 }
@@ -48,4 +63,11 @@ export function deleteHolding(id: number) {
 
 export function bulkDeleteHoldings(payload: HoldingBulkDeletePayload) {
   return postJSON<HoldingBulkDeleteResult>('/holdings/bulk-delete', payload);
+}
+
+export function bulkUpdateHoldingTargetRatio(payload: HoldingBulkUpdateTargetRatioPayload) {
+  return postJSON<HoldingBulkUpdateTargetRatioResult>(
+    '/holdings/bulk-update-target-ratio',
+    payload
+  );
 }

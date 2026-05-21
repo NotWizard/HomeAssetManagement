@@ -24,6 +24,11 @@
 - 共用 `ECharts` 包装组件追加 `ResizeObserver`：父容器因 tab 切换、卡片折叠或窗口尺寸变化而 reflow 时，图表会自动调用 `resize()`，避免延用旧画布导致绘制区域被截断。
 - The shared `ECharts` wrapper now installs a `ResizeObserver` on its host element so charts call `resize()` whenever the parent reflows (tab switches, card collapsing, viewport changes), preventing the previously observed clipped drawing region after layout updates.
 
+### Removed
+
+- 删除 `AppShell` 顶部条上未接通后端的占位组件：搜索框（无 `value/onChange`、`⌘K` 也未绑快捷键）、通知按钮（无 `onClick`、红点是写死 div）、用户身份卡（"HB / 本机用户"硬编码字符串）。本地优先 + 单用户定位下不会做登录与全局搜索，这些占位反而误导。桌面端整条 header 改为隐藏，主内容直接顶到顶端；移动端保留汉堡菜单 + 当前页名，作为唯一一处顶栏。
+- Remove the unwired placeholder widgets from the top bar of `AppShell`: the search input (no `value/onChange`, no `⌘K` binding), the notification bell (no `onClick`, the red dot was a hard-coded div), and the user identity chip (`"HB / 本机用户"` hard-coded). Under the local-first single-user positioning we will not be adding login or global search, so these placeholders were misleading rather than helpful. The desktop header is now hidden entirely so page content reaches the top edge; mobile keeps a slim header with hamburger menu and current page name.
+
 ### Fixed
 
 - 后端 `/{full_path:path}` catch-all 不再吞掉 `/api/*`、`/docs`、`/openapi.json`、`/redoc`、`/health` 等保留前缀；拼写错误的 API 路径会返回 404 而不是静默回 200 + 前端 index。新增 `test_unmatched_api_paths_do_not_fall_through_to_frontend` 回归用例。

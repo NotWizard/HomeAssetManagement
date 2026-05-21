@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 收紧分析看板各图表的内边距，消除"卡片左侧 / 底部 / 桑基图两侧"的大块留白。原配置把 ECharts `grid.left/right/bottom/top` 与 `containLabel: true` 一起使用，造成"axis label 自适应预留"和"grid 显式预留"双重 padding 叠加，肉眼上像是一段空白。现在折线图与币种柱图的 grid 改为 `left:8 / right:16 / top:36 / bottom:8`，波动率柱图收到 `left:80 / right:24 / top:16 / bottom:60` 同时 `nameGap` 从 72 收到 56（仍能完整显示 yAxis 名「年化波动率(%)」与旋转标签），桑基图 `series.left/right` 从 `9%` 收到 `4%`。覆盖 `chartOptions.test.ts` 的 grid/frame 断言用例。
+- Tighten the chart paddings on the analytics dashboard to remove the visibly empty bands on the left, bottom, and the two sides of the sankey diagram. The previous values overlapped ECharts's `grid.left/right/bottom/top` with `containLabel: true`, producing a double padding (axis label auto-reserve plus the explicit grid reserve). The trend and currency-exposure grids are now `left:8 / right:16 / top:36 / bottom:8`; the volatility grid moves to `left:80 / right:24 / top:16 / bottom:60` with `nameGap` shrunk from 72 to 56 (still enough room for the yAxis name "年化波动率(%)" and the rotated tick labels); the sankey `series.left/right` shrinks from `9%` to `4%`. The `chartOptions.test.ts` grid/frame assertions are updated accordingly.
+
 ### Added
 
 - 资产负债录入页新增"按成员的目标占比配平"工作流：顶部用每位成员一张迷你卡片展示该成员资产 `target_ratio` 合计、状态徽章（已达标/未达标/已超出）、距离 100% 的差值与进度条；点击卡片可聚焦并把表格筛选到该成员；表格本身改为按成员分组渲染，每组组首显示合计/状态/折叠按钮，组内 `target_ratio` 列在超配时按贡献度染色。新增"一键归一化" Dialog：以现有比例为权重等比例缩放至合计 100%（全 0 时退化为 1/N 平均），逐条预览 `当前% → 建议%` 与变化量，确认后通过新接口 `POST /api/v1/holdings/bulk-update-target-ratio` 原子批量更新并刷新快照。配套 `entryPageLogic` 新增 `buildMemberAllocationSummaries` / `summarizeMemberAllocations` / `buildNormalizationPlan` 纯函数，单测扩到 8 例。

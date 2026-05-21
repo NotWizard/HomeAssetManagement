@@ -25,7 +25,7 @@ const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const UPDATE_SUBDIR = 'updates';
 const UPDATE_STATE_FILE = 'state.json';
 const RELEASES_API_URL =
-  'https://api.github.com/repos/NotWizard/HomeAssetManagement/releases';
+  'https://api.github.com/repos/NotWizard/HouseholdBalanceSheet/releases';
 const CHANNEL_PREFIX = 'hbs:update';
 
 export const UPDATE_IPC_CHANNELS = {
@@ -119,6 +119,17 @@ SOURCE_APP=${sourceApp}
 TARGET_APP=${targetApp}
 BACKUP_APP=${backupPath}
 
+# 移除新 app 的 macOS 隔离标记（com.apple.quarantine xattr）。
+# 没签名的 zip 解压出的 .app 默认带 quarantine attr，启动时会被 Gatekeeper 拦截
+# 弹"无法验证开发者..."要求用户去 系统设置 → 隐私与安全 重新放行；
+# 这里在装入目标位置之后立即递归剥离，让用户从旧版升级到新版无需任何额外授权操作。
+# 失败时（比如 xattr 不在 / 命令缺失）不阻塞主流程。
+remove_quarantine() {
+  if [ -e "$1" ]; then
+    xattr -dr com.apple.quarantine "$1" 2>/dev/null || true
+  fi
+}
+
 while kill -0 "$TARGET_PID" 2>/dev/null; do
   sleep 1
 done
@@ -130,6 +141,7 @@ if [ -d "$TARGET_APP" ]; then
     osascript -e "do shell script \\"${escapeForAppleScript(
       adminCommand
     )}\\" with administrator privileges"
+    remove_quarantine "$TARGET_APP"
     open "$TARGET_APP"
     exit 0
   fi
@@ -138,6 +150,7 @@ fi
 # 2) 把新 app 落到目标位置；失败 → 还原 BACKUP_APP，绝不留下"被删却没装上"的状态
 if ditto "$SOURCE_APP" "$TARGET_APP"; then
   rm -rf "$BACKUP_APP"
+  remove_quarantine "$TARGET_APP"
   open "$TARGET_APP"
   exit 0
 fi
@@ -152,6 +165,7 @@ fi
 osascript -e "do shell script \\"${escapeForAppleScript(
     adminCommand
   )}\\" with administrator privileges"
+remove_quarantine "$TARGET_APP"
 open "$TARGET_APP"
 `;
 }
@@ -408,6 +422,15 @@ export function createUpdateController(options: UpdateControllerOptions) {
           totalBytes: candidate.asset.size,
           progress: 100,
         });
+      }
+
+      // 后台静默下载：检测到新候选包后立即触发下载，不等待用户操作。
+      // - 不 await，让 checkForUpdates 立刻返回，不阻塞 12h 轮询。
+      // - 错误吞掉，downloadUpdate 内部已经通过 toErrorState 写入 state。
+      // - 用 status === 'available' 守卫，避免 12h 轮询期间正在下载又被重复触发。
+      // 用户感知链路：idle → (静默 available/downloading) → downloaded（左下角才出现提醒）。
+      if (state.status === 'available') {
+        void downloadUpdate().catch(() => undefined);
       }
 
       return nextState;

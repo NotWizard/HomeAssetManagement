@@ -45,3 +45,29 @@ test('安装脚本采用 staging→backup→swap 路径，失败时能从 BACKUP
   // 校验：BACKUP_APP 变量已注入
   assert.match(script, /BACKUP_APP=/);
 });
+
+test('安装脚本会移除新 app 的 macOS 隔离标记，避免升级后用户被要求重新授权', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const script = updateControllerModule.buildDetachedInstallScript({
+    pid: 1234,
+    sourceAppPath: '/tmp/hbs-update/staged/HouseholdBalanceSheet.app',
+    targetAppPath: '/Applications/HouseholdBalanceSheet.app',
+    backupPath: '/tmp/hbs-update/backup/previous.app',
+  });
+
+  // 必须递归剥离 com.apple.quarantine xattr，否则没签名的 zip 解压出的新 .app
+  // 启动时会被 Gatekeeper 拦截，要求用户去 系统设置→隐私与安全 重新放行
+  assert.match(script, /xattr -dr com\.apple\.quarantine/);
+  // remove_quarantine 必须在 ditto 成功后、open 之前调用（这样 open 启动的是干净的 app）
+  const dittoSuccessBlock = script.match(
+    /ditto "\$SOURCE_APP" "\$TARGET_APP";[\s\S]*?exit 0/
+  );
+  assert.ok(dittoSuccessBlock, '未找到 ditto 成功分支');
+  assert.match(dittoSuccessBlock![0], /remove_quarantine "\$TARGET_APP"/);
+  // 提权 fallback 也必须经过 remove_quarantine（osascript with admin 写入的文件同样带 quarantine）
+  const adminFallbackBlock = script.match(
+    /administrator privileges"[\s\S]*$/
+  );
+  assert.ok(adminFallbackBlock, '未找到 admin fallback 分支');
+  assert.match(adminFallbackBlock![0], /remove_quarantine "\$TARGET_APP"/);
+});

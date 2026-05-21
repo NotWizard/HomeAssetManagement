@@ -4,7 +4,6 @@ import type {
 } from '../../config/runtime';
 
 export type DesktopUpdateClickAction =
-  | 'open-download-dialog'
   | 'open-install-dialog'
   | 'check-for-updates'
   | 'none';
@@ -57,9 +56,12 @@ export function formatUpdateDownloadProgress(progress?: number | null): string {
 export function shouldShowDesktopUpdateEntry(
   status: HbsDesktopUpdateStatus
 ): boolean {
+  // 仅在用户需要操作的状态才显示左下角入口：
+  // - downloaded：下载完成、等待用户点击触发安装确认
+  // - preparing/installing：用户已点过安装、显示进行中状态
+  // - error：让用户能重试
+  // available / downloading 阶段属于"后台静默"，不打扰用户。
   return (
-    status === 'available' ||
-    status === 'downloading' ||
     status === 'downloaded' ||
     status === 'preparing' ||
     status === 'installing' ||
@@ -104,9 +106,6 @@ export function resolveDesktopUpdateClickAction(
   state: Pick<HbsDesktopUpdateState, 'status' | 'downloadedFilePath'> | null | undefined
 ): DesktopUpdateClickAction {
   const status = state?.status ?? 'idle';
-  if (status === 'available') {
-    return 'open-download-dialog';
-  }
   if (status === 'downloaded') {
     return 'open-install-dialog';
   }

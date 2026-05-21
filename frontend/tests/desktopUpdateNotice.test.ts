@@ -27,19 +27,22 @@ test('桌面更新状态会补齐下载进度与错误字段回退', () => {
   });
 });
 
-test('桌面更新入口只在需要用户感知的状态下展示，并给出正确文案', () => {
+test('桌面更新入口只在用户需要操作的状态下展示，并给出正确文案', () => {
+  // idle / checking 是后台过渡态，不打扰用户
   assert.equal(shouldShowDesktopUpdateEntry('idle'), false);
   assert.equal(shouldShowDesktopUpdateEntry('checking'), false);
-  assert.equal(shouldShowDesktopUpdateEntry('available'), true);
+  // available / downloading 由"后台静默下载"接管，UI 不出现入口
+  assert.equal(shouldShowDesktopUpdateEntry('available'), false);
+  assert.equal(shouldShowDesktopUpdateEntry('downloading'), false);
+  // 下载完成后才在左下角出现可点击入口
+  assert.equal(shouldShowDesktopUpdateEntry('downloaded'), true);
+  assert.equal(shouldShowDesktopUpdateEntry('preparing'), true);
   assert.equal(shouldShowDesktopUpdateEntry('installing'), true);
+  assert.equal(shouldShowDesktopUpdateEntry('error'), true);
 
   assert.equal(
-    getDesktopUpdateButtonLabel({ status: 'available', progress: null }),
-    '有可用更新'
-  );
-  assert.equal(
-    getDesktopUpdateButtonLabel({ status: 'downloading', progress: 51.2 }),
-    '下载中 51%'
+    getDesktopUpdateButtonLabel({ status: 'downloaded', progress: 100 }),
+    '立即安装更新'
   );
   assert.equal(
     getDesktopUpdateButtonLabel({ status: 'preparing', progress: null }),
@@ -56,12 +59,20 @@ test('桌面更新入口只在需要用户感知的状态下展示，并给出�
 });
 
 test('桌面更新入口会根据状态推导点击动作与忙碌态', () => {
+  // available / downloading 不显示入口、不应该被点击；返回 'none' 防御性兜底
   assert.equal(
     resolveDesktopUpdateClickAction({
       status: 'available',
       downloadedFilePath: null,
     }),
-    'open-download-dialog'
+    'none'
+  );
+  assert.equal(
+    resolveDesktopUpdateClickAction({
+      status: 'downloading',
+      downloadedFilePath: null,
+    }),
+    'none'
   );
   assert.equal(
     resolveDesktopUpdateClickAction({

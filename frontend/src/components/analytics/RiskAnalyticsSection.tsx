@@ -38,48 +38,47 @@ export function RiskAnalyticsSection({
 }: RiskAnalyticsSectionProps) {
   return (
     <div className="space-y-4">
-      {/* 上排两图表：波动率 + 相关性矩阵。两者高度都有上限（柱图 ~320-420px、热力图 ~420-820px），
-          左右等宽对齐不会出现大块留白。再平衡表格因为行数随资产规模线性增长（无上限），独占下排
-          全宽，避免它把高度有限的图表卡片拖成同步长度。 */}
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-sm">资产波动率</CardTitle>
-            <CardDescription>帮助识别当前组合中波动更高的资产项。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {volatilityIsError ? (
-              <ErrorState text={`波动率数据加载失败：${formatError(volatilityError)}`} />
-            ) : (volatilityData ?? []).length > 0 ? (
-              <Suspense fallback={<Skeleton className="h-[320px] w-full" />}>
-                <VolatilityChart data={volatilityData ?? []} />
-              </Suspense>
-            ) : (
-              <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，暂时无法计算波动率。" />
-            )}
-          </CardContent>
-        </Card>
+      {/* 三张卡片各自独占一行，避免任何一张卡片的高度被相邻卡片牵着走：
+          - 资产波动率柱图：高度 ~320-420 px（按数据条目数自适应），独占行后宽度更大、长资产名标签更不挤；
+          - 相关性矩阵：高度按 N×N 资产数自适应（420-820 px），独占行后图表内部 max-width 居中以保持
+            单元格接近正方形，不会被卡片宽度拉成横向长方形；
+          - 再平衡提醒：表格行数随资产规模线性增长（无上限），独占行后纵向延伸不会牵动其他卡片。 */}
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-sm">资产波动率</CardTitle>
+          <CardDescription>帮助识别当前组合中波动更高的资产项。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {volatilityIsError ? (
+            <ErrorState text={`波动率数据加载失败：${formatError(volatilityError)}`} />
+          ) : (volatilityData ?? []).length > 0 ? (
+            <Suspense fallback={<Skeleton className="h-[320px] w-full" />}>
+              <VolatilityChart data={volatilityData ?? []} />
+            </Suspense>
+          ) : (
+            <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，暂时无法计算波动率。" />
+          )}
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-sm">相关性矩阵</CardTitle>
-            <CardDescription>观察资产之间的联动程度，辅助分散配置决策。</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {correlationIsError ? (
-              <ErrorState text={`相关性矩阵加载失败：${formatError(correlationError)}`} />
-            ) : (correlationData?.assets.length ?? 0) < 2 ? (
-              <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，无法计算相关性矩阵。" />
-            ) : (
-              <Suspense fallback={<Skeleton className="h-[420px] w-full" />}>
-                <CorrelationHeatmap data={correlationData!} />
-              </Suspense>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-sm">相关性矩阵</CardTitle>
+          <CardDescription>观察资产之间的联动程度，辅助分散配置决策。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {correlationIsError ? (
+            <ErrorState text={`相关性矩阵加载失败：${formatError(correlationError)}`} />
+          ) : (correlationData?.assets.length ?? 0) < 2 ? (
+            <EmptyState icon={<AlertTriangle className="h-5 w-5 text-amber-500" />} text="数据样本不足，无法计算相关性矩阵。" />
+          ) : (
+            <Suspense fallback={<Skeleton className="mx-auto h-[420px] w-full max-w-[580px]" />}>
+              <CorrelationHeatmap data={correlationData!} />
+            </Suspense>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* 再平衡提醒：作为"行动导向"卡片独占下排全宽。资产数多时表格自然向下延伸，不会牵动其他卡片。 */}
       <Card>
         <CardHeader className="pb-1">
           <CardTitle className="text-sm">再平衡提醒</CardTitle>

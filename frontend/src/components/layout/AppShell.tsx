@@ -6,7 +6,6 @@ import {
   Menu,
   Settings2,
   UsersRound,
-  WalletCards,
 } from 'lucide-react';
 import { ReactNode, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -109,9 +108,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-full flex-col overflow-y-auto">
       {/* Logo 区 */}
       <div className="flex h-16 items-center gap-3 px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-soft">
-          <WalletCards className="h-4 w-4" />
-        </div>
+        <svg
+          className="h-9 w-9 drop-shadow-sm"
+          viewBox="0 0 64 64"
+          xmlns="http://www.w3.org/2000/svg"
+          role="img"
+          aria-label="家庭资产负债表"
+        >
+          <rect x="2" y="2" width="60" height="60" rx="14" fill="#FFFFFF" stroke="#0E1E3F" strokeOpacity="0.12" strokeWidth="1" />
+          <g transform="translate(32 32)">
+            <g transform="translate(4 -12) rotate(45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#2490F3" /></g>
+            <g transform="translate(-4 12) rotate(45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#2490F3" /></g>
+            <g transform="translate(-12 -4) rotate(-45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#0E1E3F" /></g>
+            <g transform="translate(12 4) rotate(-45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#0E1E3F" /></g>
+          </g>
+        </svg>
         <div className="leading-tight">
           <p className="text-sm font-semibold tracking-tight">家庭资产负债表</p>
           <p className="text-[11px] text-muted-foreground">Household&nbsp;Balance&nbsp;Sheet</p>

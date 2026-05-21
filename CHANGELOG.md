@@ -17,6 +17,8 @@
 
 ### Changed
 
+- 应用图标整体重做为新设计的「双蓝 H」品牌标志：替换 `desktop/assets/icon.icns`、`desktop/assets/icon.svg`、`frontend/public/favicon.svg`，以及 `AppShell` 侧栏左上角原本占位的 lucide `WalletCards` 图标（同时移除该 import）。主图标 SVG 严格遵循 Apple HIG（macOS Sequoia/Tahoe）模板：1024×1024 画布，824×824 squircle 内容区居中，连续曲率半径 184（≈22.4%），白底配极轻 rim 高光与 H 标志的柔阴影；`icon.icns` 通过 `iconutil` 从完整 `desktop/assets/icon.iconset/` 重新打包，覆盖 16/32/128/256/512 五个逻辑尺寸的 1×/@2× 共 10 个 PNG。
+- Rebrand the app icon to the newly designed dual-blue H mark across `desktop/assets/icon.icns`, `desktop/assets/icon.svg`, `frontend/public/favicon.svg`, and the placeholder `WalletCards` lucide icon in the `AppShell` sidebar (the now-unused import is dropped as well). The master SVG follows the Apple HIG template for macOS Sequoia/Tahoe — 1024×1024 canvas, 824×824 squircle content area centered with a continuous-curvature radius of 184 (~22.4%), pure white fill with a faint rim highlight and a soft drop shadow under the mark. `icon.icns` is regenerated with `iconutil` from a full `desktop/assets/icon.iconset/` covering all ten Apple-required PNGs (1×/@2× across 16/32/128/256/512).
 - `backend/requirements.txt` 与 `backend/requirements-desktop.txt` 全部依赖改为精确版本 pin（`fastapi==0.136.1`、`sqlalchemy==2.0.49`、`pyinstaller==6.20.0` 等），消除"任意一次重装都可能拉到含 CVE / 破坏性更新版本"的风险。
 - Pin every dependency in `backend/requirements.txt` and `backend/requirements-desktop.txt` to exact versions so reinstalls cannot silently pull a vulnerable or breaking release.
 - 分析看板的相关性矩阵与资产波动率柱图改为按数据规模自适应：相关性矩阵的高度按资产数量动态计算（最低 420，最高 820），坐标轴字号、X 轴旋转角度随资产数收紧；当资产数 > 12 时关闭单元格内数值标签（数值仍保留在 tooltip 中）。波动率柱图按数据条目数动态调整高度（320/380/420）、X 轴标签字号与旋转角度。修复在 23+ 资产场景下两图标签严重重叠、单元格被压扁不可读的问题。

@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-22
+
 ### Fixed
 
 - `CategoryTreePicker` 的下拉面板不再被 dialog / viewport 边界裁剪。原实现把面板做成 `absolute` 定位（先 `top-full` 向下展开、后改为按 viewport 余量自动 `top` / `bottom` 切换向上向下），但 dialog 在屏幕中下方时无论向哪展开都会撞上 viewport 边界，且向上展开还会让面板"飘"到 trigger 上方、与 trigger 视觉脱钩。本次改成两件事：(1) 面板去 `absolute`，作为 in-flow `<div>` inline 占用真实空间——把下方字段（币种 / 金额 / 期望占比）自然推下去，面板永远在 trigger 正下方，关联感最强；(2) `Dialog` 整体改成 `flex max-h-[85vh] flex-col` + 中段 body `flex-1 overflow-y-auto` + footer 固定底部（之前是 `p-5` 一锅渲染，长内容会顶破 viewport），dialog 自身在内容超出时可滚动，footer「取消 / 创建条目」始终可见。`CategoryTreePicker` 同时新增 `onOpenChange` 回调；`EntryHoldingFormDialog` 在「分类」字段最外层挂 ref，open=true 时 `requestAnimationFrame` 后调用 `scrollIntoView({ behavior: 'smooth', block: 'start' })`，把「分类」label 平滑滚到 dialog body 顶部紧贴「保存后将自动触发事件快照记录」一行，让 trigger + tab + 面包屑 + 搜索 + 一级列表 一次性最大化展示。

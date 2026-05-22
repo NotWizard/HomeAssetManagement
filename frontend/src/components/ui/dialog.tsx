@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '../../lib/cn';
 
@@ -13,8 +14,9 @@ type DialogProps = {
 
 export function Dialog({ open, title, description, onClose, children, footer }: DialogProps) {
   if (!open) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <button
         className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
@@ -29,6 +31,7 @@ export function Dialog({ open, title, description, onClose, children, footer }: 
         <div>{children}</div>
         {footer ? <div className="mt-5 flex justify-end gap-2">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

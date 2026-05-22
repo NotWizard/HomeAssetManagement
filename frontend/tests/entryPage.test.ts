@@ -4,7 +4,6 @@ import test from 'node:test';
 import {
   buildMemberAllocationSummaries,
   buildNormalizationPlan,
-  buildPathOptions,
   buildTargetRatioStatus,
   formatAllocationDeviation,
   formatTargetRatioSummary,
@@ -15,7 +14,7 @@ import {
   summarizeMemberAllocations,
   sumAssetTargetRatio,
 } from '../src/components/entry/entryPageLogic.ts';
-import type { CategoryNode, Holding, Member } from '../src/types/index.ts';
+import type { Holding, Member } from '../src/types/index.ts';
 
 const sampleHoldings: Holding[] = [
   {
@@ -67,47 +66,6 @@ const sampleHoldings: Holding[] = [
     updated_at: '2026-03-31T00:00:00Z',
   },
 ];
-
-test('buildPathOptions 会展开三级分类路径', () => {
-  const tree: CategoryNode[] = [
-    {
-      id: 1,
-      type: 'asset',
-      level: 1,
-      parent_id: null,
-      name: '现金存款类',
-      children: [
-        {
-          id: 2,
-          type: 'asset',
-          level: 2,
-          parent_id: 1,
-          name: '银行存款',
-          children: [
-            {
-              id: 3,
-              type: 'asset',
-              level: 3,
-              parent_id: 2,
-              name: '活期',
-              children: [],
-            },
-          ],
-        },
-      ],
-    },
-  ];
-
-  assert.deepEqual(buildPathOptions(tree), [
-    {
-      key: '1|2|3',
-      label: '现金存款类 / 银行存款 / 活期',
-      l1Id: 1,
-      l2Id: 2,
-      l3Id: 3,
-    },
-  ]);
-});
 
 test('金额输入工具函数会规范前导小数并拒绝超过两位小数', () => {
   assert.equal(normalizeAmountInput('.'), '0.');

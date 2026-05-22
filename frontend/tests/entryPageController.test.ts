@@ -20,14 +20,13 @@ const sampleHolding: Holding = {
   updated_at: '2026-04-01T00:00:00Z',
 };
 
-test('buildCreateEntryForm 会默认选中首个成员并初始化资产表单', async () => {
+test('buildCreateEntryForm 会默认选中首个成员并初始化空分类表单', async () => {
   const { buildCreateEntryForm } = await import('../src/components/entry/entryPageController.ts');
 
   assert.deepEqual(buildCreateEntryForm([{ id: 5 }, { id: 9 }]), {
     memberId: '5',
-    type: 'asset',
     name: '',
-    pathKey: '',
+    category: null,
     currency: '',
     amountOriginal: '',
     targetRatio: '',
@@ -36,30 +35,17 @@ test('buildCreateEntryForm 会默认选中首个成员并初始化资产表单',
   assert.equal(buildCreateEntryForm([]).memberId, '');
 });
 
-test('buildEditEntryForm 会按现有 holding 回填表单值', async () => {
+test('buildEditEntryForm 会按现有 holding 回填表单值（含 category 三元组）', async () => {
   const { buildEditEntryForm } = await import('../src/components/entry/entryPageController.ts');
 
   assert.deepEqual(buildEditEntryForm(sampleHolding), {
     memberId: '3',
-    type: 'asset',
     name: '全球股票 ETF',
-    pathKey: '10|11|12',
+    category: { type: 'asset', l1Id: 10, l2Id: 11, l3Id: 12 },
     currency: 'usd',
     amountOriginal: '1200.5',
     targetRatio: '35',
   });
-});
-
-test('resolvePathOptions 会过滤旧默认分类，但编辑旧数据时保留当前选项', async () => {
-  const { LEGACY_CATEGORY_PATH_LABEL, resolvePathOptions } = await import('../src/components/entry/entryPageController.ts');
-
-  const allPathOptions = [
-    { key: '1|2|3', label: LEGACY_CATEGORY_PATH_LABEL, l1Id: 1, l2Id: 2, l3Id: 3 },
-    { key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 },
-  ];
-
-  assert.deepEqual(resolvePathOptions(allPathOptions, null, ''), [allPathOptions[1]]);
-  assert.deepEqual(resolvePathOptions(allPathOptions, sampleHolding, '1|2|3'), allPathOptions);
 });
 
 test('resolveDefaultMemberDeleteId 会优先保留筛选成员，否则回退到首个有数据成员', async () => {
@@ -97,33 +83,31 @@ test('validateEntryForm 会返回面向用户的校验错误', async () => {
   const { buildCreateEntryForm, validateEntryForm } = await import('../src/components/entry/entryPageController.ts');
 
   const form = buildCreateEntryForm([{ id: 1 }]);
-  assert.equal(validateEntryForm(form, []).error, '请输入名称');
+  assert.equal(validateEntryForm(form).error, '请输入名称');
 
   assert.equal(
-    validateEntryForm({ ...form, name: '美元存款' }, []).error,
-    '请选择三级分类路径'
+    validateEntryForm({ ...form, name: '美元存款' }).error,
+    '请选择资产或负债的三级分类'
   );
 
+  const withCategory = {
+    ...form,
+    name: '美元存款',
+    category: { type: 'asset' as const, l1Id: 4, l2Id: 5, l3Id: 6 },
+  };
+
   assert.equal(
-    validateEntryForm(
-      { ...form, name: '美元存款', pathKey: '4|5|6', currency: 'USD', amountOriginal: '12.345' },
-      [{ key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 }]
-    ).error,
+    validateEntryForm({ ...withCategory, currency: 'USD', amountOriginal: '12.345' }).error,
     '金额必须大于 0，且最多支持两位小数'
   );
 
   assert.equal(
-    validateEntryForm(
-      {
-        ...form,
-        name: '美元存款',
-        pathKey: '4|5|6',
-        currency: 'USD',
-        amountOriginal: '12.34',
-        targetRatio: '101',
-      },
-      [{ key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 }]
-    ).error,
+    validateEntryForm({
+      ...withCategory,
+      currency: 'USD',
+      amountOriginal: '12.34',
+      targetRatio: '101',
+    }).error,
     '资产期望占比必须在 0 到 100 之间'
   );
 });
@@ -131,20 +115,19 @@ test('validateEntryForm 会返回面向用户的校验错误', async () => {
 test('buildHoldingPayload 会输出提交 API 所需 payload，并对负债清空 target_ratio', async () => {
   const { buildHoldingPayload, validateEntryForm } = await import('../src/components/entry/entryPageController.ts');
 
-  const pathOptions = [{ key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 }];
   const assetForm = {
     memberId: '2',
-    type: 'asset' as const,
     name: ' 美元存款 ',
-    pathKey: '4|5|6',
+    category: { type: 'asset' as const, l1Id: 4, l2Id: 5, l3Id: 6 },
     currency: ' usd ',
     amountOriginal: '12.34',
     targetRatio: '18',
   };
 
-  const assetValidation = validateEntryForm(assetForm, pathOptions);
+  const assetValidation = validateEntryForm(assetForm);
   assert.equal(assetValidation.error, null);
-  assert.deepEqual(buildHoldingPayload(assetForm, assetValidation.selectedPath!), {
+  assert.ok(assetValidation.category);
+  assert.deepEqual(buildHoldingPayload(assetForm, assetValidation.category), {
     member_id: 2,
     type: 'asset',
     name: '美元存款',
@@ -158,10 +141,14 @@ test('buildHoldingPayload 会输出提交 API 所需 payload，并对负债清�
 
   const liabilityForm = {
     ...assetForm,
-    type: 'liability' as const,
+    category: { type: 'liability' as const, l1Id: 4, l2Id: 5, l3Id: 6 },
     targetRatio: '80',
   };
-  const liabilityValidation = validateEntryForm(liabilityForm, pathOptions);
+  const liabilityValidation = validateEntryForm(liabilityForm);
   assert.equal(liabilityValidation.error, null);
-  assert.equal(buildHoldingPayload(liabilityForm, liabilityValidation.selectedPath!).target_ratio, null);
+  assert.ok(liabilityValidation.category);
+  assert.equal(
+    buildHoldingPayload(liabilityForm, liabilityValidation.category).target_ratio,
+    null
+  );
 });

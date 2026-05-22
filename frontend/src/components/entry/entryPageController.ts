@@ -1,12 +1,11 @@
 import type { HoldingPayload } from '../../services/holdings';
 import type { Holding } from '../../types';
-import type { PathOption } from './entryPageLogic';
+import type { CategoryPickerValue } from './categoryTreePickerLogic';
 
 export type EntryFormState = {
   memberId: string;
-  type: 'asset' | 'liability';
   name: string;
-  pathKey: string;
+  category: CategoryPickerValue | null;
   currency: string;
   amountOriginal: string;
   targetRatio: string;
@@ -15,11 +14,11 @@ export type EntryFormState = {
 export type EntryFormValidationResult =
   | {
       error: string;
-      selectedPath: null;
+      category: null;
     }
   | {
       error: null;
-      selectedPath: PathOption;
+      category: CategoryPickerValue;
     };
 
 type MemberLike = {
@@ -28,15 +27,12 @@ type MemberLike = {
 
 export const INITIAL_ENTRY_FORM: EntryFormState = {
   memberId: '',
-  type: 'asset',
   name: '',
-  pathKey: '',
+  category: null,
   currency: '',
   amountOriginal: '',
   targetRatio: '',
 };
-
-export const LEGACY_CATEGORY_PATH_LABEL = '默认一级 / 默认二级 / 默认三级';
 
 function hasValidTwoDecimalAmount(value: string): boolean {
   return /^\d+(?:\.\d{1,2})?$/.test(value) && Number(value) > 0;
@@ -52,33 +48,17 @@ export function buildCreateEntryForm(members: MemberLike[]): EntryFormState {
 export function buildEditEntryForm(row: Holding): EntryFormState {
   return {
     memberId: String(row.member_id),
-    type: row.type,
     name: row.name,
-    pathKey: `${row.category_l1_id}|${row.category_l2_id}|${row.category_l3_id}`,
+    category: {
+      type: row.type,
+      l1Id: row.category_l1_id,
+      l2Id: row.category_l2_id,
+      l3Id: row.category_l3_id,
+    },
     currency: row.currency,
     amountOriginal: String(row.amount_original),
     targetRatio: row.target_ratio == null ? '' : String(row.target_ratio),
   };
-}
-
-export function resolvePathOptions(
-  allPathOptions: PathOption[],
-  editing: Holding | null,
-  pathKey: string
-): PathOption[] {
-  const filtered = allPathOptions.filter(
-    (option) => option.label !== LEGACY_CATEGORY_PATH_LABEL
-  );
-  if (editing == null) {
-    return filtered;
-  }
-
-  const selected = allPathOptions.find((option) => option.key === pathKey);
-  if (!selected || selected.label !== LEGACY_CATEGORY_PATH_LABEL) {
-    return filtered;
-  }
-
-  return [selected, ...filtered];
 }
 
 export function resolveDefaultMemberDeleteId(options: {
@@ -98,61 +78,53 @@ export function resolveDefaultMemberDeleteId(options: {
   return String(firstMemberWithHoldings?.id ?? members[0]?.id ?? '');
 }
 
-export function validateEntryForm(
-  form: EntryFormState,
-  pathOptions: PathOption[]
-): EntryFormValidationResult {
+export function validateEntryForm(form: EntryFormState): EntryFormValidationResult {
   if (!form.memberId) {
-    return { error: '请选择成员', selectedPath: null };
+    return { error: '请选择成员', category: null };
   }
   if (!form.name.trim()) {
-    return { error: '请输入名称', selectedPath: null };
+    return { error: '请输入名称', category: null };
   }
-  if (!form.pathKey) {
-    return { error: '请选择三级分类路径', selectedPath: null };
+  if (!form.category) {
+    return { error: '请选择资产或负债的三级分类', category: null };
   }
   if (!form.currency.trim()) {
-    return { error: '请选择币种', selectedPath: null };
+    return { error: '请选择币种', category: null };
   }
   if (!form.amountOriginal) {
-    return { error: '请输入金额', selectedPath: null };
+    return { error: '请输入金额', category: null };
   }
   if (!hasValidTwoDecimalAmount(form.amountOriginal)) {
-    return { error: '金额必须大于 0，且最多支持两位小数', selectedPath: null };
+    return { error: '金额必须大于 0，且最多支持两位小数', category: null };
   }
   if (
-    form.type === 'asset' &&
+    form.category.type === 'asset' &&
     (!form.targetRatio ||
       Number(form.targetRatio) < 0 ||
       Number(form.targetRatio) > 100)
   ) {
-    return { error: '资产期望占比必须在 0 到 100 之间', selectedPath: null };
-  }
-
-  const selectedPath = pathOptions.find((option) => option.key === form.pathKey);
-  if (!selectedPath) {
-    return { error: '分类路径无效', selectedPath: null };
+    return { error: '资产期望占比必须在 0 到 100 之间', category: null };
   }
 
   return {
     error: null,
-    selectedPath,
+    category: form.category,
   };
 }
 
 export function buildHoldingPayload(
   form: EntryFormState,
-  selectedPath: PathOption
+  category: CategoryPickerValue
 ): HoldingPayload {
   return {
     member_id: Number(form.memberId),
-    type: form.type,
+    type: category.type,
     name: form.name.trim(),
-    category_l1_id: selectedPath.l1Id,
-    category_l2_id: selectedPath.l2Id,
-    category_l3_id: selectedPath.l3Id,
+    category_l1_id: category.l1Id,
+    category_l2_id: category.l2Id,
+    category_l3_id: category.l3Id,
     currency: form.currency.trim().toUpperCase(),
     amount_original: form.amountOriginal,
-    target_ratio: form.type === 'asset' ? form.targetRatio : null,
+    target_ratio: category.type === 'asset' ? form.targetRatio : null,
   };
 }

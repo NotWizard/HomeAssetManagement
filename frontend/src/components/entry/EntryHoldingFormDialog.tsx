@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { Member } from '../../types';
+import type { CategoryNode, Member } from '../../types';
 import { Button } from '../ui/button';
 import { Dialog } from '../ui/dialog';
 import { Input } from '../ui/input';
@@ -10,6 +10,8 @@ import {
 } from '../ui/searchable-select';
 import { Select } from '../ui/select';
 import { Tooltip } from '../ui/tooltip';
+import { CategoryTreePicker } from './CategoryTreePicker';
+import type { CategoryPickerValue } from './categoryTreePickerLogic';
 import {
   normalizeAmountInput,
 } from './entryPageLogic';
@@ -22,7 +24,8 @@ type EntryHoldingFormDialogProps = {
   form: EntryFormState;
   error: string | null;
   members: Member[];
-  pathSelectOptions: SearchableSelectOption[];
+  assetTree: CategoryNode[];
+  liabilityTree: CategoryNode[];
   currencyOptions: SearchableSelectOption[];
   submitting: boolean;
   setForm: Dispatch<SetStateAction<EntryFormState>>;
@@ -37,13 +40,15 @@ export function EntryHoldingFormDialog({
   form,
   error,
   members,
-  pathSelectOptions,
+  assetTree,
+  liabilityTree,
   currencyOptions,
   submitting,
   setForm,
   onClose,
   onSubmit,
 }: EntryHoldingFormDialogProps) {
+  const isAsset = form.category?.type === 'asset';
   return (
     <Dialog
       open={open}
@@ -62,7 +67,7 @@ export function EntryHoldingFormDialog({
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <div>
+        <div className="sm:col-span-2">
           <label className="mb-1 block text-sm text-muted-foreground">成员</label>
           <Select
             value={form.memberId}
@@ -73,25 +78,6 @@ export function EntryHoldingFormDialog({
               label: member.name,
               value: member.id,
             }))}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm text-muted-foreground">类型</label>
-          <Select
-            value={form.type}
-            onChange={(event) => {
-              const nextType = event.target.value as 'asset' | 'liability';
-              setForm((prev) => ({
-                ...prev,
-                type: nextType,
-                pathKey: '',
-                targetRatio: nextType === 'asset' ? prev.targetRatio : '',
-              }));
-            }}
-            options={[
-              { label: '资产', value: 'asset' },
-              { label: '负债', value: 'liability' },
-            ]}
           />
         </div>
         <div className="sm:col-span-2">
@@ -105,22 +91,23 @@ export function EntryHoldingFormDialog({
         </div>
         <div className="sm:col-span-2">
           <div className="mb-1 flex items-center gap-1.5">
-            <label className="block text-sm text-muted-foreground">
-              三级分类路径
-            </label>
+            <label className="block text-sm text-muted-foreground">分类</label>
             <Tooltip
-              content="请选择完整的一级 / 二级 / 三级分类路径；支持输入关键词搜索，例如“权益”“住房”“信用卡”。"
-              label="三级分类路径说明"
+              content="顶部切换资产 / 负债，沿一级→二级→三级面包屑逐步缩范围；也可在搜索框直接按名字搜（一级 / 二级 / 三级任一段命中均可）。"
+              label="分类选择说明"
             />
           </div>
-          <SearchableSelect
-            value={form.pathKey}
-            onValueChange={(value) =>
-              setForm((prev) => ({ ...prev, pathKey: value }))
+          <CategoryTreePicker
+            value={form.category}
+            onChange={(next: CategoryPickerValue) =>
+              setForm((prev) => ({
+                ...prev,
+                category: next,
+                targetRatio: next.type === 'asset' ? prev.targetRatio : '',
+              }))
             }
-            options={pathSelectOptions}
-            placeholder="搜索一级 / 二级 / 三级分类"
-            emptyMessage="没有匹配的分类路径"
+            assetTree={assetTree}
+            liabilityTree={liabilityTree}
           />
         </div>
         <div>
@@ -158,8 +145,8 @@ export function EntryHoldingFormDialog({
             }}
           />
         </div>
-        {form.type === 'asset' ? (
-          <div>
+        {isAsset ? (
+          <div className="sm:col-span-2">
             <div className="mb-1 flex items-center gap-1.5">
               <label className="block text-sm text-muted-foreground">
                 期望占比(%)

@@ -75,7 +75,7 @@ test('buildPathOptions 会展开三级分类路径', () => {
       type: 'asset',
       level: 1,
       parent_id: null,
-      name: '现金与存款',
+      name: '现金存款类',
       children: [
         {
           id: 2,
@@ -89,7 +89,7 @@ test('buildPathOptions 会展开三级分类路径', () => {
               type: 'asset',
               level: 3,
               parent_id: 2,
-              name: '活期存款',
+              name: '活期',
               children: [],
             },
           ],
@@ -101,7 +101,7 @@ test('buildPathOptions 会展开三级分类路径', () => {
   assert.deepEqual(buildPathOptions(tree), [
     {
       key: '1|2|3',
-      label: '现金与存款 / 银行存款 / 活期存款',
+      label: '现金存款类 / 银行存款 / 活期',
       l1Id: 1,
       l2Id: 2,
       l3Id: 3,

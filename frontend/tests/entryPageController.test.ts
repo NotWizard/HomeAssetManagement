@@ -55,7 +55,7 @@ test('resolvePathOptions 会过滤旧默认分类，但编辑旧数据时保留�
 
   const allPathOptions = [
     { key: '1|2|3', label: LEGACY_CATEGORY_PATH_LABEL, l1Id: 1, l2Id: 2, l3Id: 3 },
-    { key: '4|5|6', label: '现金与存款 / 银行存款 / 活期存款', l1Id: 4, l2Id: 5, l3Id: 6 },
+    { key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 },
   ];
 
   assert.deepEqual(resolvePathOptions(allPathOptions, null, ''), [allPathOptions[1]]);
@@ -107,7 +107,7 @@ test('validateEntryForm 会返回面向用户的校验错误', async () => {
   assert.equal(
     validateEntryForm(
       { ...form, name: '美元存款', pathKey: '4|5|6', currency: 'USD', amountOriginal: '12.345' },
-      [{ key: '4|5|6', label: '现金与存款 / 银行存款 / 活期存款', l1Id: 4, l2Id: 5, l3Id: 6 }]
+      [{ key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 }]
     ).error,
     '金额必须大于 0，且最多支持两位小数'
   );
@@ -122,7 +122,7 @@ test('validateEntryForm 会返回面向用户的校验错误', async () => {
         amountOriginal: '12.34',
         targetRatio: '101',
       },
-      [{ key: '4|5|6', label: '现金与存款 / 银行存款 / 活期存款', l1Id: 4, l2Id: 5, l3Id: 6 }]
+      [{ key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 }]
     ).error,
     '资产期望占比必须在 0 到 100 之间'
   );
@@ -131,7 +131,7 @@ test('validateEntryForm 会返回面向用户的校验错误', async () => {
 test('buildHoldingPayload 会输出提交 API 所需 payload，并对负债清空 target_ratio', async () => {
   const { buildHoldingPayload, validateEntryForm } = await import('../src/components/entry/entryPageController.ts');
 
-  const pathOptions = [{ key: '4|5|6', label: '现金与存款 / 银行存款 / 活期存款', l1Id: 4, l2Id: 5, l3Id: 6 }];
+  const pathOptions = [{ key: '4|5|6', label: '现金存款类 / 银行存款 / 活期', l1Id: 4, l2Id: 5, l3Id: 6 }];
   const assetForm = {
     memberId: '2',
     type: 'asset' as const,

@@ -28,7 +28,7 @@ def test_import_preview_detects_insert_or_update_actions():
         content = "\n".join(
             [
                 "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
-                "US ETF,asset,Alice,权益投资,基金,指数基金/ETF,USD,1000,30",
+                "US ETF,asset,Alice,权益与另类,公募基金,指数/ETF,USD,1000,30",
             ]
         ).encode("utf-8")
 
@@ -56,7 +56,7 @@ def test_import_preview_rejects_ambiguous_duplicate_member_names():
         content = "\n".join(
             [
                 "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
-                "US ETF,asset,Alice,权益投资,基金,指数基金/ETF,USD,1000,30",
+                "US ETF,asset,Alice,权益与另类,公募基金,指数/ETF,USD,1000,30",
             ]
         ).encode("utf-8")
 
@@ -78,8 +78,8 @@ def test_commit_csv_creates_single_import_event_snapshot():
         content = "\n".join(
             [
                 "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
-                "US ETF,asset,Alice,权益投资,基金,指数基金/ETF,USD,1000,30",
-                "现金,asset,Alice,现金与存款,银行存款,活期存款,CNY,700,20",
+                "US ETF,asset,Alice,权益与另类,公募基金,指数/ETF,USD,1000,30",
+                "现金,asset,Alice,现金存款类,银行存款,活期,CNY,700,20",
             ]
         ).encode("utf-8")
 
@@ -106,8 +106,8 @@ def test_finalize_error_report_runs_after_import_commit():
         content = "\n".join(
             [
                 "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
-                "US ETF,asset,Alice,权益投资,基金,指数基金/ETF,USD,1000,30",
-                "坏数据,asset,Alice,权益投资,基金,指数基金/ETF,USD,-1,30",
+                "US ETF,asset,Alice,权益与另类,公募基金,指数/ETF,USD,1000,30",
+                "坏数据,asset,Alice,权益与另类,公募基金,指数/ETF,USD,-1,30",
             ]
         ).encode("utf-8")
 
@@ -217,7 +217,7 @@ def test_import_preview_treats_other_family_matching_holding_as_insert():
         content = "\n".join(
             [
                 "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
-                "US ETF,asset,Alice,权益投资,基金,指数基金/ETF,USD,1000,30",
+                "US ETF,asset,Alice,权益与另类,公募基金,指数/ETF,USD,1000,30",
             ]
         ).encode("utf-8")
 

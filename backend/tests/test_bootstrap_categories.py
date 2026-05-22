@@ -81,5 +81,5 @@ def test_ensure_default_categories_seeds_curated_tree_beside_legacy_tree_when_ho
         )
 
         assert '默认一级' in asset_root_names
-        assert '现金与存款' in asset_root_names
-        assert '房屋相关负债' in liability_root_names
+        assert '现金存款类' in asset_root_names
+        assert '住房负债' in liability_root_names

@@ -45,7 +45,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 22 LTS 原生支持 type-stripping，能让 make-macos-release.mjs 里
+          # `await import('../forge.config.ts')` 直接加载 TS 文件（去掉类型）；
+          # 20 跑会报 "Unknown file extension .ts"。
+          node-version: '22'
           cache: npm
           cache-dependency-path: |
             frontend/package-lock.json

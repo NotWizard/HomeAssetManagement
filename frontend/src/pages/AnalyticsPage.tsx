@@ -171,7 +171,8 @@ export function AnalyticsPage() {
                   <p className="mt-1 text-xs text-slate-500">切换后方卡片与图表会同步更新。</p>
                 </div>
                 <Select
-                  className="h-11 rounded-2xl border-0 bg-white text-sm font-medium shadow-[0_14px_28px_-24px_rgba(15,23,42,0.45)] sm:ml-auto sm:w-[220px]"
+                  wrapperClassName="sm:ml-auto sm:w-[220px]"
+                  className="h-11 rounded-2xl border-0 bg-white text-sm font-medium shadow-[0_14px_28px_-24px_rgba(15,23,42,0.45)]"
                   value={selectedCurrency}
                   onChange={(event) => setSelectedAnalyticsCurrency(String(event.target.value))}
                   options={currencySummaries.map((item) => ({

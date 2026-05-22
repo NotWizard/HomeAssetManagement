@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Performance
+
+- 前端图表性能修复：`ECharts.tsx` 去掉 `notMerge: true`（之前每次 option 引用变化都强制重建实例），改走 echarts 默认 diff `setOption`；`ResizeObserver` 加 `requestAnimationFrame` 合批避免多图同屏时多次串联 resize 抖动；6 个 chart 组件（`TrendChart` / `SankeyChart` / `CorrelationHeatmap` / `VolatilityChart` / `CurrencyBreakdownChart` / `CurrencyExposureChart`）中漏 `useMemo` 包 `buildXxxOption` 的 4 个补齐。修复后切换 analytics 日期范围 / 滚动 / 勾选 / 输入不再触发图表抖动。来源：性能计划 Q1 + P1#9。
+- Frontend chart performance fix: drop `notMerge: true` from `ECharts.tsx` (which forced a fresh ECharts instance whenever the `option` reference changed) so echarts can diff via `setOption`; add `requestAnimationFrame` batching to the ResizeObserver to avoid serialised resize jitter when several charts share the viewport; add the missing `useMemo` wrapper around `buildXxxOption` in the four chart components that didn't have it (`TrendChart`, `CorrelationHeatmap`, `VolatilityChart`, `CurrencyBreakdownChart`, `CurrencyExposureChart`; `SankeyChart` was already memoised). Result: switching analytics date ranges, scrolling, toggling checkboxes and typing no longer cause chart redraw jitter. Tracks Q1 + P1#9 of the performance plan.
+
 ## [0.2.0] - 2026-05-22
 
 ### Fixed

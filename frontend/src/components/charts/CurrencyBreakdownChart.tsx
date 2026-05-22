@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { ECharts } from './ECharts';
 import { buildCurrencyBreakdownChartOption } from './chartOptions';
 
@@ -10,7 +12,10 @@ type Props = {
 };
 
 export function CurrencyBreakdownChart({ currency, items, emptyText }: Props) {
-  const option = buildCurrencyBreakdownChartOption(currency, items, emptyText);
+  const option = useMemo(
+    () => buildCurrencyBreakdownChartOption(currency, items, emptyText),
+    [currency, items, emptyText]
+  );
 
   return <ECharts option={option} style={{ height: 360 }} />;
 }

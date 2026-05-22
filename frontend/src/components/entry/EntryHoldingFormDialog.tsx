@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { useRef } from 'react';
 
 import type { CategoryNode, Member } from '../../types';
 import { Button } from '../ui/button';
@@ -49,6 +50,7 @@ export function EntryHoldingFormDialog({
   onSubmit,
 }: EntryHoldingFormDialogProps) {
   const isAsset = form.category?.type === 'asset';
+  const categoryFieldRef = useRef<HTMLDivElement>(null);
   return (
     <Dialog
       open={open}
@@ -89,7 +91,7 @@ export function EntryHoldingFormDialog({
             }
           />
         </div>
-        <div className="sm:col-span-2">
+        <div ref={categoryFieldRef} className="sm:col-span-2">
           <div className="mb-1 flex items-center gap-1.5">
             <label className="block text-sm text-muted-foreground">分类</label>
             <Tooltip
@@ -108,6 +110,17 @@ export function EntryHoldingFormDialog({
             }
             assetTree={assetTree}
             liabilityTree={liabilityTree}
+            onOpenChange={(open) => {
+              if (!open) return;
+              // 等 popover 渲染完后，把整个「分类」字段（含 label）滚到 dialog body 顶部，
+              // 让用户一次性看到 trigger + tab + 面包屑 + 搜索 + 列表 的完整组件。
+              requestAnimationFrame(() => {
+                categoryFieldRef.current?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              });
+            }}
           />
         </div>
         <div>

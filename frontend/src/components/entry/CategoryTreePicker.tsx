@@ -17,6 +17,7 @@ type CategoryTreePickerProps = {
   liabilityTree: CategoryNode[];
   disabled?: boolean;
   className?: string;
+  onOpenChange?: (open: boolean) => void;
 };
 
 type CategoryType = 'asset' | 'liability';
@@ -28,8 +29,8 @@ export function CategoryTreePicker({
   liabilityTree,
   disabled = false,
   className,
+  onOpenChange,
 }: CategoryTreePickerProps) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
   const [open, setOpen] = React.useState(false);
   const [activeType, setActiveType] = React.useState<CategoryType>(value?.type ?? 'asset');
   const [breadcrumb, setBreadcrumb] = React.useState<{ l1Id?: number; l2Id?: number }>(() =>
@@ -45,14 +46,10 @@ export function CategoryTreePicker({
   const activeTree = activeType === 'asset' ? assetTree : liabilityTree;
 
   React.useEffect(() => {
-    if (!open) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    return () => document.removeEventListener('mousedown', handlePointerDown);
+    // 关闭 popover 时清空搜索词，下次打开干净状态（点 outside 关闭逻辑下移到全局 mousedown）
+    if (!open) {
+      setSearchTerm('');
+    }
   }, [open]);
 
   const openPicker = () => {
@@ -61,11 +58,13 @@ export function CategoryTreePicker({
     setBreadcrumb(value ? { l1Id: value.l1Id, l2Id: value.l2Id } : {});
     setSearchTerm('');
     setOpen(true);
+    onOpenChange?.(true);
   };
 
   const closePicker = () => {
     setSearchTerm('');
     setOpen(false);
+    onOpenChange?.(false);
   };
 
   const handleSwitchType = (next: CategoryType) => {
@@ -115,11 +114,11 @@ export function CategoryTreePicker({
   const typeChangedFromValue = value !== null && value.type !== activeType;
 
   return (
-    <div ref={containerRef} className={cn('relative', className)}>
+    <div className={cn(className)}>
       <button
         type="button"
         disabled={disabled}
-        aria-haspopup="dialog"
+        aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => (open ? closePicker() : openPicker())}
         className={cn(
@@ -135,7 +134,7 @@ export function CategoryTreePicker({
       </button>
 
       {open ? (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
+        <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-card">
           {/* Tab */}
           <div className="flex gap-1 border-b border-slate-200 p-2">
             {(['asset', 'liability'] as const).map((t) => (

@@ -136,7 +136,7 @@ def test_update_settings_revalues_existing_holdings_and_daily_snapshot():
         member_id = member_resp.json()["data"]["id"]
 
         category_resp = client.get("/api/v1/categories", params={"type": "asset"})
-        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金与存款", "银行存款", "活期存款"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金存款类", "银行存款", "活期"))
 
         create_resp = client.post(
             "/api/v1/holdings",
@@ -181,7 +181,7 @@ def test_delete_holding_updates_daily_analytics_snapshot_immediately():
 
         category_resp = client.get("/api/v1/categories", params={"type": "asset"})
         assert category_resp.status_code == 200
-        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金与存款", "银行存款", "活期存款"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金存款类", "银行存款", "活期"))
 
         create_resp = client.post(
             "/api/v1/holdings",
@@ -247,10 +247,10 @@ def test_currency_overview_api_returns_currency_summary_and_category_paths():
         asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
         liability_tree = client.get("/api/v1/categories", params={"type": "liability"}).json()["data"]
 
-        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("权益投资", "股票", "A股"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("权益与另类", "股票", "A股"))
         liability_l1, liability_l2, liability_l3 = _find_category_path(
             liability_tree,
-            ("消费负债", "信用卡", "已出账单"),
+            ("消费负债", "信用卡", "已出账"),
         )
 
         create_asset = client.post(
@@ -293,8 +293,8 @@ def test_currency_overview_api_returns_currency_summary_and_category_paths():
     assert payload["currencies"][0]["total_asset"] == 300.0
     assert payload["currencies"][0]["total_liability"] == 50.0
     assert payload["currencies"][0]["net_asset"] == 250.0
-    assert payload["details"]["CNY"]["items"][0]["category_path"] == "权益投资 / 股票 / A股"
-    assert payload["details"]["CNY"]["items"][1]["category_path"] == "消费负债 / 信用卡 / 已出账单"
+    assert payload["details"]["CNY"]["items"][0]["category_path"] == "权益与另类 / 股票 / A股"
+    assert payload["details"]["CNY"]["items"][1]["category_path"] == "消费负债 / 信用卡 / 已出账"
 
 
 
@@ -307,8 +307,8 @@ def test_bulk_delete_holdings_by_ids_updates_analytics_immediately():
 
         asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
         liability_tree = client.get("/api/v1/categories", params={"type": "liability"}).json()["data"]
-        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金与存款", "银行存款", "活期存款"))
-        liability_l1, liability_l2, liability_l3 = _find_category_path(liability_tree, ("消费负债", "信用卡", "已出账单"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金存款类", "银行存款", "活期"))
+        liability_l1, liability_l2, liability_l3 = _find_category_path(liability_tree, ("消费负债", "信用卡", "已出账"))
 
         first_resp = client.post(
             "/api/v1/holdings",
@@ -380,7 +380,7 @@ def test_bulk_delete_holdings_by_member_only_removes_target_member_rows():
         bob_id = bob_resp.json()["data"]["id"]
 
         asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
-        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金与存款", "银行存款", "活期存款"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金存款类", "银行存款", "活期"))
 
         for member_id, name, amount in (
             (alice_id, "Alice 工资卡", "100"),
@@ -434,7 +434,7 @@ def test_delete_member_succeeds_after_bulk_deleting_all_member_holdings():
         member_id = member_resp.json()["data"]["id"]
 
         asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
-        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金与存款", "银行存款", "活期存款"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(asset_tree, ("现金存款类", "银行存款", "活期"))
 
         create_resp = client.post(
             "/api/v1/holdings",
@@ -542,7 +542,7 @@ def test_update_settings_only_revalues_current_family_holdings_and_snapshots():
         member_resp = client.post("/api/v1/members", json={"name": "Carol"})
         member_id = member_resp.json()["data"]["id"]
         category_resp = client.get("/api/v1/categories", params={"type": "asset"})
-        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金与存款", "银行存款", "活期存款"))
+        asset_l1, asset_l2, asset_l3 = _find_category_path(category_resp.json()["data"], ("现金存款类", "银行存款", "活期"))
         create_resp = client.post(
             "/api/v1/holdings",
             json={
@@ -632,7 +632,7 @@ def _seed_two_assets_for_member(client: TestClient, name: str) -> tuple[int, int
     member_id = member_resp.json()["data"]["id"]
 
     asset_tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
-    l1, l2, l3 = _find_category_path(asset_tree, ("现金与存款", "银行存款", "活期存款"))
+    l1, l2, l3 = _find_category_path(asset_tree, ("现金存款类", "银行存款", "活期"))
 
     payload = {
         "member_id": member_id,
@@ -709,7 +709,7 @@ def test_bulk_update_target_ratio_rejects_liability_holding():
         member_id = member_resp.json()["data"]["id"]
 
         liability_tree = client.get("/api/v1/categories", params={"type": "liability"}).json()["data"]
-        l1, l2, l3 = _find_category_path(liability_tree, ("消费负债", "信用卡", "已出账单"))
+        l1, l2, l3 = _find_category_path(liability_tree, ("消费负债", "信用卡", "已出账"))
 
         liability = client.post(
             "/api/v1/holdings",

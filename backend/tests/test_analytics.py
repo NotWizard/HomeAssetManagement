@@ -109,9 +109,9 @@ def test_build_currency_overview_aggregates_currency_totals_and_breakdowns():
             "type": "asset",
             "currency": "USD",
             "amount_original": 600.0,
-            "category_l1": "现金与存款",
+            "category_l1": "现金存款类",
             "category_l2": "银行存款",
-            "category_l3": "活期存款",
+            "category_l3": "活期",
         },
         {
             "id": 2,
@@ -119,9 +119,9 @@ def test_build_currency_overview_aggregates_currency_totals_and_breakdowns():
             "type": "asset",
             "currency": "USD",
             "amount_original": 400.0,
-            "category_l1": "权益投资",
-            "category_l2": "基金",
-            "category_l3": "指数基金/ETF",
+            "category_l1": "权益与另类",
+            "category_l2": "公募基金",
+            "category_l3": "指数/ETF",
         },
         {
             "id": 3,
@@ -131,7 +131,7 @@ def test_build_currency_overview_aggregates_currency_totals_and_breakdowns():
             "amount_original": 200.0,
             "category_l1": "消费负债",
             "category_l2": "信用卡",
-            "category_l3": "已出账单",
+            "category_l3": "已出账",
         },
         {
             "id": 4,
@@ -139,9 +139,9 @@ def test_build_currency_overview_aggregates_currency_totals_and_breakdowns():
             "type": "asset",
             "currency": "CNY",
             "amount_original": 1000.0,
-            "category_l1": "现金与存款",
+            "category_l1": "现金存款类",
             "category_l2": "银行存款",
-            "category_l3": "活期存款",
+            "category_l3": "活期",
         },
         {
             "id": 5,
@@ -149,8 +149,8 @@ def test_build_currency_overview_aggregates_currency_totals_and_breakdowns():
             "type": "liability",
             "currency": "CNY",
             "amount_original": 100.0,
-            "category_l1": "房屋相关负债",
-            "category_l2": "住房贷款",
+            "category_l1": "住房负债",
+            "category_l2": "房屋按揭",
             "category_l3": "商业房贷",
         },
     ]
@@ -172,9 +172,9 @@ def test_build_currency_overview_aggregates_currency_totals_and_breakdowns():
     assert usd_detail["asset_breakdown"][0]["share_pct"] == 60.0
     assert usd_detail["asset_breakdown"][1]["share_pct"] == 40.0
     assert usd_detail["liability_breakdown"][0]["share_pct"] == 100.0
-    assert usd_detail["items"][0]["category_path"] == "现金与存款 / 银行存款 / 活期存款"
+    assert usd_detail["items"][0]["category_path"] == "现金存款类 / 银行存款 / 活期"
     assert usd_detail["items"][0]["share_pct"] == 60.0
-    assert usd_detail["items"][2]["category_path"] == "消费负债 / 信用卡 / 已出账单"
+    assert usd_detail["items"][2]["category_path"] == "消费负债 / 信用卡 / 已出账"
 
 
 def test_build_currency_overview_returns_zero_share_when_bucket_total_is_zero():
@@ -185,9 +185,9 @@ def test_build_currency_overview_returns_zero_share_when_bucket_total_is_zero():
             "type": "liability",
             "currency": "JPY",
             "amount_original": 0.0,
-            "category_l1": "往来及其他负债",
-            "category_l2": "其他应付款",
-            "category_l3": "税费及其他欠款",
+            "category_l1": "亲友借款",
+            "category_l2": "其他个人往来",
+            "category_l3": "合伙人借款",
         }
     ]
 
@@ -211,9 +211,9 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
             'type': 'asset',
             'member_id': 7,
             'amount_base': 120.0,
-            'category_l1': '现金与存款',
+            'category_l1': '现金存款类',
             'category_l2': '银行存款',
-            'category_l3': '活期存款',
+            'category_l3': '活期',
         },
         {
             'id': 2,
@@ -223,7 +223,7 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
             'amount_base': 35.0,
             'category_l1': '消费负债',
             'category_l2': '信用卡',
-            'category_l3': '已出账单',
+            'category_l3': '已出账',
         },
         {
             'id': 3,
@@ -231,9 +231,9 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
             'type': 'asset',
             'member_id': 7,
             'amount_base': 30.0,
-            'category_l1': '现金与存款',
+            'category_l1': '现金存款类',
             'category_l2': '银行存款',
-            'category_l3': '定期存款',
+            'category_l3': '定期',
         },
     ]
 
@@ -242,30 +242,30 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
     node_map = {node['id']: node for node in result['nodes']}
     link_map = {(link['source'], link['target']): link['value'] for link in result['links']}
 
-    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['depth'] == 0
-    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['name'] == '已出账单'
-    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['category_path'] == '消费负债 / 信用卡 / 已出账单'
-    assert node_map['liability:l3:7:消费负债/信用卡/已出账单']['share_pct'] == 100.0
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账']['depth'] == 0
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账']['name'] == '已出账'
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账']['category_path'] == '消费负债 / 信用卡 / 已出账'
+    assert node_map['liability:l3:7:消费负债/信用卡/已出账']['share_pct'] == 100.0
     assert node_map['liability:l2:7:消费负债/信用卡']['depth'] == 1
     assert node_map['liability:l2:7:消费负债/信用卡']['name'] == '信用卡'
     assert node_map['liability:l2:7:消费负债/信用卡']['share_pct'] == 100.0
     assert node_map['member:7']['depth'] == 2
     assert node_map['member:7']['name'] == 'Alice'
-    assert node_map['asset:l2:7:现金与存款/银行存款']['depth'] == 3
-    assert node_map['asset:l2:7:现金与存款/银行存款']['name'] == '银行存款'
-    assert node_map['asset:l2:7:现金与存款/银行存款']['share_pct'] == 100.0
-    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['depth'] == 4
-    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['name'] == '活期存款'
-    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['category_path'] == '现金与存款 / 银行存款 / 活期存款'
-    assert node_map['asset:l3:7:现金与存款/银行存款/活期存款']['share_pct'] == 80.0
-    assert node_map['asset:l3:7:现金与存款/银行存款/定期存款']['name'] == '定期存款'
-    assert node_map['asset:l3:7:现金与存款/银行存款/定期存款']['share_pct'] == 20.0
+    assert node_map['asset:l2:7:现金存款类/银行存款']['depth'] == 3
+    assert node_map['asset:l2:7:现金存款类/银行存款']['name'] == '银行存款'
+    assert node_map['asset:l2:7:现金存款类/银行存款']['share_pct'] == 100.0
+    assert node_map['asset:l3:7:现金存款类/银行存款/活期']['depth'] == 4
+    assert node_map['asset:l3:7:现金存款类/银行存款/活期']['name'] == '活期'
+    assert node_map['asset:l3:7:现金存款类/银行存款/活期']['category_path'] == '现金存款类 / 银行存款 / 活期'
+    assert node_map['asset:l3:7:现金存款类/银行存款/活期']['share_pct'] == 80.0
+    assert node_map['asset:l3:7:现金存款类/银行存款/定期']['name'] == '定期'
+    assert node_map['asset:l3:7:现金存款类/银行存款/定期']['share_pct'] == 20.0
 
     assert link_map[('member:7', 'liability:l2:7:消费负债/信用卡')] == 35.0
-    assert link_map[('liability:l2:7:消费负债/信用卡', 'liability:l3:7:消费负债/信用卡/已出账单')] == 35.0
-    assert link_map[('member:7', 'asset:l2:7:现金与存款/银行存款')] == 150.0
-    assert link_map[('asset:l2:7:现金与存款/银行存款', 'asset:l3:7:现金与存款/银行存款/活期存款')] == 120.0
-    assert link_map[('asset:l2:7:现金与存款/银行存款', 'asset:l3:7:现金与存款/银行存款/定期存款')] == 30.0
+    assert link_map[('liability:l2:7:消费负债/信用卡', 'liability:l3:7:消费负债/信用卡/已出账')] == 35.0
+    assert link_map[('member:7', 'asset:l2:7:现金存款类/银行存款')] == 150.0
+    assert link_map[('asset:l2:7:现金存款类/银行存款', 'asset:l3:7:现金存款类/银行存款/活期')] == 120.0
+    assert link_map[('asset:l2:7:现金存款类/银行存款', 'asset:l3:7:现金存款类/银行存款/定期')] == 30.0
 
 
 
@@ -552,9 +552,9 @@ def test_trend_and_sankey_ignore_other_family_snapshots_and_members():
                 'amount_base': 100.0,
                 'amount_original': 100.0,
                 'currency': 'CNY',
-                'category_l1': '现金与存款',
+                'category_l1': '现金存款类',
                 'category_l2': '银行存款',
-                'category_l3': '活期存款',
+                'category_l3': '活期',
             }
         ],
     }
@@ -569,9 +569,9 @@ def test_trend_and_sankey_ignore_other_family_snapshots_and_members():
                 'amount_base': 999.0,
                 'amount_original': 999.0,
                 'currency': 'CNY',
-                'category_l1': '现金与存款',
+                'category_l1': '现金存款类',
                 'category_l2': '银行存款',
-                'category_l3': '活期存款',
+                'category_l3': '活期',
             }
         ],
     }
@@ -625,5 +625,5 @@ def test_trend_and_sankey_ignore_other_family_snapshots_and_members():
     node_names = {node['name'] for node in sankey_resp.json()['data']['nodes']}
     assert 'Alice' in node_names
     assert 'Mallory' not in node_names
-    assert '活期存款' in node_names
+    assert '活期' in node_names
     assert '外部家庭资产' not in node_names

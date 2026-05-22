@@ -8,7 +8,6 @@ import {
   buildBulkErrorMessage,
   buildMemberAllocationSummaries,
   buildNormalizationPlan,
-  buildPathOptions,
   summarizeHoldings,
   summarizeMemberAllocations,
 } from '../components/entry/entryPageLogic';
@@ -23,7 +22,6 @@ import {
   buildHoldingPayload,
   INITIAL_ENTRY_FORM,
   resolveDefaultMemberDeleteId,
-  resolvePathOptions,
   type EntryFormState,
   validateEntryForm,
 } from '../components/entry/entryPageController';
@@ -161,27 +159,8 @@ export function EntryPage() {
     },
   });
 
-  const allPathOptions = useMemo(() => {
-    if (form.type === 'asset') {
-      return buildPathOptions(assetCategoryQuery.data ?? []);
-    }
-    return buildPathOptions(liabilityCategoryQuery.data ?? []);
-  }, [form.type, assetCategoryQuery.data, liabilityCategoryQuery.data]);
-
-  const pathOptions = useMemo(
-    () => resolvePathOptions(allPathOptions, editing, form.pathKey),
-    [allPathOptions, editing, form.pathKey]
-  );
-
-  const pathSelectOptions = useMemo<SearchableSelectOption[]>(
-    () =>
-      pathOptions.map((option) => ({
-        value: option.key,
-        label: option.label,
-        searchText: option.label.replace(/\//g, ' '),
-      })),
-    [pathOptions]
-  );
+  const assetTree = assetCategoryQuery.data ?? [];
+  const liabilityTree = liabilityCategoryQuery.data ?? [];
 
   const currencyOptions = useMemo(() => {
     const current = form.currency.trim().toUpperCase();
@@ -330,15 +309,15 @@ export function EntryPage() {
 
   const submitForm = () => {
     setError(null);
-    const validation = validateEntryForm(form, pathOptions);
-    if (validation.error || validation.selectedPath == null) {
-      setError(validation.error ?? '分类路径无效');
+    const validation = validateEntryForm(form);
+    if (validation.error || validation.category == null) {
+      setError(validation.error ?? '分类无效');
       return;
     }
 
     const payload: HoldingPayload = buildHoldingPayload(
       form,
-      validation.selectedPath
+      validation.category
     );
 
     if (editing) {
@@ -520,7 +499,8 @@ export function EntryPage() {
         form={form}
         error={error}
         members={membersQuery.data ?? []}
-        pathSelectOptions={pathSelectOptions}
+        assetTree={assetTree}
+        liabilityTree={liabilityTree}
         currencyOptions={currencyOptions}
         submitting={
           createHoldingMutation.isPending || updateHoldingMutation.isPending

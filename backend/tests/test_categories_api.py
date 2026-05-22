@@ -5,99 +5,135 @@ from app.main import app
 
 EXPECTED_ASSET_TREE = [
     {
-        "name": "现金与存款",
+        "name": "现金存款类",
         "children": [
-            {"name": "现金", "children": ["人民币现金", "美元现金"]},
-            {"name": "银行存款", "children": ["活期存款", "定期存款", "大额存单"]},
-            {"name": "支付账户", "children": ["支付宝余额", "微信余额", "其他支付余额"]},
+            {"name": "现金", "children": ["人民币现金", "外币现金"]},
+            {"name": "银行存款", "children": ["活期", "定期", "大额存单", "通知存款"]},
+            {"name": "支付账户", "children": ["支付宝", "微信", "数字人民币", "其他"]},
+            {"name": "货基/T+0 理财", "children": ["货币基金", "现金管理类理财"]},
         ],
     },
     {
-        "name": "稳健投资",
+        "name": "固定收益类",
         "children": [
-            {"name": "货币类", "children": ["货币基金", "现金管理类理财"]},
-            {"name": "固收类", "children": ["银行理财", "债券基金", "国债/债券"]},
+            {"name": "债券", "children": ["国债", "地方政府债", "企业债", "可转债"]},
+            {"name": "固收基金", "children": ["纯债基金", "一级债基", "二级债基"]},
+            {"name": "银行理财", "children": ["R1-R2 稳健", "R3 平衡", "结构性存款"]},
+            {"name": "信托与资管", "children": ["集合信托", "资管计划", "私募固收"]},
         ],
     },
     {
-        "name": "权益投资",
+        "name": "权益与另类",
         "children": [
-            {"name": "股票", "children": ["A股", "港股", "美股/海外股票"]},
-            {"name": "基金", "children": ["指数基金/ETF", "主动权益基金", "REITs"]},
+            {"name": "股票", "children": ["A股", "港股", "美股海外"]},
+            {"name": "公募基金", "children": ["指数/ETF", "主动权益", "混合型"]},
+            {"name": "REITs", "children": ["公募 REITs", "海外 REITs"]},
+            {"name": "另类投资", "children": ["PE/VC", "对冲", "商品期货", "贵金属账户"]},
         ],
     },
     {
-        "name": "保障与储备",
+        "name": "数字资产",
         "children": [
-            {"name": "保险", "children": ["寿险现金价值", "年金险现金价值", "万能险账户价值"]},
-            {"name": "长期账户", "children": ["住房公积金", "个人养老金", "养老保险个人账户"]},
+            {"name": "主流加密", "children": ["BTC", "ETH", "稳定币 USDT-USDC"]},
+            {"name": "其他代币", "children": ["山寨币", "平台币", "DeFi"]},
+            {"name": "NFT 与链上资产", "children": ["NFT", "GameFi"]},
+        ],
+    },
+    {
+        "name": "退休与长期账户",
+        "children": [
+            {"name": "法定养老", "children": ["社保个人账户"]},
+            {"name": "补充养老", "children": ["企业年金", "职业年金", "个人养老金"]},
+            {"name": "公积金", "children": ["住房公积金"]},
+            {"name": "教育储备", "children": ["子女教育金"]},
+        ],
+    },
+    {
+        "name": "保险账户",
+        "children": [
+            {"name": "寿险类", "children": ["终身寿现金价值", "定期寿现金价值"]},
+            {"name": "年金险", "children": ["传统年金", "分红型年金"]},
+            {"name": "万能/投连", "children": ["万能险账户价值", "投连险账户价值"]},
         ],
     },
     {
         "name": "不动产",
         "children": [
-            {"name": "住宅", "children": ["自住房", "投资住宅"]},
-            {"name": "商业及附属", "children": ["商铺/写字楼", "车位/车库"]},
+            {"name": "住宅", "children": ["公寓", "别墅", "商品住宅", "自建房"]},
+            {"name": "商业不动产", "children": ["商铺", "写字楼", "厂房"]},
+            {"name": "其他不动产", "children": ["车位车库", "土地使用权", "海外不动产"]},
         ],
     },
     {
-        "name": "实物资产",
+        "name": "车辆",
         "children": [
-            {"name": "车辆", "children": ["家用汽车", "其他车辆"]},
-            {"name": "贵重物品", "children": ["黄金贵金属", "珠宝奢侈品", "收藏品"]},
+            {"name": "家用车辆", "children": ["燃油车", "新能源车", "摩托车"]},
+            {"name": "其他车辆", "children": ["商用车", "房车", "游艇"]},
         ],
     },
     {
-        "name": "经营与往来",
+        "name": "其他实物",
         "children": [
-            {"name": "经营资产", "children": ["公司股权", "合伙份额", "经营设备"]},
-            {"name": "应收资产", "children": ["亲友借出款", "应收账款", "押金保证金"]},
+            {"name": "贵金属与珠宝", "children": ["黄金实物", "白银铂金实物", "珠宝首饰"]},
+            {"name": "艺术与收藏", "children": ["艺术品", "古董", "名表", "名酒"]},
+            {"name": "其他高价值", "children": ["奢侈品", "乐器装备"]},
+        ],
+    },
+    {
+        "name": "经营资产",
+        "children": [
+            {"name": "股权类", "children": ["公司股权", "合伙份额"]},
+            {"name": "经营性实物", "children": ["经营设备", "商铺装修"]},
+            {"name": "经营性账户", "children": ["经营银行账户", "经营性货款"]},
         ],
     },
 ]
 
 EXPECTED_LIABILITY_TREE = [
     {
-        "name": "房屋相关负债",
+        "name": "住房负债",
         "children": [
-            {"name": "住房贷款", "children": ["商业房贷", "公积金贷款", "组合贷款"]},
-            {"name": "房产抵押贷款", "children": ["抵押经营贷", "抵押消费贷", "装修贷"]},
-        ],
-    },
-    {
-        "name": "消费负债",
-        "children": [
-            {"name": "信用卡", "children": ["已出账单", "未出账单", "分期余额"]},
-            {"name": "互联网消费信贷", "children": ["花呗/白条类", "其他平台消费贷"]},
-            {"name": "银行消费贷", "children": ["个人信用贷", "教育/医疗/装修消费贷"]},
-        ],
-    },
-    {
-        "name": "车辆及耐用品负债",
-        "children": [
-            {"name": "车贷", "children": ["新车贷款", "二手车贷款"]},
-            {"name": "分期付款", "children": ["手机数码分期", "家电家具分期"]},
+            {"name": "房屋按揭", "children": ["商业房贷", "公积金贷款", "组合贷款"]},
+            {"name": "房产抵押贷", "children": ["抵押消费贷", "抵押经营贷"]},
+            {"name": "装修与配套", "children": ["装修贷", "家装分期"]},
         ],
     },
     {
         "name": "经营负债",
         "children": [
-            {"name": "经营贷款", "children": ["小微经营贷", "流动资金贷款", "对公借款"]},
-            {"name": "经营应付款", "children": ["应付货款", "应付租金", "其他经营应付款"]},
+            {"name": "经营性贷款", "children": ["小微经营贷", "流动资金贷款"]},
+            {"name": "对公借款", "children": ["股东借款", "关联企业借款"]},
+        ],
+    },
+    {
+        "name": "消费负债",
+        "children": [
+            {"name": "信用卡", "children": ["已出账", "未出账", "分期"]},
+            {"name": "互联网消费信贷", "children": ["花呗白条类", "京东金融", "美团消费贷"]},
+            {"name": "银行消费贷", "children": ["个人信用贷", "教育医疗消费贷"]},
+        ],
+    },
+    {
+        "name": "车辆与耐用品负债",
+        "children": [
+            {"name": "车贷", "children": ["新车贷款", "二手车贷款", "车辆抵押贷"]},
+            {"name": "耐用品分期", "children": ["手机数码", "家电家具"]},
         ],
     },
     {
         "name": "投资杠杆负债",
         "children": [
-            {"name": "融资类", "children": ["融资融券", "质押借款"]},
-            {"name": "其他杠杆", "children": ["配资/其他杠杆融资"]},
+            {"name": "证券融资", "children": ["融资融券", "期权保证金"]},
+            {"name": "质押借款", "children": ["股票质押", "基金质押"]},
+            {"name": "其他杠杆", "children": ["配资", "加密杠杆"]},
         ],
     },
     {
-        "name": "往来及其他负债",
+        "name": "亲友借款",
         "children": [
-            {"name": "亲友借款", "children": ["短期借款", "长期借款"]},
-            {"name": "其他应付款", "children": ["医疗欠款", "学费欠款", "税费及其他欠款"]},
+            {"name": "短期借款", "children": ["1 年内"]},
+            {"name": "长期借款", "children": ["1 年以上"]},
+            {"name": "其他个人往来", "children": ["合伙人借款", "同事借款"]},
         ],
     },
 ]
@@ -145,5 +181,5 @@ def test_categories_api_returns_curated_asset_and_liability_trees():
     assert _project_tree(liability_tree) == EXPECTED_LIABILITY_TREE
 
     all_names = _collect_names(asset_tree) | _collect_names(liability_tree)
-    assert "美元现金" in all_names
+    assert "外币现金" in all_names
     assert not (LEGACY_PLACEHOLDERS & all_names)

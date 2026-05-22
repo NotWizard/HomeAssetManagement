@@ -1,12 +1,4 @@
-import type { CategoryNode, Holding, Member } from '../../types';
-
-export type PathOption = {
-  key: string;
-  label: string;
-  l1Id: number;
-  l2Id: number;
-  l3Id: number;
-};
+import type { Holding, Member } from '../../types';
 
 export type BulkDeleteSummary = {
   count: number;
@@ -25,24 +17,6 @@ export type TargetRatioStatus = {
 
 const AMOUNT_PATTERN = /^\d*(?:\.\d{0,2})?$/;
 export const TARGET_RATIO_EPSILON = 0.0001;
-
-export function buildPathOptions(tree: CategoryNode[]): PathOption[] {
-  const result: PathOption[] = [];
-  for (const l1 of tree) {
-    for (const l2 of l1.children ?? []) {
-      for (const l3 of l2.children ?? []) {
-        result.push({
-          key: `${l1.id}|${l2.id}|${l3.id}`,
-          label: `${l1.name} / ${l2.name} / ${l3.name}`,
-          l1Id: l1.id,
-          l2Id: l2.id,
-          l3Id: l3.id,
-        });
-      }
-    }
-  }
-  return result;
-}
 
 export function normalizeAmountInput(value: string): string | null {
   if (value === '') {

@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import { cn } from '../../lib/cn';
 
@@ -13,22 +14,24 @@ type DialogProps = {
 
 export function Dialog({ open, title, description, onClose, children, footer }: DialogProps) {
   if (!open) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <button
         className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
         onClick={onClose}
         aria-label="关闭弹窗"
       />
-      <div className={cn('relative z-10 w-full max-w-2xl rounded-xl border bg-card p-5 shadow-card animate-fade-in')}>
-        <div className="mb-4">
+      <div className={cn('relative z-10 flex max-h-[85vh] w-full max-w-2xl flex-col rounded-xl border bg-card shadow-card animate-fade-in')}>
+        <div className="px-5 pt-5">
           <h3 className="text-lg font-semibold">{title}</h3>
           {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
-        <div>{children}</div>
-        {footer ? <div className="mt-5 flex justify-end gap-2">{footer}</div> : null}
+        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer ? <div className="flex justify-end gap-2 border-t border-border/60 px-5 py-3">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

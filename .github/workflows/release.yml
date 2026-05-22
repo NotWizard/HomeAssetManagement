@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '版本 tag（必填，如 v0.2.0）；workflow 不会自动打 tag，仅基于该名字 build 并 create release / Required tag name (e.g. v0.2.0); the workflow does not create the tag, only builds and publishes the release under this name.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos-arm64:
+    name: Build macOS arm64 DMG/ZIP
+    runs-on: macos-latest
+    timeout-minutes: 30
+    outputs:
+      release_tag: ${{ steps.resolve_tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        id: resolve_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - name: Install backend (desktop) deps into .venv
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-desktop.txt
+
+      - name: Install frontend deps
+        run: npm --prefix frontend ci
+
+      - name: Install desktop deps
+        run: npm --prefix desktop ci
+
+      - name: Build DMG + ZIP (arm64)
+        run: npm --prefix desktop run make:dmg:arm64
+
+      - name: List release artifacts
+        run: ls -lh desktop/out/release/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: desktop/out/release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-release:
+    name: Publish GitHub release
+    needs: build-macos-arm64
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS arm64 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-arm64
+          path: release-assets
+
+      - name: List downloaded assets
+        run: ls -lh release-assets/
+
+      - name: Extract CHANGELOG section for tag
+        id: changelog
+        env:
+          TAG: ${{ needs.build-macos-arm64.outputs.release_tag }}
+        run: |
+          VERSION="${TAG#v}"
+          {
+            echo "body<<__EOF__"
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { found = 1; next }
+              found && /^## \[/         { exit }
+              found                      { print }
+            ' CHANGELOG.md
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.build-macos-arm64.outputs.release_tag }}
+          BODY: ${{ steps.changelog.outputs.body }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, uploading new assets (--clobber)"
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* \
+              --title "$TAG" \
+              --notes "$BODY"
+          fi

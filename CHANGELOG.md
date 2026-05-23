@@ -8,6 +8,11 @@
 
 ### Performance
 
+- 后端三处小热点合并优化：(1) `services/common.get_default_family` 加 `Session.info` 级缓存——之前几乎每个 service 调用都跑一次 SELECT，每请求多 5-10 次小读；(2) `core/timezone.resolve_timezone_name` 同样加 `Session.info` 缓存（CLAUDE.md 约束 tz read-only，无需主动失效；Session close 自然丢）；(3) `api/v1/analytics.get_sankey` 的 member name 查询从 N 次 `get_scoped_member(每次跑 get_default_family + 单查)` 改为单条 `SELECT ... WHERE id IN (...) AND family_id = ?` 批查。每次分析请求往返 -30%。来源：性能计划 M3 + P1#6 + P1#8。
+- Three small backend hot-path consolidations: (1) `services/common.get_default_family` now caches the family id in `Session.info` — previously almost every service call did a fresh SELECT, costing 5-10 extra small reads per request; (2) `core/timezone.resolve_timezone_name` gets the same treatment (the CLAUDE.md constraint that timezone is read-only means no proactive invalidation is needed; the cache vanishes when the session closes); (3) `api/v1/analytics.get_sankey` switches from N per-member `get_scoped_member` calls (each one running `get_default_family` + a single-row SELECT) to a single batched `SELECT ... WHERE id IN (...) AND family_id = ?`. Roughly 30% fewer round-trips per analytics request. Tracks M3 + P1#6 + P1#8 of the performance plan.
+
+### Performance
+
 - `/api/v1/analytics/currency-overview` 改读最新 daily snapshot：原 `analytics.py:127` 调 `SnapshotService.build_current_payload(db)`（全表 SELECT holdings + N+1 categories + JSON 重建），而 sankey / rebalance 早就是读 `get_latest_daily_snapshot` 现成 payload。统一改为读 snapshot——holdings 写路径触发 `_refresh_snapshots` 已经把最新数据落到 snapshot，两条路径数据等价但读 snapshot 省去一次重新构建。currency-overview 接口耗时大幅下降。来源：性能计划 M2 + P1#5。
 - Switch `/api/v1/analytics/currency-overview` to the latest daily snapshot path: `analytics.py:127` previously called `SnapshotService.build_current_payload(db)`, which re-queries the full holdings table, hits the N+1 category lookups (Q5 already alleviated this, but the rebuild itself is still wasted work), and JSON-encodes the result. The sankey and rebalance endpoints have long read the same data via `get_latest_daily_snapshot`. Unifying currency-overview to the same path keeps data equivalent (every holdings write triggers `_refresh_snapshots` which updates the snapshot) while skipping the rebuild. Tracks M2 + P1#5 of the performance plan.
 

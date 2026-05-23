@@ -11,20 +11,34 @@ from app.services.common import get_default_family
 
 FALLBACK_TIMEZONE = "UTC"
 
+_TIMEZONE_NAME_CACHE_KEY = "_business_timezone_name"
+
 
 def resolve_timezone_name(session: Session | None = None) -> str:
     configured = get_settings().timezone
     if session is None:
         return configured
 
+    # 缓存 per-session：之前每个 business_now / business_today 调用都查一次
+    # SETTINGS 表（resolve_rate / snapshot / list 端点都会用），命中后省 2-4 次小读
+    cached = session.info.get(_TIMEZONE_NAME_CACHE_KEY)
+    if cached is not None:
+        return cached
+
     family = get_default_family(session)
     timezone_name = session.scalar(
         select(SettingsModel.timezone).where(SettingsModel.family_id == family.id).limit(1)
     )
-    if timezone_name and timezone_name.strip():
-        return timezone_name.strip()
+    resolved = (
+        timezone_name.strip() if timezone_name and timezone_name.strip() else configured
+    )
+    session.info[_TIMEZONE_NAME_CACHE_KEY] = resolved
+    return resolved
 
-    return configured
+
+def invalidate_timezone_cache(session: Session) -> None:
+    """Settings 更新后调用：清掉当前 session 的 tz 缓存避免读到旧值。"""
+    session.info.pop(_TIMEZONE_NAME_CACHE_KEY, None)
 
 
 def get_business_tzinfo(session: Session | None = None) -> ZoneInfo:

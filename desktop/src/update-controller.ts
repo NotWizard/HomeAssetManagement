@@ -501,6 +501,28 @@ export function createUpdateController(options: UpdateControllerOptions) {
       const reader = response.body.getReader();
       const hasher = createHash('sha256');
       let downloadedBytes = 0;
+      // 下载进度节流：原来每个 chunk 都触发 updateState → persistState（fsync state.json）
+      // + 全 listener 广播；100MB 包 ×（64KB chunk = 1600+ 次 / 5MB chunk = 20+ 次）
+      // 都过多。改为 250ms 节流：常见 fetch chunk 间隔 < 250ms 时跳过中间帧。
+      // 最后一次状态由循环结束后的 flush 统一写出，保证持久化到最终值。
+      const PROGRESS_THROTTLE_MS = 250;
+      let lastProgressEmitAt = 0;
+      let pendingProgress: { downloadedBytes: number; totalBytes: number | undefined } | null = null;
+
+      const flushProgressNow = () => {
+        if (!pendingProgress) return;
+        updateState({
+          status: 'downloading',
+          downloadedBytes: pendingProgress.downloadedBytes,
+          totalBytes: pendingProgress.totalBytes ?? state.totalBytes,
+          progress: calculateProgress(
+            pendingProgress.downloadedBytes,
+            pendingProgress.totalBytes ?? state.totalBytes
+          ),
+        });
+        lastProgressEmitAt = Date.now();
+        pendingProgress = null;
+      };
 
       while (true) {
         const chunk = await reader.read();
@@ -511,13 +533,13 @@ export function createUpdateController(options: UpdateControllerOptions) {
         hasher.update(buf);
         downloadedBytes += chunk.value.byteLength;
         fileStream.write(buf);
-        updateState({
-          status: 'downloading',
-          downloadedBytes,
-          totalBytes: totalBytes ?? state.totalBytes,
-          progress: calculateProgress(downloadedBytes, totalBytes ?? state.totalBytes),
-        });
+        pendingProgress = { downloadedBytes, totalBytes };
+        if (Date.now() - lastProgressEmitAt >= PROGRESS_THROTTLE_MS) {
+          flushProgressNow();
+        }
       }
+      // 循环结束 flush 一次，保证 100% / 最终 downloadedBytes 落到 state.json + listeners
+      flushProgressNow();
 
       await new Promise<void>((resolveWrite, rejectWrite) => {
         fileStream.on('error', rejectWrite);

@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `daily_totals` 表与对应 `DailyTotal` 模型作为 `snapshot_daily.payload_json` 的 slim 副本，存 `(family_id, snapshot_date, total_asset, total_liability, net_asset, generated_at)` 五字段，给「totals-only」端点（轻量净资产趋势、未来可能新增的迷你图）一条不必反序列化 N 天 payload 的快路径。`snapshot_daily.payload_json` 仍是 holding 粒度的真理源（sankey / rebalance / currency-overview 依赖）。alembic migration `20260523_000001_daily_totals.py` 创建表 + UNIQUE(family_id, snapshot_date) + 一次性从存量 `snapshot_daily.payload_json.totals` 回填（`INSERT OR IGNORE`）。`SnapshotService.create_daily_snapshot` 在 upsert snapshot_daily 时通过 `_upsert_daily_total` helper 同步双写，写路径多一次 small upsert 但读路径将来可以省去全量反序列化。当前 trend 端点仍读 payload_json（要 per-asset 序列），未来若新增 totals-only 端点可直接读此表。来源：性能计划 L1。
+- Add a `daily_totals` table (and `DailyTotal` model) as a slim companion to `snapshot_daily.payload_json`. It stores `(family_id, snapshot_date, total_asset, total_liability, net_asset, generated_at)` — five columns, no holding-grained array — so future totals-only endpoints (lightweight net-asset sparklines, etc.) can skip the deserialise-N-payloads path. `snapshot_daily.payload_json` remains the source of truth for sankey / rebalance / currency-overview, which still need per-holding detail. Alembic migration `20260523_000001_daily_totals.py` creates the table with a UNIQUE (family_id, snapshot_date) constraint and back-fills from the existing `snapshot_daily.payload_json.totals` (using `INSERT OR IGNORE`). `SnapshotService.create_daily_snapshot` now dual-writes via a new `_upsert_daily_total` helper. The current trend endpoint still reads from payload_json because it needs per-asset series; the new table is meant to back any totals-only endpoint added later. Tracks L1 of the performance plan.
+
 ### Performance
 
 - `backend/app/jobs/scheduler.py` `BackgroundScheduler` 显式限制 default executor 为 1 worker（原默认 10）。项目实际只有 `daily_fx_fetch_job` 与 `daily_snapshot_job` 两个 job，互不并发；10 个常驻线程每个 stack ~2 MB → 单纯多扛 ~20 MB 常驻内存。改为 `executors={"default": ThreadPoolExecutor(1)}` 后 sidecar 常驻内存基线下降 ~20 MB。来源：性能计划 M8 + Electron P1#4。

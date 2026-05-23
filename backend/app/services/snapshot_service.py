@@ -9,6 +9,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.models.category import Category
+from app.models.daily_total import DailyTotal
 from app.models.holding_item import HoldingItem
 from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
@@ -73,6 +74,9 @@ class SnapshotService:
             session.add(row)
         else:
             row.payload_json = json.dumps(payload, ensure_ascii=False)
+
+        # 双写 daily_totals（slim 副本，给 totals-only 端点用）
+        _upsert_daily_total(session, family.id, snapshot_date, payload.get("totals") or {})
 
         session.flush()
         return row
@@ -351,3 +355,41 @@ def _revalue_snapshot_payload(
         "net_asset": decimal_to_float(total_asset - total_liability),
     }
     return payload
+
+
+def _upsert_daily_total(
+    session: Session,
+    family_id: int,
+    snapshot_date: date,
+    totals: dict,
+) -> None:
+    """daily_totals 表的 upsert（snapshot 双写副本）。
+
+    snapshot_daily.payload_json 仍是 holding 粒度真理源；这张表只是为
+    totals-only 端点（如轻量净资产趋势）省去反序列化的副本。
+    """
+    row = session.scalar(
+        select(DailyTotal).where(
+            and_(
+                DailyTotal.family_id == family_id,
+                DailyTotal.snapshot_date == snapshot_date,
+            )
+        )
+    )
+    total_asset = Decimal(str(totals.get("total_asset", 0) or 0))
+    total_liability = Decimal(str(totals.get("total_liability", 0) or 0))
+    net_asset = Decimal(str(totals.get("net_asset", 0) or 0))
+    if row is None:
+        session.add(
+            DailyTotal(
+                family_id=family_id,
+                snapshot_date=snapshot_date,
+                total_asset=total_asset,
+                total_liability=total_liability,
+                net_asset=net_asset,
+            )
+        )
+    else:
+        row.total_asset = total_asset
+        row.total_liability = total_liability
+        row.net_asset = net_asset

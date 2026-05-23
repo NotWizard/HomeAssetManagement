@@ -1,4 +1,5 @@
 from app.models.category import Category
+from app.models.daily_total import DailyTotal
 from app.models.family import Family
 from app.models.fx_rate_daily import FxRateDaily
 from app.models.holding_item import HoldingItem
@@ -10,6 +11,7 @@ from app.models.snapshot_event import SnapshotEvent
 
 __all__ = [
     "Category",
+    "DailyTotal",
     "Family",
     "FxRateDaily",
     "HoldingItem",

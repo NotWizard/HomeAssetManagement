@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Performance
+
+- `jobs/scheduler.py` 模块级 `BackgroundScheduler` 实例化改 lazy：原 `scheduler = BackgroundScheduler(...)` 在 import 时就会创建 scheduler 对象 + 预留 executor pool，即使 `HBS_ENABLE_SCHEDULER=false` 的场景也付这份开销。改为 `_scheduler` 私有变量 + `_get_or_create_scheduler()` 工厂函数，仅 `start_scheduler()` 真正调用时才创建。配合 Q7（daily snapshot 异步）和 M8（worker 限 1）形成 backend 冷启动综合优化。L4 计划文档原范围更激进（lazy import 非必需模块、alembic offline migration），但 Q7 已经把"启动卡 /health"主因（同步 daily snapshot）解决，剩余空间边际，本次只保守落地这一处。来源：性能计划 L4 + Electron P0#1 余量。
+- Make the module-level `BackgroundScheduler` instantiation in `jobs/scheduler.py` lazy. The previous `scheduler = BackgroundScheduler(...)` ran at import time and created a scheduler object plus reserved an executor pool even when `HBS_ENABLE_SCHEDULER=false` — pure dead weight on cold start in that config. The instance is now created on first `start_scheduler()` call via a `_get_or_create_scheduler()` factory backed by a private `_scheduler` slot. This complements Q7 (async daily snapshot off the lifespan thread) and M8 (single-worker executor) for the full cold-start picture. The L4 plan also called for aggressively lazy-importing non-critical modules and switching to alembic offline migration, but Q7 already removed the dominant cause of slow `/health` (synchronous daily snapshot), so the remaining wins were marginal — this commit takes only the conservative slice. Tracks L4 of the performance plan and remaining items of Electron P0#1.
+
 ### Changed
 
 - `holding_service._refresh_snapshots` 不再写 event snapshot：原 holding 单条 create / update / delete / bulk-update-target-ratio 路径每次都同时写 event snapshot + daily snapshot，单次 mutate = 2× JSON serialize + 2× DB INSERT。grep 全仓库 `/api/v1/snapshots/events`、`fetchSnapshotEvents`、`listEventSnapshots` 均无任何前端 / 脚本消费方（写而不读的纯历史记录）。改为只刷 daily snapshot；高价值事件（CSV import / settings.base_currency 变更）仍由 `import_service` / `settings_service` 直接调 `SnapshotService.create_event_snapshot` 显式写。`trigger_type` / `note` 参数保留（unused）以免破坏所有调用方签名。holding 编辑后端 IO ~-50%。配套更新 2 个测试断言（`test_create_holding_via_api_creates_snapshot` / `test_bulk_update_target_ratio_normalizes_member_assets`）改查 daily snapshot 而不是 event snapshot。来源：性能计划 L3 + P2#15。

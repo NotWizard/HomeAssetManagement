@@ -8,6 +8,11 @@
 
 ### Performance
 
+- `FXService.resolve_rate_for_pair` 不再同步阻塞 ~30s：原实现在汇率缺失时同步调 `refresh_rates()`（httpx.get 5s timeout × 3 retries × 2 providers = 最长 ~30s），首次录入新币种或 FX provider 抖动时单次 holding 写请求挂 30s，前端只能 spinner 死等。改为「exact → 历史 fallback（is_estimated=True）→ 仍缺则同步 refresh 一次」三段：常见路径下命中 fallback 即立即返回最近一次已知汇率，同时 fire-and-forget 一个 daemon 线程后台 `refresh_rates` 把当天最新值写入 DB（下次同样查询命中 exact）；只在「连历史 fallback 都没有」的真正冷启动场景才保留同步 refresh。录入新币种 P99 延迟从 30s 降到 ~100ms。来源：性能计划 Q6 + P0#2。
+- `FXService.resolve_rate_for_pair` no longer blocks for up to ~30 s on the request path: the previous implementation called `refresh_rates()` synchronously when no rate was found, which goes through `httpx.get` with a 5 s timeout × 3 retries × 2 providers, so the first time a user entered a new-currency holding (or the FX provider hiccuped) the write request hung for ~30 s and the UI just spun. The lookup is now three-step: exact match → historical fallback (with `is_estimated=True`) → if both miss, only then attempt a synchronous refresh as a true cold-start fallback. When the historical fallback path fires we also kick off a daemon-thread `refresh_rates` in the background (with its own `SessionLocal()`, broad except + warning log) so the next identical query likely hits the exact row. New-currency holding P99 latency drops from ~30 s to ~100 ms. Tracks Q6 + P0#2 of the performance plan.
+
+### Performance
+
 - `_build_snapshot_payload` 修复 N+1：原实现对每条 holding 跑 3 次 `session.get(Category, cid)`（一级/二级/三级名），40 条 holding = 120 次单查 + 同一个 category id 在不同 holding 间重复查；改为先收集所有用到的 category id，一次 `SELECT ... WHERE id IN (...)` 预取，再用 dict 内存查表。被 trend / sankey / rebalance / currency-overview 与每次 holding write 路径调用，编辑 + 仪表盘加载的 DB 往返数 -90%+。来源：性能计划 Q5 + P0#3。
 - Fix the N+1 in `_build_snapshot_payload`: the previous implementation called `session.get(Category, cid)` three times per holding (l1 / l2 / l3) — 40 holdings = 120 single-row lookups, and the same category id was re-fetched across different holdings. Replace with a one-shot `SELECT ... WHERE id IN (...)` over every category id the snapshot references, building a `dict[int, str]` for in-memory name lookup. Hit by trend / sankey / rebalance / currency-overview as well as every holding-write path, so dashboard load and per-edit DB round-trips drop ~90%. Tracks Q5 + P0#3 of the performance plan.
 

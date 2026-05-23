@@ -8,6 +8,11 @@
 
 ### Performance
 
+- `AnalyticsPage` 5 个 date-range 分析 query 加 `placeholderData: keepPreviousData`：原 date range 一变 query key 整体替换，5 张图同时回退到 Skeleton 闪烁白屏。开启后旧数据先占位过渡，新数据到达再无缝替换。currency-overview 因为 key 不含 date range（始终查 latest），不需要这个。来源：性能计划 M4 + P1#6。
+- `AnalyticsPage`'s five date-range driven queries (trend / volatility / correlation / sankey / rebalance) now use `placeholderData: keepPreviousData`. Previously when the user dragged the date axis the query key changed wholesale, all five charts fell back to Skeleton and the screen flashed. With `keepPreviousData` the previous response stays visible until the new one arrives, eliminating the flash. `currencyOverview` is unaffected because its key has no date range. Tracks M4 + P1#6 of the performance plan.
+
+### Performance
+
 - 后端三处小热点合并优化：(1) `services/common.get_default_family` 加 `Session.info` 级缓存——之前几乎每个 service 调用都跑一次 SELECT，每请求多 5-10 次小读；(2) `core/timezone.resolve_timezone_name` 同样加 `Session.info` 缓存（CLAUDE.md 约束 tz read-only，无需主动失效；Session close 自然丢）；(3) `api/v1/analytics.get_sankey` 的 member name 查询从 N 次 `get_scoped_member(每次跑 get_default_family + 单查)` 改为单条 `SELECT ... WHERE id IN (...) AND family_id = ?` 批查。每次分析请求往返 -30%。来源：性能计划 M3 + P1#6 + P1#8。
 - Three small backend hot-path consolidations: (1) `services/common.get_default_family` now caches the family id in `Session.info` — previously almost every service call did a fresh SELECT, costing 5-10 extra small reads per request; (2) `core/timezone.resolve_timezone_name` gets the same treatment (the CLAUDE.md constraint that timezone is read-only means no proactive invalidation is needed; the cache vanishes when the session closes); (3) `api/v1/analytics.get_sankey` switches from N per-member `get_scoped_member` calls (each one running `get_default_family` + a single-row SELECT) to a single batched `SELECT ... WHERE id IN (...) AND family_id = ?`. Roughly 30% fewer round-trips per analytics request. Tracks M3 + P1#6 + P1#8 of the performance plan.
 

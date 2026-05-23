@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, UsersRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -47,9 +47,14 @@ import {
 } from '../services/holdings';
 import { fetchMembers } from '../services/members';
 import { fetchSettings } from '../services/settings';
-import type { Holding } from '../types';
+import type { Holding, Member } from '../types';
 
 type HoldingFilterType = 'all' | 'asset' | 'liability';
+
+// 模块级冻结空数组，给 `holdingsQuery.data ?? EMPTY_HOLDINGS` 用：
+// 避免 `?? []` 每次 render 产生新引用，击穿下游所有 useMemo 依赖。
+const EMPTY_HOLDINGS: Holding[] = [];
+const EMPTY_MEMBERS: Member[] = [];
 
 const COMMON_CURRENCY_OPTIONS: SearchableSelectOption[] = [
   { value: 'CNY', label: 'CNY（人民币）', searchText: '人民币 china chinese yuan renminbi' },
@@ -164,6 +169,13 @@ export function EntryPage() {
   const assetTree = assetCategoryQuery.data ?? [];
   const liabilityTree = liabilityCategoryQuery.data ?? [];
 
+  // 用模块级 EMPTY 常量替代 `?? []`，保证 query 数据未加载时下游 useMemo 依赖引用稳定，
+  // 不会因为每次 render 新建空数组而被击穿。
+  const allHoldings = holdingsQuery.data ?? EMPTY_HOLDINGS;
+  const members = membersQuery.data ?? EMPTY_MEMBERS;
+  const hasMembers = members.length > 0;
+  const hasLoadedHoldings = holdingsQuery.data != null;
+
   const currencyOptions = useMemo(() => {
     const current = form.currency.trim().toUpperCase();
     if (!current || COMMON_CURRENCY_OPTIONS.some((option) => String(option.value) === current)) {
@@ -174,17 +186,13 @@ export function EntryPage() {
 
   const memberNameMap = useMemo(() => {
     const map = new Map<number, string>();
-    (membersQuery.data ?? []).forEach((member) => map.set(member.id, member.name));
+    members.forEach((member) => map.set(member.id, member.name));
     return map;
-  }, [membersQuery.data]);
-
-  const allHoldings = holdingsQuery.data ?? [];
-  const hasMembers = (membersQuery.data ?? []).length > 0;
-  const hasLoadedHoldings = holdingsQuery.data != null;
+  }, [members]);
 
   const memberSummaries = useMemo(
-    () => buildMemberAllocationSummaries(allHoldings, membersQuery.data ?? []),
-    [allHoldings, membersQuery.data]
+    () => buildMemberAllocationSummaries(allHoldings, members),
+    [allHoldings, members]
   );
 
   const memberAllocationOverview = useMemo(
@@ -192,8 +200,12 @@ export function EntryPage() {
     [memberSummaries]
   );
 
+  // useDeferredValue：keyword 输入时 input 立即响应（不抢占），过滤计算延后到下一帧；
+  // 输入连续按键时合并多次过滤为一次最终计算。
+  const deferredKeyword = useDeferredValue(keyword);
+
   const filteredHoldings = useMemo(() => {
-    const normalizedKeyword = keyword.trim().toLowerCase();
+    const normalizedKeyword = deferredKeyword.trim().toLowerCase();
     return allHoldings.filter((row) => {
       if (focusedMemberId != null && row.member_id !== focusedMemberId) {
         return false;
@@ -211,7 +223,7 @@ export function EntryPage() {
       const searchText = [row.name, memberName, row.currency, row.type === 'asset' ? '资产' : '负债'].join(' ').toLowerCase();
       return searchText.includes(normalizedKeyword);
     });
-  }, [allHoldings, keyword, memberFilter, typeFilter, memberNameMap, focusedMemberId]);
+  }, [allHoldings, deferredKeyword, memberFilter, typeFilter, memberNameMap, focusedMemberId]);
 
   const normalizeMember = useMemo(
     () =>
@@ -253,7 +265,7 @@ export function EntryPage() {
 
   const memberDeleteOptions = useMemo(
     () =>
-      (membersQuery.data ?? []).map((member) => {
+      (members).map((member) => {
         const count = allHoldings.filter((row) => row.member_id === member.id).length;
         return {
           label: `${member.name}（${count}条）`,
@@ -278,19 +290,22 @@ export function EntryPage() {
     void assetCategoryQuery.refetch();
     void liabilityCategoryQuery.refetch();
     setEditing(null);
-    setForm(buildCreateEntryForm(membersQuery.data ?? []));
+    setForm(buildCreateEntryForm(members));
     setError(null);
     setOpen(true);
   };
 
-  const openEditDialog = (row: Holding) => {
-    void assetCategoryQuery.refetch();
-    void liabilityCategoryQuery.refetch();
-    setEditing(row);
-    setError(null);
-    setForm(buildEditEntryForm(row));
-    setOpen(true);
-  };
+  const openEditDialog = useCallback(
+    (row: Holding) => {
+      void assetCategoryQuery.refetch();
+      void liabilityCategoryQuery.refetch();
+      setEditing(row);
+      setError(null);
+      setForm(buildEditEntryForm(row));
+      setOpen(true);
+    },
+    [assetCategoryQuery, liabilityCategoryQuery]
+  );
 
   const openSelectedDeleteDialog = () => {
     setBulkDeleteError(null);
@@ -301,7 +316,7 @@ export function EntryPage() {
     setMemberDeleteId(
       resolveDefaultMemberDeleteId({
         memberFilter,
-        members: membersQuery.data ?? [],
+        members: members,
         holdings: allHoldings,
       })
     );
@@ -329,16 +344,16 @@ export function EntryPage() {
     }
   };
 
-  const toggleHoldingSelection = (holdingId: number, checked: boolean) => {
+  const toggleHoldingSelection = useCallback((holdingId: number, checked: boolean) => {
     setSelectedHoldingIds((current) => {
       if (checked) {
         return current.includes(holdingId) ? current : [...current, holdingId];
       }
       return current.filter((id) => id !== holdingId);
     });
-  };
+  }, []);
 
-  const toggleSelectAllVisible = (checked: boolean) => {
+  const toggleSelectAllVisible = useCallback((checked: boolean) => {
     setSelectedHoldingIds((current) => {
       const next = new Set(current);
       if (checked) {
@@ -348,7 +363,20 @@ export function EntryPage() {
       }
       return Array.from(next);
     });
-  };
+  }, [filteredHoldings]);
+
+  const handleDeleteHolding = useCallback(
+    (holdingId: number) => deleteHoldingMutation.mutate(holdingId),
+    [deleteHoldingMutation]
+  );
+
+  const handleOpenNormalize = useCallback(
+    (memberId: number) => {
+      setNormalizeError(null);
+      setNormalizeMemberId(memberId);
+    },
+    []
+  );
 
   const submitDeleteSelected = () => {
     if (selectedHoldings.length === 0) {
@@ -436,7 +464,7 @@ export function EntryPage() {
             typeFilter={typeFilter}
             memberOptions={[
               { label: '全部成员', value: 'all' },
-              ...(membersQuery.data ?? []).map((member) => ({ label: member.name, value: member.id })),
+              ...(members).map((member) => ({ label: member.name, value: member.id })),
             ]}
             filteredCount={filteredHoldings.length}
             selectedCount={selectedHoldingIds.length}
@@ -462,11 +490,8 @@ export function EntryPage() {
             onToggleSelectAllVisible={toggleSelectAllVisible}
             onToggleHoldingSelection={toggleHoldingSelection}
             onOpenEditDialog={openEditDialog}
-            onDeleteHolding={(holdingId) => deleteHoldingMutation.mutate(holdingId)}
-            onOpenNormalize={(memberId) => {
-              setNormalizeError(null);
-              setNormalizeMemberId(memberId);
-            }}
+            onDeleteHolding={handleDeleteHolding}
+            onOpenNormalize={handleOpenNormalize}
           />
         </CardContent>
       </Card>
@@ -500,7 +525,7 @@ export function EntryPage() {
         editing={editing != null}
         form={form}
         error={error}
-        members={membersQuery.data ?? []}
+        members={members}
         assetTree={assetTree}
         liabilityTree={liabilityTree}
         currencyOptions={currencyOptions}

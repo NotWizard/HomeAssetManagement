@@ -3,6 +3,12 @@ export interface BootstrapWindow {
   showApp: (url: string) => Promise<void>;
   showError: (message: string) => Promise<void>;
   focus: () => void;
+  /**
+   * 可选：把真实启动阶段推送到 loading 页（如果已渲染）。
+   * 实现方应捕获 webContents 错误（页面可能尚未准备好）并安静吞掉，
+   * 不影响主流程。
+   */
+  setStartupStage?: (title: string, body: string) => Promise<void>;
 }
 
 interface BackendStartupResult {
@@ -40,7 +46,22 @@ export function createBootstrapController(
       const backendPromise = dependencies.startBackend();
 
       await loadingPromise;
+      // loading 页已渲染：推第一阶段真实文案（替换 fake 轮播第一帧），
+      // 让用户知道目前正在等的是「后端服务就绪」
+      await window
+        .setStartupStage?.(
+          '正在等待本地服务就绪',
+          '本地后端进程已启动，正在等待健康检查通过。首次启动通常需要 2-5 秒。'
+        )
+        .catch(() => undefined);
       const { appUrl } = await backendPromise;
+      // 后端 ready，进入「载入应用」阶段
+      await window
+        .setStartupStage?.(
+          '正在加载主界面',
+          '本地服务已就绪，前端资源最后接好就会切换到工作台。'
+        )
+        .catch(() => undefined);
       await window.showApp(appUrl);
     } catch (error) {
       const message = getErrorMessage(error);

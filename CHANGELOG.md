@@ -8,6 +8,11 @@
 
 ### Performance
 
+- `_build_snapshot_payload` 修复 N+1：原实现对每条 holding 跑 3 次 `session.get(Category, cid)`（一级/二级/三级名），40 条 holding = 120 次单查 + 同一个 category id 在不同 holding 间重复查；改为先收集所有用到的 category id，一次 `SELECT ... WHERE id IN (...)` 预取，再用 dict 内存查表。被 trend / sankey / rebalance / currency-overview 与每次 holding write 路径调用，编辑 + 仪表盘加载的 DB 往返数 -90%+。来源：性能计划 Q5 + P0#3。
+- Fix the N+1 in `_build_snapshot_payload`: the previous implementation called `session.get(Category, cid)` three times per holding (l1 / l2 / l3) — 40 holdings = 120 single-row lookups, and the same category id was re-fetched across different holdings. Replace with a one-shot `SELECT ... WHERE id IN (...)` over every category id the snapshot references, building a `dict[int, str]` for in-memory name lookup. Hit by trend / sankey / rebalance / currency-overview as well as every holding-write path, so dashboard load and per-edit DB round-trips drop ~90%. Tracks Q5 + P0#3 of the performance plan.
+
+### Performance
+
 - 合并 settings 缓存 key：`OverviewPage` / `AnalyticsPage` / `EntryPage` 三处 `queryKeys.settings.scope('overview' | 'analytics' | 'entry')` 统一改用 `queryKeys.settings.all()`。同一份后端数据原本被切成 3 个独立缓存，跨页切换重复 fetch；合并后共用一份。`trend.scope('overview')` / `rebalance.scope('overview')` 保留 scope，因为 overview 用 `fetchTrend(90)` / `fetchRebalance()`、analytics 用带 date range 的版本，fetch 行为不同需分缓存。来源：性能计划 Q4 + P1#7。
 - Unify the `settings` cache key across pages: `OverviewPage`, `AnalyticsPage` and `EntryPage` all switch from `queryKeys.settings.scope(...)` to `queryKeys.settings.all()`. The same backend response was previously stored under three independent keys, causing the same `/api/v1/settings` call to fire on every page switch. `trend.scope('overview')` and `rebalance.scope('overview')` keep their scopes because OverviewPage calls them with hard-coded `fetchTrend(90)` / `fetchRebalance()` while AnalyticsPage uses date-range variants — the underlying responses differ and must remain in separate caches. Tracks Q4 + P1#7 of the performance plan.
 

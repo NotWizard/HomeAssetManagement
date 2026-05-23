@@ -249,12 +249,23 @@ def _build_snapshot_payload(session: Session, family_id: int) -> dict:
         )
     )
 
-    category_cache: dict[int, Category] = {}
+    # 一次性 IN(...) 预取所有用到的 category，替代之前每条 holding 3 次 session.get(Category)
+    # 的 N+1。40 条 holding 把 120 次单查压成 1 次范围查询。
+    needed_cids: set[int] = set()
+    for h in holdings:
+        needed_cids.add(h.category_l1_id)
+        needed_cids.add(h.category_l2_id)
+        needed_cids.add(h.category_l3_id)
+    category_name_by_id: dict[int, str] = {}
+    if needed_cids:
+        rows = session.scalars(
+            select(Category).where(Category.id.in_(needed_cids))
+        )
+        for row in rows:
+            category_name_by_id[row.id] = row.name
+
     def category_name(cid: int) -> str:
-        if cid not in category_cache:
-            category_cache[cid] = session.get(Category, cid)
-        c = category_cache[cid]
-        return c.name if c else "未知"
+        return category_name_by_id.get(cid, "未知")
 
     total_asset = Decimal("0")
     total_liability = Decimal("0")

@@ -98,35 +98,44 @@ export function AnalyticsPage() {
     setAnalyticsDateRange(applyEndDateChange(analyticsDateRange, endDate));
   };
 
+  // 分析端点 staleTime 30s：编辑 holdings 后不立即触发分析端点 refetch（雪崩），
+  // 让用户切回分析页 ≥30s 后自然 stale 重 fetch；30s 内连续切来切去命中缓存。
+  const ANALYTICS_STALE_MS = 30_000;
   const trendQuery = useQuery({
     queryKey: queryKeys.trend.range(analyticsDateRange),
     queryFn: () => fetchTrend(analyticsDateRange),
     enabled: analyticsView === 'overview' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
   });
   const volatilityQuery = useQuery({
     queryKey: queryKeys.volatility.range(analyticsDateRange),
     queryFn: () => fetchVolatility(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
   });
   const correlationQuery = useQuery({
     queryKey: queryKeys.correlation.range(analyticsDateRange),
     queryFn: () => fetchCorrelation(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
   });
   const sankeyQuery = useQuery({
     queryKey: queryKeys.sankey.range(analyticsDateRange),
     queryFn: () => fetchSankey(analyticsDateRange),
     enabled: analyticsView === 'overview' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
   });
   const rebalanceQuery = useQuery({
     queryKey: queryKeys.rebalance.range(analyticsDateRange),
     queryFn: () => fetchRebalance(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
   });
   const currencyOverviewQuery = useQuery({
     queryKey: queryKeys.currencyOverview.all(),
     queryFn: fetchCurrencyOverview,
     enabled: analyticsView === 'currency',
+    staleTime: ANALYTICS_STALE_MS,
   });
   const settingsQuery = useQuery({
     queryKey: queryKeys.settings.scope('analytics'),

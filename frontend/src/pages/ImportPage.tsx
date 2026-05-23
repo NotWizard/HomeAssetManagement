@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import {
-  invalidateHoldingRelatedQueries,
+  invalidateAllHoldingDependentQueries,
   invalidateImportLogQueries,
   queryKeys,
 } from '../services/holdingRelatedQueries';
@@ -41,7 +41,8 @@ export function ImportPage() {
     onSuccess: async () => {
       setError(null);
       await invalidateImportLogQueries(queryClient);
-      await invalidateHoldingRelatedQueries(queryClient);
+      // CSV import 一次可能批量插入/更新数十条 holding，对分析数据冲击大，走全失效
+      await invalidateAllHoldingDependentQueries(queryClient);
     },
     onError: (e) => setError(formatError(e)),
   });

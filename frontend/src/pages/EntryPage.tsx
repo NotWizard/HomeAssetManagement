@@ -32,6 +32,7 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { fetchCategories } from '../services/categories';
 import {
   invalidateHoldingRelatedQueries,
+  invalidateAllHoldingDependentQueries,
   queryKeys,
 } from '../services/holdingRelatedQueries';
 import {
@@ -138,7 +139,8 @@ export function EntryPage() {
       setMemberDeleteOpen(false);
       setMemberDeleteId('');
       setBulkDeleteError(null);
-      await invalidateHoldingRelatedQueries(queryClient);
+      // 批量删除可能涉及多成员、跨币种、跨大类，对分析数据冲击大，走全失效刷所有派生缓存
+      await invalidateAllHoldingDependentQueries(queryClient);
     },
     onError: (mutationError) => {
       setBulkDeleteError(buildBulkErrorMessage(mutationError));

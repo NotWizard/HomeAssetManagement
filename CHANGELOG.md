@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-23
+
 ### Added
 
 - 新增 `/api/v1/snapshots/events/summary` 与 `/api/v1/snapshots/daily/summary` 两个 metadata-only 端点：原 `/events`、`/daily` list 接口会反序列化每条快照的完整 payload_json（events `limit≤500` × ~20 KB、daily `limit≤1000` × ~20 KB，最大可达几 MB），summary 端点只查关键字段（events 返 `id/family_id/trigger_type/snapshot_at`；daily 直接读 L1 引入的 `daily_totals` slim 表返 `snapshot_date/total_asset/total_liability/net_asset`），不触碰 payload_json，相同 limit 下响应体积下降 ~95%。旧端点保留不动以维持向后兼容。`SnapshotService` 同步新增 `list_event_summaries` / `list_daily_summaries` 两个方法。来源：性能计划 L5 + P1#9 + P2#13。

@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Performance
+
+- `backend/build_desktop.py` PyInstaller 命令行加 `--exclude-module` 排除 sidecar 运行时不用的模块：`watchfiles`（uvicorn[standard] 默认拉但只在 reload 模式用）、`tkinter`、`unittest`、`test`、`pytest` / `_pytest`、`setuptools`。bundle 大小 / 启动 import 时间下降；具体收益取决于 Python 版本与依赖图，估计 -10 ~ -30 MB（DMG 145 MB），冷启动 import -0.5 ~ -1.5s。来源：性能计划 L2 + Electron P1#4。
+- Add a `--exclude-module` list to the PyInstaller invocation in `backend/build_desktop.py` to drop modules the sidecar never uses at runtime: `watchfiles` (pulled by `uvicorn[standard]` but only needed in reload mode), `tkinter`, `unittest`, `test`, `pytest` / `_pytest`, `setuptools`. Bundle size and cold-import time both shrink; the exact saving depends on the Python/dependency graph but is estimated at -10 to -30 MB off the 145 MB DMG and -0.5 to -1.5 s off the cold-start import phase. Tracks L2 of the performance plan and Electron P1#4.
+
 ### Added
 
 - 新增 `daily_totals` 表与对应 `DailyTotal` 模型作为 `snapshot_daily.payload_json` 的 slim 副本，存 `(family_id, snapshot_date, total_asset, total_liability, net_asset, generated_at)` 五字段，给「totals-only」端点（轻量净资产趋势、未来可能新增的迷你图）一条不必反序列化 N 天 payload 的快路径。`snapshot_daily.payload_json` 仍是 holding 粒度的真理源（sankey / rebalance / currency-overview 依赖）。alembic migration `20260523_000001_daily_totals.py` 创建表 + UNIQUE(family_id, snapshot_date) + 一次性从存量 `snapshot_daily.payload_json.totals` 回填（`INSERT OR IGNORE`）。`SnapshotService.create_daily_snapshot` 在 upsert snapshot_daily 时通过 `_upsert_daily_total` helper 同步双写，写路径多一次 small upsert 但读路径将来可以省去全量反序列化。当前 trend 端点仍读 payload_json（要 per-asset 序列），未来若新增 totals-only 端点可直接读此表。来源：性能计划 L1。

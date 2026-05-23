@@ -109,9 +109,9 @@
 - 配置再平衡阈值
 - 导出 / 导入迁移包做备份与恢复
 
-## 资产负债分类体系（方案 D）
+## 资产负债分类体系
 
-v0.2.0 起，资产 10 大类、负债 6 大类，三层扁平结构，固定不可改。
+资产 10 大类、负债 6 大类，三层扁平结构，固定不可改。
 
 ### 资产（10 大类）
 
@@ -141,7 +141,7 @@ v0.2.0 起，资产 10 大类、负债 6 大类，三层扁平结构，固定不
 
 **设计原则**：扁平、无金融 / 非金融顶层壳；每个一级类目都对应一个真实的家庭资产场景；删除「应收资产」「其他应付款」这些家庭场景用不上的会计概念；账户型黄金（如黄金 ETF）走「权益与另类 / 另类投资 / 贵金属账户」，金条实物走「其他实物 / 贵金属与珠宝 / 黄金实物」，资产形态清晰分流。
 
-完整三层骨架（含每个三级叶子）见 [`docs/plans/2026-05-22-category-tree-picker-design.md`](docs/plans/2026-05-22-category-tree-picker-design.md)。
+每个一级类下的二级 / 三级细分，进入「资产负债录入」点开分类选择器时可以逐层浏览。
 
 ---
 
@@ -254,13 +254,13 @@ npm --prefix desktop run make:dmg
 打 `v*` tag 即自动触发 GitHub Actions 构建并发布 release：
 
 ```bash
-git tag -a v0.2.1 -m "release notes"
-git push origin v0.2.1
+git tag -a v0.3.1 -m "release notes"
+git push origin v0.3.1
 ```
 
 `.github/workflows/release.yml` 会在 `macos-latest` runner 上跑 `make:dmg:arm64`，把 DMG / ZIP 上传到 release，release notes 自动从 `CHANGELOG.md` 抠取对应版本段落。
 
-x64 暂未在 workflow 中构建。如有 Intel Mac 用户反馈，可按上一节说明本地构建后用 `gh release upload v0.2.x ...` 追加上传。
+x64 暂未在 workflow 中构建。如有 Intel Mac 用户反馈，可按上一节说明本地构建后用 `gh release upload v0.3.x ...` 追加上传。
 
 ### 环境配置
 

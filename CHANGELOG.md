@@ -8,6 +8,11 @@
 
 ### Performance
 
+- `OverviewPage` 首页趋势图改用纯 SVG `SparklineTrend` 替代 lazy 加载的 ECharts `TrendChart`。原首屏 LCP 必须等 `echarts-core` (436 KB) + `zrender` (173 KB) + `echarts-react` (17 KB) 这条链下载完，~600 KB / ~150 KB gzip 都压在首屏关键路径上；用户冷打开应用第一眼就要等这堆下载完才看到趋势线。新组件 ~120 行纯 SVG，直接 inline 三条折线（净资产 / 总资产 / 总负债）+ 端点圆点 + 渐变填充 + 图例 + 起止日期，达到「迷你趋势」信号传达；用户想看细节去分析看板即可。首屏 LCP 路径节省 ~600 KB / ~150 KB gzip。来源：性能计划 M6 + P2#12。
+- Replace ECharts `TrendChart` on `OverviewPage` with a hand-rolled SVG `SparklineTrend`. The first-paint LCP path used to drag in `echarts-core` (436 KB) + `zrender` (173 KB) + `echarts-react` (17 KB) — about 600 KB raw / 150 KB gzip — before the user could see any trend line on the home page. The new component is ~120 lines of pure SVG and draws three lines (net asset / total asset / total liability) plus endpoint dots, gradient area fills, a legend, and the start/end date range — enough to convey the "mini trend" signal; users who want detail can hop to the analytics page (which still uses ECharts). First-paint LCP path now drops the ~600 KB / ~150 KB gzip ECharts payload entirely. Tracks M6 + P2#12 of the performance plan.
+
+### Performance
+
 - `vite.config.ts` 补 vendor chunk 拆分：原 `manualChunks` 只切了 echarts / zrender，react / react-dom / react-router-dom / @tanstack/react-query / lucide-react 全塞进 `index.js`（227 KB）。新增 `react-vendor` 和 `icons-vendor` 两个 chunk，`index.js` 从 227 KB 缩到 37 KB（gzip 13 KB）。业务代码迭代时这些 vendor chunk 不变、用户增量下载只命中变化部分，发版后 304 命中率从 0 提升到主要内容只下载差量。来源：性能计划 M5 + P1#10。
 - Add vendor chunk splitting to `vite.config.ts`: `manualChunks` previously only split out echarts / zrender, so react / react-dom / react-router-dom / @tanstack/react-query / lucide-react all rode along in `index.js` (227 KB). Two new chunks — `react-vendor` and `icons-vendor` — shrink `index.js` to ~37 KB (~13 KB gzip). On every release these vendor chunks stay unchanged, so users with cached assets only download the actual business diff instead of the entire bundle. Tracks M5 + P1#10 of the performance plan.
 

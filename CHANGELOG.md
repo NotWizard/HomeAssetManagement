@@ -8,6 +8,11 @@
 
 ### Performance
 
+- `vite.config.ts` 补 vendor chunk 拆分：原 `manualChunks` 只切了 echarts / zrender，react / react-dom / react-router-dom / @tanstack/react-query / lucide-react 全塞进 `index.js`（227 KB）。新增 `react-vendor` 和 `icons-vendor` 两个 chunk，`index.js` 从 227 KB 缩到 37 KB（gzip 13 KB）。业务代码迭代时这些 vendor chunk 不变、用户增量下载只命中变化部分，发版后 304 命中率从 0 提升到主要内容只下载差量。来源：性能计划 M5 + P1#10。
+- Add vendor chunk splitting to `vite.config.ts`: `manualChunks` previously only split out echarts / zrender, so react / react-dom / react-router-dom / @tanstack/react-query / lucide-react all rode along in `index.js` (227 KB). Two new chunks — `react-vendor` and `icons-vendor` — shrink `index.js` to ~37 KB (~13 KB gzip). On every release these vendor chunks stay unchanged, so users with cached assets only download the actual business diff instead of the entire bundle. Tracks M5 + P1#10 of the performance plan.
+
+### Performance
+
 - `AnalyticsPage` 5 个 date-range 分析 query 加 `placeholderData: keepPreviousData`：原 date range 一变 query key 整体替换，5 张图同时回退到 Skeleton 闪烁白屏。开启后旧数据先占位过渡，新数据到达再无缝替换。currency-overview 因为 key 不含 date range（始终查 latest），不需要这个。来源：性能计划 M4 + P1#6。
 - `AnalyticsPage`'s five date-range driven queries (trend / volatility / correlation / sankey / rebalance) now use `placeholderData: keepPreviousData`. Previously when the user dragged the date axis the query key changed wholesale, all five charts fell back to Skeleton and the screen flashed. With `keepPreviousData` the previous response stays visible until the new one arrives, eliminating the flash. `currencyOverview` is unaffected because its key has no date range. Tracks M4 + P1#6 of the performance plan.
 

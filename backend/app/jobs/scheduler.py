@@ -1,3 +1,4 @@
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -10,7 +11,10 @@ from app.jobs.snapshot_jobs import run_daily_snapshot_job
 
 logger = get_logger(__name__)
 
-scheduler = BackgroundScheduler()
+# 限制 default executor 为 1 worker（默认 10 太多）：
+# 本项目只有 daily_fx_fetch_job + daily_snapshot_job 两个 job，互不并发，
+# 单 worker 足够；原 10 worker 每个 stack ~2MB → 常驻 sidecar 内存 -20MB。
+scheduler = BackgroundScheduler(executors={"default": ThreadPoolExecutor(1)})
 
 
 def _get_scheduler_timezone():

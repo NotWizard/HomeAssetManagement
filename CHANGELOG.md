@@ -8,6 +8,11 @@
 
 ### Performance
 
+- `backend/app/jobs/scheduler.py` `BackgroundScheduler` 显式限制 default executor 为 1 worker（原默认 10）。项目实际只有 `daily_fx_fetch_job` 与 `daily_snapshot_job` 两个 job，互不并发；10 个常驻线程每个 stack ~2 MB → 单纯多扛 ~20 MB 常驻内存。改为 `executors={"default": ThreadPoolExecutor(1)}` 后 sidecar 常驻内存基线下降 ~20 MB。来源：性能计划 M8 + Electron P1#4。
+- Cap `BackgroundScheduler` in `backend/app/jobs/scheduler.py` to a single-worker default executor (down from APScheduler's default of 10). The project only has two scheduled jobs (`daily_fx_fetch_job` and `daily_snapshot_job`) and they never run concurrently; the 10 idle worker threads each cost ~2 MB of stack — about ~20 MB of resident memory the sidecar process was carrying for no reason. Setting `executors={"default": ThreadPoolExecutor(1)}` drops the baseline. Tracks M8 of the performance plan and Electron P1#4.
+
+### Performance
+
 - 桌面 loading 页接真实 backend stage：原 `desktop/src/startup-page.ts` loading 页跑 1700 ms 周期的 fake 轮播假进度，跟实际 backend ready 进度脱钩，cold-start > 1.7s 时用户会怀疑死锁。本次 (1) loading 页 JS 暴露 `window.setStartupStage(title, body)` 全局函数，首次收到调用即停掉 fake interval、切到真实文案（fake 仍作为 fallback 兜底无推送场景）；(2) `BootstrapWindow` 接口新增 `setStartupStage` 可选方法，`bootstrap-controller` 在「showLoading 之后 + startBackend 期间」「startBackend 完成 + showApp 之前」两个关键点推送真实文案；(3) `main.ts` 实现 `setStartupStage` —— 通过 `window.webContents.executeJavaScript` 调 loading 页里的 `window.setStartupStage`，错误安静吞掉避免阻塞主流程。来源：性能计划 M7 + Electron P1#5。
 - The desktop loading page now reflects real backend startup progress instead of a 1700 ms fake carousel. The fake states are now a fallback — `startup-page.ts` exposes a `window.setStartupStage(title, body)` global; the first real call stops the fake interval and switches to the real text. `BootstrapWindow` gains an optional `setStartupStage` and `bootstrap-controller` pushes two real-state updates: one after `showLoading` while waiting for backend readiness ("waiting for local service to be ready, first launch usually takes 2-5 s") and one after the backend reports ready while the SPA loads ("local service ready, finalising the workspace"). `main.ts` implements `setStartupStage` via `window.webContents.executeJavaScript`, swallowing any rejection so the main bootstrap path is never blocked. Tracks M7 of the performance plan and Electron P1#5.
 

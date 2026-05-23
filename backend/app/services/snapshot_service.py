@@ -125,6 +125,66 @@ class SnapshotService:
         ]
 
     @staticmethod
+    def list_event_summaries(session: Session, limit: int = 100) -> list[dict]:
+        """metadata-only 列表：不反序列化 payload_json，只返关键摘要字段。
+
+        给「快速看历史索引、按需点详情」类 UI 用，避免一次返几 MB 数据。
+        详情用 `get_event_snapshot(id)`（待加）按需取。
+        """
+        family = get_default_family(session)
+        rows = list(
+            session.execute(
+                select(
+                    SnapshotEvent.id,
+                    SnapshotEvent.family_id,
+                    SnapshotEvent.trigger_type,
+                    SnapshotEvent.snapshot_at,
+                )
+                .where(SnapshotEvent.family_id == family.id)
+                .order_by(SnapshotEvent.snapshot_at.desc())
+                .limit(max(1, min(limit, 500)))
+            )
+        )
+        return [
+            {
+                "id": row.id,
+                "family_id": row.family_id,
+                "trigger_type": row.trigger_type,
+                "snapshot_at": row.snapshot_at.isoformat(),
+            }
+            for row in rows
+        ]
+
+    @staticmethod
+    def list_daily_summaries(session: Session, limit: int = 365) -> list[dict]:
+        """metadata-only 列表：直接读 daily_totals slim 副本，避免反序列化 N 天 payload。"""
+        from app.models.daily_total import DailyTotal
+
+        family = get_default_family(session)
+        rows = list(
+            session.execute(
+                select(
+                    DailyTotal.snapshot_date,
+                    DailyTotal.total_asset,
+                    DailyTotal.total_liability,
+                    DailyTotal.net_asset,
+                )
+                .where(DailyTotal.family_id == family.id)
+                .order_by(DailyTotal.snapshot_date.desc())
+                .limit(max(1, min(limit, 1000)))
+            )
+        )
+        return [
+            {
+                "snapshot_date": row.snapshot_date.isoformat(),
+                "total_asset": float(row.total_asset),
+                "total_liability": float(row.total_liability),
+                "net_asset": float(row.net_asset),
+            }
+            for row in rows
+        ]
+
+    @staticmethod
     def get_earliest_daily_snapshot_date(session: Session) -> date | None:
         family = get_default_family(session)
         return session.scalar(

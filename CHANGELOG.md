@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `/api/v1/snapshots/events/summary` 与 `/api/v1/snapshots/daily/summary` 两个 metadata-only 端点：原 `/events`、`/daily` list 接口会反序列化每条快照的完整 payload_json（events `limit≤500` × ~20 KB、daily `limit≤1000` × ~20 KB，最大可达几 MB），summary 端点只查关键字段（events 返 `id/family_id/trigger_type/snapshot_at`；daily 直接读 L1 引入的 `daily_totals` slim 表返 `snapshot_date/total_asset/total_liability/net_asset`），不触碰 payload_json，相同 limit 下响应体积下降 ~95%。旧端点保留不动以维持向后兼容。`SnapshotService` 同步新增 `list_event_summaries` / `list_daily_summaries` 两个方法。来源：性能计划 L5 + P1#9 + P2#13。
+- Add two metadata-only endpoints `/api/v1/snapshots/events/summary` and `/api/v1/snapshots/daily/summary` alongside the existing list endpoints. The old `/events` and `/daily` list calls deserialise each snapshot's full `payload_json` (events up to 500 × ~20 KB, daily up to 1000 × ~20 KB — can be multiple MB), while the new summary variants only project key fields: the events summary returns `id / family_id / trigger_type / snapshot_at`, and the daily summary reads directly from the `daily_totals` slim table introduced in L1 to return `snapshot_date / total_asset / total_liability / net_asset`. Response body drops by ~95% at the same `limit`. The old endpoints are retained for backwards compatibility. `SnapshotService` gains matching `list_event_summaries` and `list_daily_summaries` methods. Tracks L5 + P1#9 + P2#13 of the performance plan.
+
 ### Performance
 
 - `jobs/scheduler.py` 模块级 `BackgroundScheduler` 实例化改 lazy：原 `scheduler = BackgroundScheduler(...)` 在 import 时就会创建 scheduler 对象 + 预留 executor pool，即使 `HBS_ENABLE_SCHEDULER=false` 的场景也付这份开销。改为 `_scheduler` 私有变量 + `_get_or_create_scheduler()` 工厂函数，仅 `start_scheduler()` 真正调用时才创建。配合 Q7（daily snapshot 异步）和 M8（worker 限 1）形成 backend 冷启动综合优化。L4 计划文档原范围更激进（lazy import 非必需模块、alembic offline migration），但 Q7 已经把"启动卡 /health"主因（同步 daily snapshot）解决，剩余空间边际，本次只保守落地这一处。来源：性能计划 L4 + Electron P0#1 余量。

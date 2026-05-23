@@ -24,3 +24,21 @@ def list_daily_snapshots(
     db: Session = Depends(get_db),
 ):
     return ok(SnapshotService.list_daily_snapshots(db, limit))
+
+
+@router.get("/events/summary")
+def list_event_summaries(
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """metadata-only 事件快照列表，避免一次返几 MB 的 payload。"""
+    return ok(SnapshotService.list_event_summaries(db, limit))
+
+
+@router.get("/daily/summary")
+def list_daily_summaries(
+    limit: int = Query(default=365, ge=1, le=1000),
+    db: Session = Depends(get_db),
+):
+    """metadata-only 每日快照列表，直接读 daily_totals slim 副本。"""
+    return ok(SnapshotService.list_daily_summaries(db, limit))

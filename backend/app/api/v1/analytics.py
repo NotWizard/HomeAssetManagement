@@ -126,7 +126,15 @@ def get_rebalance(
 
 @router.get("/currency-overview")
 def get_currency_overview(db: Session = Depends(get_db)):
-    payload = SnapshotService.build_current_payload(db)
+    # 跟 sankey / rebalance 一致，读最新 daily snapshot 现成 payload，
+    # 避免 build_current_payload 每次重新跑「全表 SELECT + N+1 categories
+    # + JSON 重建」；新数据由 holdings 写路径触发 _refresh_snapshots 落到
+    # 最新 snapshot，时延上是「数据已落到 snapshot」与「请求触发重建」
+    # 两条等价路径，前者直接读现成结果。
+    latest = SnapshotService.get_latest_daily_snapshot(db)
+    if latest is None:
+        return ok({"currencies": [], "details": {}})
+    payload = parse_snapshot_payload(latest.payload_json)
     if not payload.get("holdings"):
         return ok({"currencies": [], "details": {}})
     return ok(build_currency_overview(payload.get("holdings", [])))

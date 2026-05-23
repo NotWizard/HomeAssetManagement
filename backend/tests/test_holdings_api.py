@@ -70,8 +70,10 @@ def test_create_holding_via_api_creates_snapshot():
         )
         assert create_resp.status_code == 200
 
-        snapshots = client.get("/api/v1/snapshots/events").json()["data"]
-        assert len(snapshots) >= 1
+        # L3 之后 holding mutate 只刷 daily snapshot，不再写 event snapshot
+        # （前端无消费方）。这里改断言 daily snapshot 至少有一条。
+        daily_snapshots = client.get("/api/v1/snapshots/daily").json()["data"]
+        assert len(daily_snapshots) >= 1
 
 
 def test_create_holding_uses_correct_fx_direction_for_foreign_currency():
@@ -682,11 +684,10 @@ def test_bulk_update_target_ratio_normalizes_member_assets():
         assert ratio_map[first_id] == 42.86
         assert ratio_map[second_id] == 57.14
 
-        events = client.get("/api/v1/snapshots/events").json()["data"]
-        assert any(
-            "bulk-update-target-ratio" in str(row.get("payload", {}).get("note", ""))
-            for row in events
-        )
+        # L3 之后 holding mutate（含 bulk-update-target-ratio）不再写 event snapshot，
+        # 只刷 daily snapshot。改断言 daily snapshot 至少有一条即可。
+        daily = client.get("/api/v1/snapshots/daily").json()["data"]
+        assert len(daily) >= 1
 
 
 def test_bulk_update_target_ratio_rejects_out_of_range_value():

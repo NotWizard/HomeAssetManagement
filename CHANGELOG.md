@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `holding_service._refresh_snapshots` 不再写 event snapshot：原 holding 单条 create / update / delete / bulk-update-target-ratio 路径每次都同时写 event snapshot + daily snapshot，单次 mutate = 2× JSON serialize + 2× DB INSERT。grep 全仓库 `/api/v1/snapshots/events`、`fetchSnapshotEvents`、`listEventSnapshots` 均无任何前端 / 脚本消费方（写而不读的纯历史记录）。改为只刷 daily snapshot；高价值事件（CSV import / settings.base_currency 变更）仍由 `import_service` / `settings_service` 直接调 `SnapshotService.create_event_snapshot` 显式写。`trigger_type` / `note` 参数保留（unused）以免破坏所有调用方签名。holding 编辑后端 IO ~-50%。配套更新 2 个测试断言（`test_create_holding_via_api_creates_snapshot` / `test_bulk_update_target_ratio_normalizes_member_assets`）改查 daily snapshot 而不是 event snapshot。来源：性能计划 L3 + P2#15。
+- `holding_service._refresh_snapshots` stops writing event snapshots. Previously every single-row create / update / delete / bulk-update-target-ratio path wrote both an event snapshot and a daily snapshot — each mutation cost 2× JSON serialise + 2× DB INSERT for the same data. A grep across the repo for `/api/v1/snapshots/events`, `fetchSnapshotEvents` and `listEventSnapshots` found zero frontend or script consumers (it was a write-and-never-read audit log). The helper now only refreshes the daily snapshot; the genuinely high-value events (CSV import, settings.base_currency change) still call `SnapshotService.create_event_snapshot` explicitly from `import_service` / `settings_service` respectively. The `trigger_type` / `note` parameters are retained on the helper signature (unused, marked as such) so callers don't have to change. Per-mutation backend IO drops ~50%. Two tests are updated to assert against daily snapshots instead of event snapshots. Tracks L3 + P2#15 of the performance plan.
+
 ### Performance
 
 - `backend/build_desktop.py` PyInstaller 命令行加 `--exclude-module` 排除 sidecar 运行时不用的模块：`watchfiles`（uvicorn[standard] 默认拉但只在 reload 模式用）、`tkinter`、`unittest`、`test`、`pytest` / `_pytest`、`setuptools`。bundle 大小 / 启动 import 时间下降；具体收益取决于 Python 版本与依赖图，估计 -10 ~ -30 MB（DMG 145 MB），冷启动 import -0.5 ~ -1.5s。来源：性能计划 L2 + Electron P1#4。

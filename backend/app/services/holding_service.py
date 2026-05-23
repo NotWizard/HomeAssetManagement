@@ -249,7 +249,18 @@ class HoldingService:
 
 
 def _refresh_snapshots(session: Session, trigger_type: str, note: str | None = None) -> None:
-    SnapshotService.create_event_snapshot(session, trigger_type=trigger_type, note=note)
+    """holding mutate 后只刷 daily snapshot。
+
+    早期版本同时写 event snapshot 留审计粒度，但目前前端 /
+    API 消费方实际不读 /api/v1/snapshots/events（既无 UI 也无脚本），
+    每次写就是纯写盘成本：完整 JSON serialize + 一次额外 INSERT。
+    去掉 event 写后 import / settings 那两条高价值事件仍由它们各自
+    显式调 SnapshotService.create_event_snapshot 保留。
+
+    保留 trigger_type / note 参数（虽然当前 unused）：调用方仍会传，
+    且未来恢复 event 写时可零改动。
+    """
+    _ = trigger_type, note  # 显式标记 unused 防 linter 报警
     SnapshotService.create_daily_snapshot(session)
 
 

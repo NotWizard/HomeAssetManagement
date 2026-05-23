@@ -94,7 +94,7 @@ export function EntryPage() {
   const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
   const assetCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('asset'), queryFn: () => fetchCategories('asset') });
   const liabilityCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('liability'), queryFn: () => fetchCategories('liability') });
-  const settingsQuery = useQuery({ queryKey: queryKeys.settings.scope('entry'), queryFn: fetchSettings });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 
   const createHoldingMutation = useMutation({

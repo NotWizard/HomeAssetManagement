@@ -138,7 +138,7 @@ export function AnalyticsPage() {
     staleTime: ANALYTICS_STALE_MS,
   });
   const settingsQuery = useQuery({
-    queryKey: queryKeys.settings.scope('analytics'),
+    queryKey: queryKeys.settings.all(),
     queryFn: fetchSettings,
     enabled: analyticsView === 'currency',
   });

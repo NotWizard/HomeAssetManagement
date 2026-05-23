@@ -36,7 +36,7 @@ export function OverviewPage() {
   // 与 EntryPage 共用 holdings.all() 缓存，避免页面切换时重复 fetch
   const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
   const rebalanceQuery = useQuery({ queryKey: queryKeys.rebalance.scope('overview'), queryFn: () => fetchRebalance() });
-  const settingsQuery = useQuery({ queryKey: queryKeys.settings.scope('overview'), queryFn: fetchSettings });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
   const trendUnavailable = trendQuery.isError && !trendQuery.data;
   const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;

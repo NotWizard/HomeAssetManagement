@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { ECharts } from './ECharts';
 import { buildCorrelationHeatmapOption, getCorrelationHeatmapHeight } from './chartOptions';
 import type { CorrelationData } from '../../services/analytics';
@@ -7,8 +9,8 @@ type Props = {
 };
 
 export function CorrelationHeatmap({ data }: Props) {
-  const option = buildCorrelationHeatmapOption(data);
-  const height = getCorrelationHeatmapHeight(data.assets.length);
+  const option = useMemo(() => buildCorrelationHeatmapOption(data), [data]);
+  const height = useMemo(() => getCorrelationHeatmapHeight(data.assets.length), [data.assets.length]);
   // 相关性矩阵是 N×N 方阵：当外层卡片独占整行（~1170 px 全宽）时，如果不限制宽度，
   // 单元格在 X 方向会被拉得远比 Y 方向长（22 资产时约 2:1，5 资产时甚至 6:1），
   // 破坏热力图"格子"的视觉语义。这里把图表内层 max-width 钉在 height + 160（160 是

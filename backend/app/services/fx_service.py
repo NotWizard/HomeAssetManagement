@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from threading import Thread
 from typing import Any
 
 import httpx
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import SessionLocal
 from app.core.logging import get_logger
 from app.core.timezone import business_today
 from app.models.fx_rate_daily import FxRateDaily
@@ -95,21 +97,8 @@ class FXService:
         if exact:
             return Decimal(exact.rate), exact.is_estimated
 
-        if allow_refresh:
-            FXService.refresh_rates(session, as_of_date, base)
-
-        exact = session.scalar(
-            select(FxRateDaily).where(
-                and_(
-                    FxRateDaily.rate_date == as_of_date,
-                    FxRateDaily.base_currency == base,
-                    FxRateDaily.quote_currency == quote,
-                )
-            )
-        )
-        if exact:
-            return Decimal(exact.rate), exact.is_estimated
-
+        # 历史 fallback：找到该币种 ≤ as_of_date 最近的一次已知汇率，标记为 is_estimated
+        # 以便 UI 提示"汇率为估算值"。
         fallback = session.scalar(
             select(FxRateDaily)
             .where(
@@ -123,7 +112,28 @@ class FXService:
             .limit(1)
         )
         if fallback:
+            # 没拿到当天精确值时 fire-and-forget 一次后台 refresh：不阻塞当前请求，
+            # 下次同样查询大概率有数据。避免之前同步 refresh 在 provider 抖动时
+            # 最多阻塞 ~30s 的体验灾难。
+            if allow_refresh:
+                _trigger_background_refresh(as_of_date, base)
             return Decimal(fallback.rate), True
+
+        # 连历史 fallback 都没有：尝试同步 refresh 一次（首次启动 + 新币种的边界场景），
+        # 不再用历史 fallback 兜底就只能 raise；这里的同步调用是不可避免的"冷启动税"。
+        if allow_refresh:
+            FXService.refresh_rates(session, as_of_date, base)
+            exact = session.scalar(
+                select(FxRateDaily).where(
+                    and_(
+                        FxRateDaily.rate_date == as_of_date,
+                        FxRateDaily.base_currency == base,
+                        FxRateDaily.quote_currency == quote,
+                    )
+                )
+            )
+            if exact:
+                return Decimal(exact.rate), exact.is_estimated
 
         raise ValueError(f"无法获取汇率: {base}->{quote} ({as_of_date})")
 
@@ -155,6 +165,32 @@ class FXService:
                 .order_by(desc(FxRateDaily.rate_date), FxRateDaily.quote_currency.asc())
             )
         )
+
+
+def _trigger_background_refresh(rate_date: date, base_currency: str) -> None:
+    """Fire-and-forget 触发一次 FX refresh，不阻塞调用方。
+
+    用在 resolve_rate_for_pair 命中历史 fallback 但缺当天精确值的场景：
+    立即返回 fallback（is_estimated=True）给用户，同时启动 daemon 线程
+    刷一次最新汇率，下一次同样查询大概率能命中精确值。
+
+    线程内自己创建新 Session，避免跨线程共享 Session（SQLAlchemy 不允许）；
+    任何异常都吞掉（只是后台尽力而为，不能影响主请求），仅记 warning。
+    """
+    def _run() -> None:
+        try:
+            with SessionLocal() as bg_session:
+                FXService.refresh_rates(bg_session, rate_date, base_currency)
+                bg_session.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "fx background refresh failed (date=%s base=%s): %s",
+                rate_date,
+                base_currency,
+                exc,
+            )
+
+    Thread(target=_run, daemon=True, name=f"fx-refresh-{base_currency}-{rate_date}").start()
 
 
 def _fetch_provider_rates(

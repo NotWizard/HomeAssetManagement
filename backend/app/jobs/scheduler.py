@@ -1,3 +1,4 @@
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -10,7 +11,17 @@ from app.jobs.snapshot_jobs import run_daily_snapshot_job
 
 logger = get_logger(__name__)
 
-scheduler = BackgroundScheduler()
+# 模块 import 时不实例化 BackgroundScheduler，避免 enable_scheduler=False
+# 配置下仍付一次实例化 + worker 线程预创建开销。首次 start_scheduler 调用
+# 时才创建（L4 lazy import 思路落地的一个具体点；配合 M8 的 1-worker 限制）。
+_scheduler: BackgroundScheduler | None = None
+
+
+def _get_or_create_scheduler() -> BackgroundScheduler:
+    global _scheduler
+    if _scheduler is None:
+        _scheduler = BackgroundScheduler(executors={"default": ThreadPoolExecutor(1)})
+    return _scheduler
 
 
 def _get_scheduler_timezone():
@@ -24,6 +35,7 @@ def start_scheduler() -> None:
         logger.info("scheduler disabled by config")
         return
 
+    scheduler = _get_or_create_scheduler()
     if scheduler.running:
         return
 
@@ -54,7 +66,7 @@ def start_scheduler() -> None:
 
 
 def stop_scheduler() -> None:
-    if scheduler.running:
+    if _scheduler is not None and _scheduler.running:
         # wait=True：等待 in-flight job 干净落地，避免与 SessionLocal 关闭顺序竞态
-        scheduler.shutdown(wait=True)
+        _scheduler.shutdown(wait=True)
         logger.info("scheduler stopped")

@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { ECharts } from './ECharts';
 import { buildVolatilityChartOption, getVolatilityChartHeight } from './chartOptions';
 import type { VolatilityItem } from '../../services/analytics';
@@ -7,8 +9,8 @@ type Props = {
 };
 
 export function VolatilityChart({ data }: Props) {
-  const option = buildVolatilityChartOption(data);
-  const height = getVolatilityChartHeight(data.length);
+  const option = useMemo(() => buildVolatilityChartOption(data), [data]);
+  const height = useMemo(() => getVolatilityChartHeight(data.length), [data.length]);
 
   return <ECharts option={option} style={{ height }} />;
 }

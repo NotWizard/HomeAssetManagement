@@ -10,12 +10,30 @@ from app.models.import_log import ImportLog
 from app.models.member import Member
 
 
+_DEFAULT_FAMILY_CACHE_KEY = "_default_family_id"
+
+
 def get_default_family(session: Session) -> Family:
+    """获取默认 family，复用 Session.info 做请求生命周期内缓存。
+
+    `Session.info` 是 SQLAlchemy 官方的「per-session 附加数据」入口，
+    会随 Session close 自动丢弃，不会跨请求泄漏。原实现被几乎所有 service
+    调用且每次都查一次 SELECT；缓存后单个请求里只查一次。
+    """
+    family_id = session.info.get(_DEFAULT_FAMILY_CACHE_KEY)
+    if family_id is not None:
+        cached = session.get(Family, family_id)
+        if cached is not None:
+            return cached
+        # 缓存的 id 在当前 session 取不到（不太可能，防御性清理）
+        session.info.pop(_DEFAULT_FAMILY_CACHE_KEY, None)
+
     family = session.scalar(select(Family).order_by(Family.id.asc()).limit(1))
     if family is None:
         family = Family(name="我的家庭")
         session.add(family)
         session.flush()
+    session.info[_DEFAULT_FAMILY_CACHE_KEY] = family.id
     return family
 
 

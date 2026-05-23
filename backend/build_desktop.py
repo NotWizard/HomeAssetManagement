@@ -65,7 +65,7 @@ def build_output_paths(project_root: Path, target_arch: str) -> DesktopBuildPath
 def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
     paths = build_output_paths(project_root, target_arch)
     backend_dir = project_root / "backend"
-    return [
+    args = [
         "--noconfirm",
         "--clean",
         "--onedir",
@@ -83,8 +83,26 @@ def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
         f"{backend_dir / 'db_migrations'}:db_migrations",
         "--add-data",
         f"{backend_dir / 'alembic.ini'}:.",
-        str(paths.entry_script),
     ]
+    # 排除不会在 sidecar 运行时用到的模块，缩 PyInstaller bundle 体积。
+    # 排错原则：每条都必须经过验证 backend 主路径不依赖：
+    #   - watchfiles：uvicorn[standard] 默认拉，仅 reload 模式用
+    #   - tkinter / unittest / test：标准库巨大模块，sidecar 不用
+    #   - pytest 套件：仅测试时用，运行时不需要
+    #   - setuptools / pkg_resources：少数库会 fall back 引用，PyInstaller 处理后多余
+    excludes = [
+        "watchfiles",
+        "tkinter",
+        "unittest",
+        "test",
+        "pytest",
+        "_pytest",
+        "setuptools",
+    ]
+    for module in excludes:
+        args.extend(["--exclude-module", module])
+    args.append(str(paths.entry_script))
+    return args
 
 
 def build_pyinstaller_environment(

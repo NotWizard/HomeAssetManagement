@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import { AnalyticsDateRangePicker } from '../components/analytics/AnalyticsDateRangePicker';
 import {
@@ -98,38 +98,54 @@ export function AnalyticsPage() {
     setAnalyticsDateRange(applyEndDateChange(analyticsDateRange, endDate));
   };
 
+  // 分析端点 staleTime 30s：编辑 holdings 后不立即触发分析端点 refetch（雪崩），
+  // 让用户切回分析页 ≥30s 后自然 stale 重 fetch；30s 内连续切来切去命中缓存。
+  // placeholderData: keepPreviousData：日期范围切换时 query key 整体替换，
+  // 用上一次范围的数据占位过渡，避免 5 张图同时回退到 Skeleton 闪烁白屏。
+  const ANALYTICS_STALE_MS = 30_000;
   const trendQuery = useQuery({
     queryKey: queryKeys.trend.range(analyticsDateRange),
     queryFn: () => fetchTrend(analyticsDateRange),
     enabled: analyticsView === 'overview' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
+    placeholderData: keepPreviousData,
   });
   const volatilityQuery = useQuery({
     queryKey: queryKeys.volatility.range(analyticsDateRange),
     queryFn: () => fetchVolatility(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
+    placeholderData: keepPreviousData,
   });
   const correlationQuery = useQuery({
     queryKey: queryKeys.correlation.range(analyticsDateRange),
     queryFn: () => fetchCorrelation(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
+    placeholderData: keepPreviousData,
   });
   const sankeyQuery = useQuery({
     queryKey: queryKeys.sankey.range(analyticsDateRange),
     queryFn: () => fetchSankey(analyticsDateRange),
     enabled: analyticsView === 'overview' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
+    placeholderData: keepPreviousData,
   });
   const rebalanceQuery = useQuery({
     queryKey: queryKeys.rebalance.range(analyticsDateRange),
     queryFn: () => fetchRebalance(analyticsDateRange),
     enabled: analyticsView === 'risk' && analyticsDateRangeReady,
+    staleTime: ANALYTICS_STALE_MS,
+    placeholderData: keepPreviousData,
   });
   const currencyOverviewQuery = useQuery({
     queryKey: queryKeys.currencyOverview.all(),
     queryFn: fetchCurrencyOverview,
     enabled: analyticsView === 'currency',
+    staleTime: ANALYTICS_STALE_MS,
   });
   const settingsQuery = useQuery({
-    queryKey: queryKeys.settings.scope('analytics'),
+    queryKey: queryKeys.settings.all(),
     queryFn: fetchSettings,
     enabled: analyticsView === 'currency',
   });

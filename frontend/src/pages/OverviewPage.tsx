@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense, lazy, useMemo } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Globe, Wallet } from 'lucide-react';
 
@@ -13,8 +13,7 @@ import { fetchRebalance, fetchTrend } from '../services/analytics';
 import { fetchHoldings } from '../services/holdings';
 import { fetchSettings } from '../services/settings';
 import { formatCurrency, formatPercent } from '../utils/format';
-
-const TrendChart = lazy(() => import('../components/charts/TrendChart').then((module) => ({ default: module.TrendChart })));
+import { SparklineTrend } from '../components/charts/SparklineTrend';
 
 function calcChangePct(current: number, previous: number | null): number | null {
   if (previous == null || previous === 0) {
@@ -36,7 +35,7 @@ export function OverviewPage() {
   // 与 EntryPage 共用 holdings.all() 缓存，避免页面切换时重复 fetch
   const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
   const rebalanceQuery = useQuery({ queryKey: queryKeys.rebalance.scope('overview'), queryFn: () => fetchRebalance() });
-  const settingsQuery = useQuery({ queryKey: queryKeys.settings.scope('overview'), queryFn: fetchSettings });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
   const trendUnavailable = trendQuery.isError && !trendQuery.data;
   const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;
@@ -190,14 +189,12 @@ export function OverviewPage() {
               </div>
             ) : null}
             {trendUnavailable ? null : trendQuery.data ? (
-              <Suspense fallback={<Skeleton className="h-72 w-full" />}>
-                <TrendChart
-                  dates={trendQuery.data.dates}
-                  totalAsset={trendQuery.data.total_asset}
-                  totalLiability={trendQuery.data.total_liability}
-                  netAsset={trendQuery.data.net_asset}
-                />
-              </Suspense>
+              <SparklineTrend
+                dates={trendQuery.data.dates}
+                totalAsset={trendQuery.data.total_asset}
+                totalLiability={trendQuery.data.total_liability}
+                netAsset={trendQuery.data.net_asset}
+              />
             ) : (
               <Skeleton className="h-72 w-full" />
             )}

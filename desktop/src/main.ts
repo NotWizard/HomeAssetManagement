@@ -403,6 +403,18 @@ const bootstrapController = createBootstrapController({
       focus: () => {
         focusWindow(window);
       },
+      // 把 bootstrap stage 推送到 loading 页里的 window.setStartupStage(title, body)。
+      // 页面可能尚未渲染完成（executeJavaScript 会 reject），全部安静吞掉，
+      // 不影响主 bootstrap 流程。
+      setStartupStage: async (title: string, body: string) => {
+        const escape = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        await window.webContents
+          .executeJavaScript(
+            `typeof window.setStartupStage === "function" && window.setStartupStage("${escape(title)}", "${escape(body)}")`,
+            true
+          )
+          .catch(() => undefined);
+      },
     };
   },
   startBackend: async () => {

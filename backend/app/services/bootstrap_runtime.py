@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass
 from collections.abc import Callable
+from threading import Thread
 
 from sqlalchemy.orm import Session
 
@@ -61,16 +62,11 @@ def run_application_startup(
             session.commit()
 
     if startup_options.run_bootstrap_snapshot:
-        try:
-            with session_factory() as session:
-                SnapshotService.create_daily_snapshot(session)
-                session.commit()
-        except Exception as exc:  # pragma: no cover - best-effort path
-            logger.warning(
-                "boot snapshot 失败，已跳过：%s",
-                exc,
-                exc_info=True,
-            )
+        # daily snapshot 改异步后台执行：原同步路径会让 /health 在快照写完前不返回 200，
+        # Electron 前端 loading 页要等这一步；holdings 较多时冷启动慢 1-3s。
+        # 改为 daemon Thread 后台跑，自己开 Session，异常吞掉只 warning。
+        # 返回 Thread 引用便于测试 join；生产代码不需要等。
+        _start_bootstrap_snapshot_async(session_factory)
 
     if startup_options.run_scheduler:
         try:
@@ -81,6 +77,25 @@ def run_application_startup(
                 exc,
                 exc_info=True,
             )
+
+
+def _start_bootstrap_snapshot_async(session_factory: SessionFactory) -> Thread:
+    def _run() -> None:
+        try:
+            with session_factory() as session:
+                SnapshotService.create_daily_snapshot(session)
+                session.commit()
+                logger.info("boot snapshot done (async)")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "boot snapshot 失败，已跳过：%s",
+                exc,
+                exc_info=True,
+            )
+
+    thread = Thread(target=_run, daemon=True, name="boot-snapshot")
+    thread.start()
+    return thread
 
 
 def run_application_shutdown(

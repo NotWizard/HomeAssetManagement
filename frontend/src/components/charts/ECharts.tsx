@@ -32,17 +32,26 @@ export function ECharts(props: Props) {
 
   // echarts-for-react 默认仅监听 window resize；当父容器因 tab 切换、布局回流改变宽高时，
   // 图表会保留首次挂载尺寸导致绘制区被截断。这里追加 ResizeObserver，让图表跟随容器自适应。
+  // 用 rAF 合批避免多图同屏时多次串联 resize 抖动。
   useEffect(() => {
     const wrapper = wrapperRef.current;
     if (!wrapper || typeof ResizeObserver === 'undefined') {
       return undefined;
     }
 
+    let rafId: number | null = null;
     const observer = new ResizeObserver(() => {
-      chartRef.current?.getEchartsInstance().resize();
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        chartRef.current?.getEchartsInstance().resize();
+      });
     });
     observer.observe(wrapper);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, []);
 
   return (
@@ -50,7 +59,6 @@ export function ECharts(props: Props) {
       <ReactEChartsCore
         ref={setRef}
         echarts={echarts}
-        notMerge
         lazyUpdate
         {...props}
       />

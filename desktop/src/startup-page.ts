@@ -390,6 +390,11 @@ function createShell(options: {
 }
 
 export function createLoadingPage(): string {
+  // loading 页 JS：
+  //   - 默认走 setInterval 1700ms 切换三个 fake state（兜底，若主进程没有推送）
+  //   - 暴露全局 window.setStartupStage(title, body)，让主进程通过
+  //     webContents.executeJavaScript 推送真实 backend stage；收到第一次
+  //     真实推送时立即停掉 fake interval 并切到真实文案，避免覆盖。
   const script = [
     '<script>',
     'const states = [',
@@ -401,14 +406,24 @@ export function createLoadingPage(): string {
     'const titleNode = document.querySelector("[data-status-title]");',
     'const bodyNode = document.querySelector("[data-status-body]");',
     'let current = 0;',
-    'window.setInterval(() => {',
+    'let fakeTimer = null;',
+    'let receivedRealStage = false;',
+    'function applyState(title, body) {',
+    '  if (titleNode) titleNode.textContent = title;',
+    '  if (bodyNode) bodyNode.textContent = body;',
+    '}',
+    'function advanceFake() {',
+    '  if (receivedRealStage) return;',
     '  current = (current + 1) % states.length;',
-    '  stepNodes.forEach((node, index) => {',
-    '    node.setAttribute("data-active", index === current ? "true" : "false");',
-    '  });',
-    '  if (titleNode) titleNode.textContent = states[current].title;',
-    '  if (bodyNode) bodyNode.textContent = states[current].body;',
-    '}, 1700);',
+    '  stepNodes.forEach((node, index) => { node.setAttribute("data-active", index === current ? "true" : "false"); });',
+    '  applyState(states[current].title, states[current].body);',
+    '}',
+    'fakeTimer = window.setInterval(advanceFake, 1700);',
+    'window.setStartupStage = function(title, body) {',
+    '  receivedRealStage = true;',
+    '  if (fakeTimer !== null) { window.clearInterval(fakeTimer); fakeTimer = null; }',
+    '  applyState(title || states[0].title, body || states[0].body);',
+    '};',
     '</script>',
   ].join('');
 

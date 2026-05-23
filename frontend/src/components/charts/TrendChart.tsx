@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { ECharts } from './ECharts';
 import { buildTrendChartOption } from './chartOptions';
 
@@ -9,7 +11,10 @@ type Props = {
 };
 
 export function TrendChart({ dates, totalAsset, totalLiability, netAsset }: Props) {
-  const option = buildTrendChartOption({ dates, totalAsset, totalLiability, netAsset });
+  const option = useMemo(
+    () => buildTrendChartOption({ dates, totalAsset, totalLiability, netAsset }),
+    [dates, totalAsset, totalLiability, netAsset]
+  );
 
   return <ECharts option={option} style={{ height: 360 }} />;
 }

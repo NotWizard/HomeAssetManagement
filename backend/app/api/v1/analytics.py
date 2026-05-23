@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analytics.correlation import compute_correlation
@@ -15,7 +16,8 @@ from app.core.database import get_db
 from app.core.exceptions import AppError
 from app.core.response import ok
 from app.core.timezone import business_today
-from app.services.common import get_scoped_member
+from app.models.member import Member
+from app.services.common import get_default_family
 from app.services.settings_service import SettingsService
 from app.services.snapshot_service import parse_snapshot_payload
 from app.services.snapshot_service import SnapshotService
@@ -99,7 +101,19 @@ def get_sankey(
         return ok({"nodes": [], "links": []})
     payload = parse_snapshot_payload(latest.payload_json)
     member_ids = {item.get("member_id") for item in payload.get("holdings", []) if item.get("member_id") is not None}
-    name_map = {member_id: get_scoped_member(db, int(member_id)).name for member_id in member_ids}
+    # 一次 IN(...) batch 查名 + 校验 family scope，替代原 N 次 get_scoped_member
+    # （每个成员都跑 get_default_family + 单条 SELECT）。
+    family = get_default_family(db)
+    name_map: dict[int, str] = {}
+    if member_ids:
+        rows = db.scalars(
+            select(Member).where(
+                Member.id.in_(member_ids),
+                Member.family_id == family.id,
+            )
+        )
+        for row in rows:
+            name_map[row.id] = row.name
     return ok(build_sankey(payload.get("holdings", []), name_map))
 
 
@@ -126,7 +140,15 @@ def get_rebalance(
 
 @router.get("/currency-overview")
 def get_currency_overview(db: Session = Depends(get_db)):
-    payload = SnapshotService.build_current_payload(db)
+    # 跟 sankey / rebalance 一致，读最新 daily snapshot 现成 payload，
+    # 避免 build_current_payload 每次重新跑「全表 SELECT + N+1 categories
+    # + JSON 重建」；新数据由 holdings 写路径触发 _refresh_snapshots 落到
+    # 最新 snapshot，时延上是「数据已落到 snapshot」与「请求触发重建」
+    # 两条等价路径，前者直接读现成结果。
+    latest = SnapshotService.get_latest_daily_snapshot(db)
+    if latest is None:
+        return ok({"currencies": [], "details": {}})
+    payload = parse_snapshot_payload(latest.payload_json)
     if not payload.get("holdings"):
         return ok({"currencies": [], "details": {}})
     return ok(build_currency_overview(payload.get("holdings", [])))

@@ -52,10 +52,19 @@ test('查询键工厂会提供统一的资源域 key', async () => {
   assert.deepEqual(queryKeys.currencyOverview.all(), ['currency-overview']);
 });
 
-test('资产负债变更后需要覆盖总览和分析看板相关查询', async () => {
+test('单条 holding 变更默认仅失效核心 2 个 key（holdings + dateBounds），避免分析端点雪崩', async () => {
   const { HOLDING_RELATED_QUERY_KEYS, queryKeys } = await import('../src/services/holdingRelatedQueries.ts');
 
   assert.deepEqual(HOLDING_RELATED_QUERY_KEYS, [
+    queryKeys.holdings.all(),
+    queryKeys.analyticsDateBounds.all(),
+  ]);
+});
+
+test('大批量场景（CSV import / 批量删除）的全失效集覆盖所有分析端点', async () => {
+  const { ALL_HOLDING_DEPENDENT_QUERY_KEYS, queryKeys } = await import('../src/services/holdingRelatedQueries.ts');
+
+  assert.deepEqual(ALL_HOLDING_DEPENDENT_QUERY_KEYS, [
     queryKeys.holdings.all(),
     queryKeys.analyticsDateBounds.all(),
     queryKeys.trend.all(),
@@ -67,7 +76,7 @@ test('资产负债变更后需要覆盖总览和分析看板相关查询', async
   ]);
 });
 
-test('共享失效函数会逐个刷新所有资产负债相关查询', async () => {
+test('invalidateHoldingRelatedQueries 只刷新核心 2 个 key', async () => {
   const {
     HOLDING_RELATED_QUERY_KEYS,
     invalidateHoldingRelatedQueries,
@@ -82,6 +91,23 @@ test('共享失效函数会逐个刷新所有资产负债相关查询', async ()
   await invalidateHoldingRelatedQueries(queryClient as never);
 
   assert.deepEqual(calls, HOLDING_RELATED_QUERY_KEYS);
+});
+
+test('invalidateAllHoldingDependentQueries 刷新全部 holdings 派生缓存', async () => {
+  const {
+    ALL_HOLDING_DEPENDENT_QUERY_KEYS,
+    invalidateAllHoldingDependentQueries,
+  } = await import('../src/services/holdingRelatedQueries.ts');
+  const calls: Array<readonly unknown[]> = [];
+  const queryClient = {
+    invalidateQueries: async ({ queryKey }: { queryKey: readonly unknown[] }) => {
+      calls.push(queryKey);
+    },
+  };
+
+  await invalidateAllHoldingDependentQueries(queryClient as never);
+
+  assert.deepEqual(calls, ALL_HOLDING_DEPENDENT_QUERY_KEYS);
 });
 
 test('按资源域的失效 helper 会刷新对应查询', async () => {

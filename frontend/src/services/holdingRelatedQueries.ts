@@ -72,6 +72,17 @@ export const queryKeys = {
 export const HOLDING_RELATED_QUERY_KEYS = [
   queryKeys.holdings.all(),
   queryKeys.analyticsDateBounds.all(),
+] as const;
+
+/**
+ * 涵盖一切 holdings 数据派生 query 的失效集。
+ * 仅在「大批量、整表换骨」场景下使用（如 CSV 导入、迁移包恢复、删除全成员等）；
+ * 单条 holding 的 create / update / delete 不要用这个——会触发 6+ 重分析端点
+ * 同时并发刷新，造成请求雪崩。单条编辑走 HOLDING_RELATED_QUERY_KEYS，
+ * 让分析 query 通过 staleTime 自然过期，用户下次切到分析页时再 refetch。
+ */
+export const ALL_HOLDING_DEPENDENT_QUERY_KEYS = [
+  ...HOLDING_RELATED_QUERY_KEYS,
   queryKeys.trend.all(),
   queryKeys.rebalance.all(),
   queryKeys.sankey.all(),
@@ -82,7 +93,7 @@ export const HOLDING_RELATED_QUERY_KEYS = [
 
 export const SETTINGS_QUERY_KEYS = [
   queryKeys.settings.all(),
-  ...HOLDING_RELATED_QUERY_KEYS,
+  ...ALL_HOLDING_DEPENDENT_QUERY_KEYS,
 ] as const;
 
 /**
@@ -97,7 +108,7 @@ export const MEMBER_QUERY_KEYS = [queryKeys.members.all()] as const;
 
 export const MEMBER_HOLDING_RELATED_QUERY_KEYS = [
   queryKeys.members.all(),
-  ...HOLDING_RELATED_QUERY_KEYS,
+  ...ALL_HOLDING_DEPENDENT_QUERY_KEYS,
 ] as const;
 
 export const IMPORT_LOG_QUERY_KEYS = [queryKeys.importLogs.all()] as const;
@@ -106,6 +117,17 @@ export async function invalidateHoldingRelatedQueries(
   queryClient: QueryClientLike
 ) {
   await invalidateQueryKeys(queryClient, HOLDING_RELATED_QUERY_KEYS);
+}
+
+/**
+ * 失效所有 holdings 派生缓存（含全部分析端点）。
+ * 仅用于「大批量、整表换骨」场景（CSV 导入、迁移恢复、按成员批量删除等），
+ * 避免单条 holding 编辑触发 6+ 重端点并发雪崩。
+ */
+export async function invalidateAllHoldingDependentQueries(
+  queryClient: QueryClientLike
+) {
+  await invalidateQueryKeys(queryClient, ALL_HOLDING_DEPENDENT_QUERY_KEYS);
 }
 
 export async function invalidateSettingsQueries(queryClient: QueryClientLike) {

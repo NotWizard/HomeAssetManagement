@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
 
 import { Badge } from '../ui/badge';
@@ -54,9 +54,17 @@ export function EntryHoldingsTable({
   onDeleteHolding,
   onOpenNormalize,
 }: EntryHoldingsTableProps) {
-  const groups = buildGroups(filteredHoldings, memberSummaries, memberNameMap);
+  // buildGroups 内部对每组 rows 都 [...rows].sort()，38+ 行时不 memo 每次 render
+  // 都全量重排——勾选 / 输入触发的父组件 re-render 会传导到这里。
+  const groups = useMemo(
+    () => buildGroups(filteredHoldings, memberSummaries, memberNameMap),
+    [filteredHoldings, memberSummaries, memberNameMap]
+  );
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<number>>(() => new Set());
-  const groupKey = groups.map((group) => group.summary.memberId).join(',');
+  const groupKey = useMemo(
+    () => groups.map((group) => group.summary.memberId).join(','),
+    [groups]
+  );
 
   useEffect(() => {
     setCollapsedGroupIds((current) => {
@@ -177,7 +185,7 @@ type GroupBlockProps = {
   onOpenNormalize: (memberId: number) => void;
 };
 
-function GroupBlock({
+function GroupBlockBase({
   group,
   collapsed,
   focused,
@@ -322,6 +330,12 @@ function GroupBlock({
     </>
   );
 }
+
+// GroupBlock 包 React.memo：父 EntryHoldingsTable 重渲染（如勾选 / 输入）时，
+// 只有 props 真正变化的 group 才重渲染，其它组短路。
+// 调用方 EntryPage 已用 useCallback 锁定 onToggleHoldingSelection / onOpenEditDialog
+// 等 handler，配合此处 memo 才能生效。
+const GroupBlock = memo(GroupBlockBase);
 
 function buildGroups(
   filteredHoldings: Holding[],

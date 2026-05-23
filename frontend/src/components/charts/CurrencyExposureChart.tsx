@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import { ECharts } from './ECharts';
 import { buildCurrencyExposureChartOption } from './chartOptions';
 
@@ -9,7 +11,10 @@ type Props = {
 };
 
 export function CurrencyExposureChart({ data, baseCurrency = 'CNY' }: Props) {
-  const option = buildCurrencyExposureChartOption(data, baseCurrency);
+  const option = useMemo(
+    () => buildCurrencyExposureChartOption(data, baseCurrency),
+    [data, baseCurrency]
+  );
 
   return <ECharts option={option} style={{ height: 360 }} />;
 }

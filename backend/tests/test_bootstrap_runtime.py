@@ -94,7 +94,13 @@ def test_run_application_startup_allows_disabling_snapshot_and_scheduler():
 
 
 def test_boot_snapshot_failure_is_swallowed_and_does_not_block_startup():
-    """boot snapshot 失败不应该阻止 schema/seed/scheduler 完成。"""
+    """boot snapshot 失败不应该阻止 schema/seed/scheduler 完成。
+
+    Q7 后 boot snapshot 改为 daemon 线程异步执行：用 enumerate threads
+    定位「boot-snapshot」线程并 join，再做断言，避免 race。
+    """
+    import threading
+
     calls: list[str] = []
     sessions: list[DummySession] = []
 
@@ -136,6 +142,11 @@ def test_boot_snapshot_failure_is_swallowed_and_does_not_block_startup():
             session_factory=session_factory,
             scheduler_start=scheduler_start,
         )
+        # 等所有 boot-snapshot daemon 线程跑完（最多 2s），确保 assert 时
+        # session_factory / create_snapshot 副作用已收集到位
+        for t in threading.enumerate():
+            if t.name == "boot-snapshot":
+                t.join(timeout=2.0)
     finally:
         runtime_module.ensure_database_schema = original_ensure_schema
         runtime_module.ensure_seed_data = original_ensure_seed
@@ -145,7 +156,7 @@ def test_boot_snapshot_failure_is_swallowed_and_does_not_block_startup():
     assert "seed" in calls
     assert "snapshot_attempt" in calls
     assert "scheduler_start" in calls, "scheduler 必须仍然启动"
-    # 两个独立 session：一个给 seed，一个给 snapshot
+    # 两个独立 session：一个给 seed，一个给 snapshot（后者在 daemon 线程里开）
     assert len(sessions) == 2
     # seed session 已 commit；snapshot session 因 raise 不会 commit
     assert sessions[0].committed is True

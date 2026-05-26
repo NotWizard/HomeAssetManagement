@@ -8,6 +8,7 @@
 
 ### Performance
 
+- 优化：migration export 一次 IN(...) 预取所有 holdings 用到的 Category 名，替代 per-holding lazy `session.get` 三连查 / Prefetch all referenced Category names in one IN(...) query during migration export, replacing the per-holding lazy `session.get` triple lookup.
 - 优化：`build_daily_series` cache fingerprint 改绑 `daily_totals` 表三元组（MAX snapshot_date / COUNT / MAX generated_at），剔除 holdings SELECT；`DailyTotal.generated_at` 加 `onupdate` 让同日重算也能让 cache 失效 / Switch `build_daily_series` cache fingerprint to `daily_totals` triple (drop holdings SELECT); add `onupdate` to `DailyTotal.generated_at` so same-day recompute invalidates cache.
 - 优化：HoldingItem 索引重构 — 删 `ix_holding_item_is_deleted` / `ix_holding_item_type`（selectivity 太低 planner 用不上），加 `(family_id, is_deleted, updated_at)` 与 `(family_id, member_id, is_deleted)` 复合索引匹配 list_holdings / per-member 热路径 / Refactor HoldingItem indexes — drop low-selectivity `is_deleted` / `type` singletons, add `(family_id, is_deleted, updated_at)` and `(family_id, member_id, is_deleted)` composites to cover list and per-member hot paths.
 - 优化：FX `_upsert_daily_rates` 改用 SQLite ON CONFLICT DO UPDATE batch upsert，单币种 SELECT 全消除，~150ms → ~30ms / Replace per-currency SELECT-then-add with batched `INSERT ... ON CONFLICT DO UPDATE` in FX upsert (~150ms → ~30ms).

@@ -7,6 +7,7 @@ from app.services.bootstrap import init_database
 from app.services.import_service import ImportApplyResult
 from app.services.import_service import ImportCommitContext
 from app.services.import_service import ImportService
+from app.services.import_service import ParsedRow
 from app.services.fx_service import FXService
 from app.services.settings_service import SettingsService
 
@@ -14,18 +15,20 @@ from app.services.settings_service import SettingsService
 
 def test_import_commit_csv_uses_staged_pipeline(monkeypatch):
     init_database()
-    parsed_rows = [object()]
+    # 用 error 行避免 _prepare_import_commit 收集 currencies 时访问 row.payload；
+    # 该 staged 测试只关心 pipeline 阶段顺序，不关心 FX cache。
+    parsed_rows = [ParsedRow(index=2, payload=None, action="invalid", error="skip")]
     apply_result = ImportApplyResult(total=1, inserted=1, updated=0, failed=0)
     calls: list[tuple[str, object]] = []
 
     class DummyImportLog:
         id = 99
 
-    def fake_parse(session, content):
+    def fake_parse(content, prefetch):
         calls.append(("parse", content))
         return parsed_rows
 
-    def fake_apply(session, parsed):
+    def fake_apply(session, parsed, prefetch):
         calls.append(("apply", parsed))
         return apply_result
 
@@ -125,6 +128,7 @@ def test_import_commit_csv_runs_prepare_apply_finalize_stages_in_order(monkeypat
         family_id=1,
         filename="batch.csv",
         parsed_rows=parsed_rows,
+        prefetch=object(),  # 仅用于 staged 测试断言对象传递，内部不读
     )
     apply_result = ImportApplyResult(total=1, inserted=1, updated=0, failed=0)
     calls: list[tuple[object, ...]] = []

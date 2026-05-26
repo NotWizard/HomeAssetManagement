@@ -6,6 +6,7 @@ import zipfile
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy import select
+from sqlalchemy.orm import undefer
 
 from app.core.database import SessionLocal
 from app.main import app
@@ -138,6 +139,7 @@ def _collect_state() -> dict:
         snapshots = list(
             session.scalars(
                 select(SnapshotDaily)
+                .options(undefer(SnapshotDaily.payload_json))
                 .where(SnapshotDaily.family_id == family.id)
                 .order_by(SnapshotDaily.snapshot_date.asc())
             )

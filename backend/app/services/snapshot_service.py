@@ -7,6 +7,7 @@ from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import undefer
 
 from app.models.category import Category
 from app.models.daily_total import DailyTotal
@@ -105,10 +106,22 @@ class SnapshotService:
 
     @staticmethod
     def list_daily_snapshots(session: Session, limit: int = 365) -> list[dict]:
+        """每日快照元数据列表（payload_json deferred 不加载）。
+
+        历史上返回 `payload` 反序列化完整 holdings 数组，但 grep 全仓库前端 /
+        脚本均无消费方使用该字段，每次返几 MB 是纯浪费。改为只回 id /
+        family_id / snapshot_date 三个 metadata 字段；需要单天完整 payload
+        请用 `get_daily_snapshot(snapshot_date)`，需要 totals slim 列表请用
+        `list_daily_summaries`（直接读 daily_totals 表）。
+        """
         family = get_default_family(session)
         rows = list(
-            session.scalars(
-                select(SnapshotDaily)
+            session.execute(
+                select(
+                    SnapshotDaily.id,
+                    SnapshotDaily.family_id,
+                    SnapshotDaily.snapshot_date,
+                )
                 .where(SnapshotDaily.family_id == family.id)
                 .order_by(SnapshotDaily.snapshot_date.desc())
                 .limit(max(1, min(limit, 1000)))
@@ -119,10 +132,32 @@ class SnapshotService:
                 "id": row.id,
                 "family_id": row.family_id,
                 "snapshot_date": row.snapshot_date.isoformat(),
-                "payload": parse_snapshot_payload(row.payload_json),
             }
             for row in rows
         ]
+
+    @staticmethod
+    def get_daily_snapshot(session: Session, snapshot_date: date) -> dict | None:
+        """按日期取单天 daily snapshot 完整 payload（显式 undefer payload_json）。"""
+        family = get_default_family(session)
+        row = session.scalar(
+            select(SnapshotDaily)
+            .options(undefer(SnapshotDaily.payload_json))
+            .where(
+                and_(
+                    SnapshotDaily.family_id == family.id,
+                    SnapshotDaily.snapshot_date == snapshot_date,
+                )
+            )
+        )
+        if row is None:
+            return None
+        return {
+            "id": row.id,
+            "family_id": row.family_id,
+            "snapshot_date": row.snapshot_date.isoformat(),
+            "payload": parse_snapshot_payload(row.payload_json),
+        }
 
     @staticmethod
     def list_event_summaries(session: Session, limit: int = 100) -> list[dict]:
@@ -220,7 +255,14 @@ class SnapshotService:
         end_date: date | None = None,
     ) -> SnapshotDaily | None:
         family = get_default_family(session)
-        stmt = select(SnapshotDaily).where(SnapshotDaily.family_id == family.id)
+        # analytics 端点（sankey / rebalance / currency-overview）拿到 row 后立刻访问
+        # payload_json，model 默认 deferred 后这里必须 undefer 一并取回，
+        # 否则每次访问会触发一次额外 SELECT。
+        stmt = (
+            select(SnapshotDaily)
+            .options(undefer(SnapshotDaily.payload_json))
+            .where(SnapshotDaily.family_id == family.id)
+        )
         if start_date is not None:
             stmt = stmt.where(SnapshotDaily.snapshot_date >= start_date)
         if end_date is not None:
@@ -241,6 +283,7 @@ class SnapshotService:
         daily_rows = list(
             session.scalars(
                 select(SnapshotDaily)
+                .options(undefer(SnapshotDaily.payload_json))
                 .where(SnapshotDaily.family_id == family.id)
                 .order_by(SnapshotDaily.snapshot_date.asc())
             )

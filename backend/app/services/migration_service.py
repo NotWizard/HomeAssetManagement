@@ -13,6 +13,7 @@ from typing import Any, BinaryIO
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import undefer
 
 from app.core.clock import format_utc_iso_z
 from app.core.clock import normalize_utc_naive
@@ -56,13 +57,16 @@ class MigrationService:
                 .order_by(Member.id.asc())
             )
         )
-        holdings_rows = session.scalars(
-            select(HoldingItem)
-            .where(HoldingItem.family_id == family.id, HoldingItem.is_deleted.is_(False))
-            .order_by(HoldingItem.id.asc())
+        holdings_rows = list(
+            session.scalars(
+                select(HoldingItem)
+                .where(HoldingItem.family_id == family.id, HoldingItem.is_deleted.is_(False))
+                .order_by(HoldingItem.id.asc())
+            )
         )
         snapshot_rows = session.scalars(
             select(SnapshotDaily)
+            .options(undefer(SnapshotDaily.payload_json))
             .where(SnapshotDaily.family_id == family.id)
             .order_by(SnapshotDaily.snapshot_date.asc())
         )
@@ -70,15 +74,26 @@ class MigrationService:
         export_dir = Path(tempfile.mkdtemp(prefix="ham-migration-export-"))
 
         try:
-            category_cache: dict[int, Category | None] = {}
+            # 一次 IN(...) 预取 holdings 用到的所有 category，替代原 lazy
+            # session.get(Category, id) per holding 的 N+1 三连查（每条 holding
+            # 三段分类 = 3 次单查）。300 条 holding = 900 次单查压成 1 次 IN。
+            needed_cids: set[int] = set()
+            for row in holdings_rows:
+                needed_cids.add(row.category_l1_id)
+                needed_cids.add(row.category_l2_id)
+                needed_cids.add(row.category_l3_id)
+            category_name_by_id: dict[int, str] = {}
+            if needed_cids:
+                for cat in session.scalars(
+                    select(Category).where(Category.id.in_(needed_cids))
+                ):
+                    category_name_by_id[cat.id] = cat.name
 
             def category_name(category_id: int) -> str:
-                if category_id not in category_cache:
-                    category_cache[category_id] = session.get(Category, category_id)
-                category = category_cache[category_id]
-                if category is None:
+                name = category_name_by_id.get(category_id)
+                if name is None:
                     raise AppError(4002, f"分类不存在: {category_id}")
-                return category.name
+                return name
 
             file_paths: dict[str, Path] = {
                 "family.json": export_dir / "family.json",

@@ -3,36 +3,39 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import undefer
 
 from app.core.clock import format_utc_iso_z
-from app.models.holding_item import HoldingItem
+from app.models.daily_total import DailyTotal
 from app.models.snapshot_daily import SnapshotDaily
 from app.services.common import get_default_family
 from app.services.snapshot_service import parse_snapshot_payload
 
 
 # Process-level 结果缓存。键：(family_id, window, start_date_iso, end_date_iso)；
-# 值：(version, result)。version 由 (MAX(snapshot_date), COUNT, MAX(holdings.updated_at))
-# 三元组组成，任一变化即失效——既覆盖"写入新一天 snapshot"也覆盖"holdings 编辑触发
-# 当天 payload upsert"两种场景。
+# 值：(version, result)。版本指纹直接绑 daily_totals 表（snapshot_service 写
+# snapshot_daily 时双写 daily_totals）：任一新 snapshot 写入或 totals 重算都
+# 体现在 (MAX(snapshot_date), COUNT, MAX(generated_at)) 三元组中。
+# 原指纹绑 holdings.updated_at 实际是"间接信号"——还要额外 SELECT holdings 表，
+# 现在 fingerprint 与读取的真实源 (snapshot_daily) 站在同一张派生表上，
+# 省去 holdings SELECT 且语义更精准。
 # trend / volatility / correlation 同一会话内重复打开分析页几乎 100% 命中。
 _cache: dict[tuple, tuple[tuple, dict]] = {}
 _CACHE_MAX_ENTRIES = 32
 
 
 def _compute_series_version(session: Session, family_id: int) -> tuple:
-    snap_row = session.execute(
-        select(func.max(SnapshotDaily.snapshot_date), func.count(SnapshotDaily.id)).where(
-            SnapshotDaily.family_id == family_id
-        )
+    row = session.execute(
+        select(
+            func.max(DailyTotal.snapshot_date),
+            func.count(DailyTotal.id),
+            func.max(DailyTotal.generated_at),
+        ).where(DailyTotal.family_id == family_id)
     ).one()
-    holdings_updated = session.execute(
-        select(func.max(HoldingItem.updated_at)).where(HoldingItem.family_id == family_id)
-    ).scalar()
     return (
-        str(snap_row[0]) if snap_row[0] is not None else "",
-        int(snap_row[1] or 0),
-        str(holdings_updated) if holdings_updated is not None else "",
+        str(row[0]) if row[0] is not None else "",
+        int(row[1] or 0),
+        str(row[2]) if row[2] is not None else "",
     )
 
 
@@ -75,7 +78,11 @@ def _build_daily_series_uncached(
     start_date: date | None,
     end_date: date | None,
 ) -> dict:
-    stmt = select(SnapshotDaily).where(SnapshotDaily.family_id == family_id)
+    stmt = (
+        select(SnapshotDaily)
+        .options(undefer(SnapshotDaily.payload_json))
+        .where(SnapshotDaily.family_id == family_id)
+    )
     if start_date is not None:
         stmt = stmt.where(SnapshotDaily.snapshot_date >= start_date)
     if end_date is not None:

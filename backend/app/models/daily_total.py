@@ -37,4 +37,9 @@ class DailyTotal(Base):
     total_asset: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=Decimal("0"))
     total_liability: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=Decimal("0"))
     net_asset: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False, default=Decimal("0"))
-    generated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
+    # generated_at 同时在 insert + update 时刷新：series_builder cache fingerprint
+    # 直接读这个字段判断当天 totals 是否被重算，没有 onupdate 的话同一天 holding
+    # 多次编辑只 mutate totals 数值、cache 永远命中老 totals。
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utc_now_naive, onupdate=utc_now_naive
+    )

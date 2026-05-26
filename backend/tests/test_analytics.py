@@ -11,9 +11,11 @@ from app.analytics.currency_overview import build_currency_overview
 from app.analytics.correlation import compute_correlation
 from app.analytics.sankey_builder import build_sankey
 from app.analytics.series_builder import build_daily_series
+from app.analytics.series_builder import clear_daily_series_cache
 from app.analytics.volatility import compute_volatility
 from app.core.database import SessionLocal
 from app.models.category import Category
+from app.models.daily_total import DailyTotal
 from app.models.holding_item import HoldingItem
 from app.main import app
 from app.models.family import Family
@@ -29,9 +31,14 @@ def _reset_daily_snapshots() -> None:
     init_database()
     with SessionLocal() as session:
         session.query(SnapshotDaily).delete()
+        # build_daily_series 的 cache fingerprint 绑 daily_totals，测试直接插
+        # SnapshotDaily 时也得同步清这张表，否则上一用例残留的 fingerprint
+        # 会让本用例 cache 命中拿到旧数据。
+        session.query(DailyTotal).delete()
         session.query(HoldingItem).delete()
         session.query(Member).delete()
         session.commit()
+    clear_daily_series_cache()
 
 
 def _snapshot_payload(total_asset: float, total_liability: float, holding_name: str = '现金') -> dict:

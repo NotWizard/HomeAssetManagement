@@ -7,6 +7,7 @@ import httpx
 from sqlalchemy import and_
 from sqlalchemy import desc
 from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -219,60 +220,54 @@ def _upsert_daily_rates(
     provider_name: str,
     latest_rates: dict[str, Decimal],
 ) -> int:
-    upserts = 0
+    """一次 batch INSERT ... ON CONFLICT DO UPDATE 写所有币种。
+
+    原实现每币种先 SELECT existing 再决定 add / update，N 个币种 = 2N 次 SQL。
+    SQLite 方言 `INSERT ... ON CONFLICT (...) DO UPDATE SET ...` 用唯一约束
+    `uq_fx_rate_daily(rate_date, base, quote)` 做 upsert，一次往返写完所有。
+    base == base 自指鉴 rate=1 行也并入同一 batch。
+    """
+    fetched_at = utc_now_naive()
+    rows: list[dict[str, Any]] = []
     for quote, rate in latest_rates.items():
-        existing = session.scalar(
-            select(FxRateDaily).where(
-                and_(
-                    FxRateDaily.rate_date == rate_date,
-                    FxRateDaily.base_currency == base_currency,
-                    FxRateDaily.quote_currency == quote,
-                )
-            )
+        rows.append(
+            {
+                "rate_date": rate_date,
+                "base_currency": base_currency,
+                "quote_currency": quote,
+                "rate": rate,
+                "provider": provider_name,
+                "is_estimated": False,
+                "fetched_at": fetched_at,
+            }
         )
-        if existing is None:
-            existing = FxRateDaily(
-                rate_date=rate_date,
-                base_currency=base_currency,
-                quote_currency=quote,
-                rate=rate,
-                provider=provider_name,
-                is_estimated=False,
-                fetched_at=utc_now_naive(),
-            )
-            session.add(existing)
-        else:
-            existing.rate = rate
-            existing.provider = provider_name
-            existing.is_estimated = False
-            existing.fetched_at = utc_now_naive()
-        upserts += 1
-
-    base_row = session.scalar(
-        select(FxRateDaily).where(
-            and_(
-                FxRateDaily.rate_date == rate_date,
-                FxRateDaily.base_currency == base_currency,
-                FxRateDaily.quote_currency == base_currency,
-            )
-        )
+    rows.append(
+        {
+            "rate_date": rate_date,
+            "base_currency": base_currency,
+            "quote_currency": base_currency,
+            "rate": Decimal("1"),
+            "provider": provider_name,
+            "is_estimated": False,
+            "fetched_at": fetched_at,
+        }
     )
-    if base_row is None:
-        session.add(
-            FxRateDaily(
-                rate_date=rate_date,
-                base_currency=base_currency,
-                quote_currency=base_currency,
-                rate=Decimal("1"),
-                provider=provider_name,
-                is_estimated=False,
-                fetched_at=utc_now_naive(),
-            )
-        )
-        upserts += 1
+    if not rows:
+        return 0
 
+    stmt = sqlite_insert(FxRateDaily).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["rate_date", "base_currency", "quote_currency"],
+        set_={
+            "rate": stmt.excluded.rate,
+            "provider": stmt.excluded.provider,
+            "is_estimated": stmt.excluded.is_estimated,
+            "fetched_at": stmt.excluded.fetched_at,
+        },
+    )
+    session.execute(stmt)
     session.flush()
-    return upserts
+    return len(rows)
 
 
 # FX provider 网络容错策略

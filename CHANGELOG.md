@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- EntryPage 修复 `memberDeleteOptions` useMemo 依赖数组语义不一致：`members` 之前是 `membersQuery.data ?? EMPTY_MEMBERS` 不带 useMemo，但下游 `memberDeleteOptions` 依赖数组用的是 `membersQuery.data`（而不是 `members`）。本次把 `members` 用 useMemo 兜底，下游统一改依赖 `members`，避免数据从 undefined → [] 切换时下游漏掉重算 / 重复 invalidate 的潜伏 bug。
+- Fix the latent dependency-array inconsistency around `memberDeleteOptions` in EntryPage. `members` was previously the bare expression `membersQuery.data ?? EMPTY_MEMBERS` (not memoized), while a downstream `useMemo` listed `membersQuery.data` (not `members`) in its dependency array. The mix meant the downstream calculation could miss recomputes around the `undefined → []` transition. Wrap `members` in `useMemo` and point the downstream `useMemo` at `members` so the dependency is semantically explicit and consistent.
+
 ### Performance
 
 - 三个 entry 组件 React.memo 包装并稳定父端 handler：CategoryTreePicker / EntryHoldingFormDialog / EntryTargetRatioSummary（含内部 MemberAllocationCard）均改为 `export const X = memo(XBase)`；EntryPage 端将原 inline arrow `onClose={()=>setOpen(false)}` / `onFocusMember={(id)=>{...}}` 替换为 useCallback 稳定 handler，并把 `submitForm` 也改 useCallback。父 EntryPage 因表单输入 / 筛选 / 选择频繁重渲染时，三块大组件依靠 memo 浅比较短路。

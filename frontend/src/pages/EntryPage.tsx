@@ -188,7 +188,13 @@ export function EntryPage() {
   // 用模块级 EMPTY 常量替代 `?? []`，保证 query 数据未加载时下游 useMemo 依赖引用稳定，
   // 不会因为每次 render 新建空数组而被击穿。
   const allHoldings = holdingsQuery.data ?? EMPTY_HOLDINGS;
-  const members = membersQuery.data ?? EMPTY_MEMBERS;
+  // useMemo 兜底：在 query 数据未加载时返回模块级 EMPTY_MEMBERS，让下游 useMemo 依赖
+  // 直接用 `members` 而不是 `membersQuery.data`，避免数据从 undefined → [] 切换时
+  // 下游漏掉重算或重复 invalidate 的潜伏 bug。
+  const members = useMemo(
+    () => membersQuery.data ?? EMPTY_MEMBERS,
+    [membersQuery.data]
+  );
   const hasMembers = members.length > 0;
   const hasLoadedHoldings = holdingsQuery.data != null;
 
@@ -288,7 +294,7 @@ export function EntryPage() {
           value: member.id,
         };
       }),
-    [allHoldings, membersQuery.data]
+    [allHoldings, members]
   );
 
   const allVisibleSelected = filteredHoldings.length > 0 && filteredHoldings.every((row) => selectedIdSet.has(row.id));

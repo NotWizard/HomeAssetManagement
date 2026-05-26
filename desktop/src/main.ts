@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, session, shell } from 'electron';
 import {
   spawn,
   spawnSync,
@@ -21,6 +21,12 @@ import { createBootstrapController } from './bootstrap-controller.js';
 import { resolvePythonExecutable } from './python-executable.js';
 import { createErrorPage, createLoadingPage } from './startup-page.js';
 import { buildMainWindowWebPreferences } from './window-options.js';
+import {
+  getWindowStatePath,
+  isBoundsVisibleOnDisplays,
+  loadWindowBounds,
+  saveWindowBounds,
+} from './window-state.js';
 import {
   probeBackendHealth,
   waitForBackendReadyWithHealthCheck,
@@ -337,9 +343,27 @@ function ensureMainWindow(): BrowserWindow {
     windowPort = null;
   }
 
+  // 还原上次关闭时的窗口位置/大小；外接屏拔掉、分辨率变化等情况下若 bounds
+  // 落到所有 display 之外，回退到默认 1440x960 居中。
+  const windowStatePath = getWindowStatePath(app.getPath('userData'));
+  const savedBounds = loadWindowBounds(windowStatePath);
+  const displays = screen
+    .getAllDisplays()
+    .map((display) => display.workArea);
+  const restoredBounds =
+    savedBounds && isBoundsVisibleOnDisplays(savedBounds, displays)
+      ? savedBounds
+      : null;
+
   const window = new BrowserWindow({
-    width: 1440,
-    height: 960,
+    ...(restoredBounds
+      ? {
+          x: restoredBounds.x,
+          y: restoredBounds.y,
+          width: restoredBounds.width,
+          height: restoredBounds.height,
+        }
+      : { width: 1440, height: 960 }),
     minWidth: 1200,
     minHeight: 760,
     autoHideMenuBar: true,
@@ -360,6 +384,13 @@ function ensureMainWindow(): BrowserWindow {
 
   window.once('ready-to-show', () => {
     window.show();
+  });
+  // 窗口关闭前把当前 bounds 持久化，下次启动还原；最小化 / 全屏状态下 getBounds
+  // 仍能返回普通窗体的最近一次位置，符合用户期望。
+  window.on('close', () => {
+    if (!window.isDestroyed()) {
+      saveWindowBounds(windowStatePath, window.getBounds());
+    }
   });
   window.on('closed', () => {
     if (mainWindow === window) {

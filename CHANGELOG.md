@@ -6,6 +6,7 @@
 
 ## [Unreleased]
 
+- 新增：桌面端记住主窗口上次关闭时的位置与尺寸，启动时还原；外接屏拔掉或落到屏幕外时回退为默认 1440x960 居中 / Remember the main window's last position and size across desktop launches, falling back to the default 1440x960 centred when the saved bounds no longer overlap any current display.
 - 优化：bootstrap 阶段 prepare 与 ensureWindow 改并行，loading 页提前 20-100ms 出现 / Run prepare and ensureWindow in parallel during bootstrap so the loading page appears 20-100ms earlier.
 - 优化：electron-packager 限定 electronLanguages 为 zh_CN + en，DMG 体积减少 8-12 MB / Restrict electronLanguages to zh_CN + en to shrink the DMG by 8-12 MB.
 - 优化：BrowserWindow 改 show:false + ready-to-show，消除桌面端首启白闪 / Hide BrowserWindow until ready-to-show to remove desktop launch white flash.

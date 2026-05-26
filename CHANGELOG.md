@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### Performance
+
+#### Backend hot path
+
+- `backend/tests/conftest.py` 改 in-memory SQLite + per-test SAVEPOINT 隔离：原 conftest 跑 file-based `backend/data/test.db`，所有 79+ tests 共享同一份磁盘 db，跨 test state 污染（family.id 漂移、import 残留 holdings、settings.fx_provider 不复位等）。新 conftest 直接覆写 `app.core.database.engine` 为 `sqlite:///:memory:` + StaticPool（所有 `SessionLocal()` 看到同一份 in-memory db），跨过 alembic 用 `Base.metadata.create_all` + `ensure_seed_data` 建一次 schema（session-scoped autouse fixture），并把测试里显式调用的 `init_database` 同样替换为 `Base.metadata.create_all` + seed（alembic 在 in-memory + 独立 engine 下拿不到我们的 connection，所以测试环境绕开 alembic 等价建表）。function-scoped autouse fixture 在每个 test 包一层 outer transaction + nested SAVEPOINT、在 `SessionLocal` 上挂 `after_transaction_end` listener 自动重启 SAVEPOINT 让 service 内部的 `session.commit()` 不破坏外层事务，test 结束 rollback 把当次所有 mutate 全部抹掉。套件总时长从 16.74s 缩到 13.42s（-20%），同时 baseline 中因 settings 污染失败的 `test_update_settings_without_fx_provider_succeeds_and_keeps_default_provider` 自然修复（剩余 2 个 import-service FX 失败是 pre-existing 网络/缺 rate 数据问题，与本次隔离改造无关）。
+- Move the backend test suite to in-memory SQLite with per-test SAVEPOINT isolation. The previous `backend/tests/conftest.py` ran a file-based `backend/data/test.db` shared across all 79+ tests; state from one test leaked into the next (family-id drift, residual holdings from import tests, `settings.fx_provider` not reset, etc.). The new conftest overrides `app.core.database.engine` to `sqlite:///:memory:` with `StaticPool` (so every `SessionLocal()` sees the same in-memory database), bootstraps the schema once via `Base.metadata.create_all` + `ensure_seed_data` in a session-scoped autouse fixture (Alembic creates its own engine, which on `:memory:` reaches a different connection and can't see our pool — the test path therefore equivalently bypasses Alembic), and stubs out the `init_database` calls scattered through tests with the same `create_all` + seed shape. A function-scoped autouse fixture wraps each test in an outer transaction + nested SAVEPOINT and listens on `SessionLocal` for `after_transaction_end` to restart the SAVEPOINT whenever a service's `session.commit()` releases it, so the outer transaction survives until rollback at test exit, which discards every per-test mutation while preserving the bootstrap seed. Total suite time drops from 16.74s to 13.42s (-20%), and the previously-failing `test_update_settings_without_fx_provider_succeeds_and_keeps_default_provider` (caused by `fx_provider` pollution between tests) is now green. The two remaining `test_import_service` failures are a pre-existing FX-network / missing-rate issue unrelated to this isolation change.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

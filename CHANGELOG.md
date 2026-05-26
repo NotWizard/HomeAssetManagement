@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `desktop/src/update-controller.ts` state.json 持久化改 `fs/promises.writeFile`，`persist` 不再每次 `mkdirSync`；目录在 `controller.start()` 一次性建好。`emitState` 同步用 try/catch 包裹每个 listener，单个 listener（如已销毁的 webContents.send）抛错不再阻塞其他 listener 与状态广播。持久化失败也只打 stderr 不向上抛。
+- `desktop/src/update-controller.ts` persists the update state via `fs/promises.writeFile` instead of `writeFileSync`, and `persist` no longer `mkdirSync`s on every call — the directory is created once in `controller.start()`. `emitState` now wraps each listener invocation in try/catch, so a single broken listener (for example a destroyed `webContents.send`) no longer breaks the rest of the broadcast, and persistence failures are reported to stderr instead of propagating.
+
 ### Fixed
 
 - `desktop/src/update-controller.ts` 自动更新下载改写 `.partial` 临时文件，SHA-256 校验通过后 atomic `rename` 到最终 `archivePath`。原实现 `createWriteStream(archivePath)` 直写最终路径，下载中崩溃 / 断电留下半截 zip + SHA-256 必失败，下次启动 sanitize 还要重下整包；改造后失败 cleanup 只删 `.partial`，启动期清理逻辑也会扫掉历史遗留 `.partial`。

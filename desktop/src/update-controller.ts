@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { chmod, mkdir, readdir, rename, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -48,7 +48,7 @@ export type UpdateControllerOptions = {
     intervalMs: number
   ) => { dispose: () => void };
   loadPersistedState?: () => UpdateState | null;
-  persistState?: (state: UpdateState) => void;
+  persistState?: (state: UpdateState) => Promise<void> | void;
   platform?: NodeJS.Platform;
   processExecPath?: string;
   processPid?: number;
@@ -271,9 +271,11 @@ function createStatePersistence(userDataDir: string) {
         return null;
       }
     },
-    persist(state: UpdateState): void {
-      mkdirSync(updatesDir, { recursive: true });
-      writeFileSync(statePath, JSON.stringify(state, null, 2), 'utf8');
+    // 改 async：原 writeFileSync 在每次 emitState 都同步阻塞主线程做一次 fsync
+    // （download 节流后仍每秒 ~4 次），改 fs/promises.writeFile 后只在事件循环
+    // 上排一次微任务；updates dir 在 controller.start() 一次性建好，不再每次 persist mkdir。
+    async persist(state: UpdateState): Promise<void> {
+      await writeFile(statePath, JSON.stringify(state, null, 2), 'utf8');
     },
   };
 }
@@ -326,9 +328,23 @@ export function createUpdateController(options: UpdateControllerOptions) {
   const listeners = new Set<UpdateListener>();
 
   function emitState(): void {
-    persistState(state);
+    // persistState 现在可能返回 Promise（默认 fs/promises.writeFile）；fire-and-forget
+    // 并捕获异常打到 stderr，避免一次磁盘错误把整个 emit 链炸断。
+    void Promise.resolve(persistState(state)).catch((error) => {
+      process.stderr.write(
+        `[hbs-update] 持久化更新状态失败: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    });
     for (const listener of listeners) {
-      listener(state);
+      // 用 try/catch 包裹每个 listener，避免一个 listener 抛错影响其他 listener
+      // 与状态广播（典型场景：窗口已销毁 webContents.send 抛 'Object has been destroyed'）。
+      try {
+        listener(state);
+      } catch (error) {
+        process.stderr.write(
+          `[hbs-update] update listener 抛出异常: ${error instanceof Error ? error.message : String(error)}\n`
+        );
+      }
     }
   }
 
@@ -650,6 +666,14 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
   return {
     async start(): Promise<void> {
+      // 一次性把 updates dir 建好，后续 persistState 走 async writeFile 无需每次 mkdir。
+      // 失败安静吞掉：emitState 内部已经把 persistState 错误打到 stderr，不阻塞主流程。
+      try {
+        await mkdir(persistence.updatesDir, { recursive: true });
+      } catch {
+        // ignore；async writeFile 失败会被 emitState 的 catch 报告
+      }
+
       const persisted = loadPersistedState();
       state = sanitizePersistedState(options.appVersion, persisted);
       emitState();

@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, rename, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -464,6 +464,9 @@ export function createUpdateController(options: UpdateControllerOptions) {
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
     await mkdir(updatesDir, { recursive: true });
     const archivePath = join(updatesDir, state.assetName);
+    // 下载先落到 .partial，校验通过后 atomic rename 到最终路径；
+    // 中途崩溃 / 断电只会留下 .partial（启动时清理），不会污染最终 archivePath。
+    const partialPath = `${archivePath}.partial`;
 
     updateState({
       status: 'downloading',
@@ -497,7 +500,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
       const totalBytesHeader = response.headers.get('content-length');
       const totalBytes = totalBytesHeader ? Number(totalBytesHeader) : undefined;
-      const fileStream = createWriteStream(archivePath);
+      const fileStream = createWriteStream(partialPath);
       const reader = response.body.getReader();
       const hasher = createHash('sha256');
       let downloadedBytes = 0;
@@ -549,11 +552,14 @@ export function createUpdateController(options: UpdateControllerOptions) {
       // 3) 校验：实际 vs 期望，不一致立刻丢弃下载
       const actualSha256 = hasher.digest('hex');
       if (!verifySha256(actualSha256, expectedSha256)) {
-        rmSync(archivePath, { force: true });
+        rmSync(partialPath, { force: true });
         throw new Error(
           `更新包 SHA-256 校验失败（expected=${expectedSha256.slice(0, 12)}…，actual=${actualSha256.slice(0, 12)}…），已丢弃下载`
         );
       }
+
+      // 4) 校验通过，atomic rename partial → 最终 archivePath
+      await rename(partialPath, archivePath);
 
       return updateState(
         toDownloadedState({
@@ -565,7 +571,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
         })
       );
     } catch (error) {
-      rmSync(archivePath, { force: true });
+      rmSync(partialPath, { force: true });
       return updateState(
         toErrorState(error instanceof Error ? error.message : String(error))
       );
@@ -654,6 +660,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
       // 启动期清理：删除超过 7 天的 install-update-*.sh 与孤儿 backup app；
       // 这些是上一次安装阶段产生的临时文件，留着会污染 userData/updates/。
+      // 同时清理任何遗留的 .partial 文件（上一次下载中断 / 崩溃留下的半截 zip）。
       try {
         const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
         if (existsSync(updatesDir)) {
@@ -671,6 +678,13 @@ export function createUpdateController(options: UpdateControllerOptions) {
                 }
               } catch {
                 // 忽略单个文件清理失败，不影响 update 主流程
+              }
+            }
+            if (entry.isFile() && entry.name.endsWith('.partial')) {
+              try {
+                rmSync(fullPath, { force: true });
+              } catch {
+                // 忽略单个 .partial 清理失败，不影响 update 主流程
               }
             }
           }

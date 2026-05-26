@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `desktop/src/update-controller.ts` 自动更新下载改写 `.partial` 临时文件，SHA-256 校验通过后 atomic `rename` 到最终 `archivePath`。原实现 `createWriteStream(archivePath)` 直写最终路径，下载中崩溃 / 断电留下半截 zip + SHA-256 必失败，下次启动 sanitize 还要重下整包；改造后失败 cleanup 只删 `.partial`，启动期清理逻辑也会扫掉历史遗留 `.partial`。
+- `desktop/src/update-controller.ts` writes the update download to a `<asset>.zip.partial` file and atomically `rename`s it to the final `archivePath` only after the SHA-256 verification passes. Previously `createWriteStream(archivePath)` wrote directly to the final path, so a mid-download crash / power loss left a half-zip with a guaranteed SHA mismatch and forced a full re-download on the next start. Failure cleanup now only removes the `.partial`, and the startup sweep prunes any leftover `.partial` files from prior aborted runs.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

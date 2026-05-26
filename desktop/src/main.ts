@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, powerMonitor, session, shell } from 'electron';
 import {
   spawn,
   spawnSync,
@@ -39,6 +39,9 @@ const BACKEND_READY_POLL_INTERVAL_MS = 150;
 const BACKEND_HEALTH_REQUEST_TIMEOUT_MS = 1_500;
 // before-quit 阶段 SIGTERM 后再等的宽限期，超过则强制 SIGKILL 兜底，防止 PyInstaller 二进制忽略信号变僵尸。
 const BACKEND_KILL_GRACE_MS = 4_000;
+// macOS sleep/wake 后调健康检查，失败则重启 sidecar；30s 节流避免一次唤醒触发多次重启。
+const SLEEP_WAKE_RESTART_THROTTLE_MS = 30_000;
+let lastSleepWakeRestartAt = 0;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
@@ -441,6 +444,54 @@ function bootstrap(): Promise<void> {
   return bootstrapController.bootstrap();
 }
 
+/**
+ * macOS 休眠唤醒后探一次 backend /health；不 ready 才走 stopAndResetPort + bootstrap。
+ * 30s 内重复 resume 事件只重启一次，避免合上盖子开几秒又合上反复触发。
+ * 仅 darwin 启用：Windows / Linux 的 sleep/resume 语义差异较大，本任务范围只覆盖 macOS。
+ */
+async function probeAndRestartBackendOnResume(): Promise<void> {
+  const currentPort = backendController.getPort();
+  if (currentPort === null) {
+    return;
+  }
+
+  const result = await probeBackendHealth({
+    healthUrl: `${buildAppUrl(currentPort)}/health`,
+    requestTimeoutMs: BACKEND_HEALTH_REQUEST_TIMEOUT_MS,
+  });
+
+  if (result.kind === 'ready') {
+    return;
+  }
+
+  const now = Date.now();
+  if (now - lastSleepWakeRestartAt < SLEEP_WAKE_RESTART_THROTTLE_MS) {
+    return;
+  }
+  lastSleepWakeRestartAt = now;
+
+  process.stderr.write(
+    `[hbs-power-monitor] backend probe after resume failed (${result.kind})，restarting sidecar\n`
+  );
+  backendController.stopAndResetPort();
+  try {
+    await bootstrap();
+  } catch (error) {
+    process.stderr.write(
+      `[hbs-power-monitor] restart failed: ${error instanceof Error ? error.message : String(error)}\n`
+    );
+  }
+}
+
+function wirePowerMonitor(): void {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+  powerMonitor.on('resume', () => {
+    void probeAndRestartBackendOnResume();
+  });
+}
+
 ipcMain.handle('hbs:retry-bootstrap', async () => {
   backendController.stopAndResetPort();
   await bootstrap();
@@ -474,6 +525,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     wireNavigationGuards();
     wireContentSecurityPolicy();
+    wirePowerMonitor();
     const updateStartup = updateController.start().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(`[hbs-update] ${message}\n`);

@@ -8,6 +8,11 @@
 
 ### Added
 
+- `desktop/src/main.ts` 在 macOS 上新增 `powerMonitor.on('resume')` 监听：系统休眠唤醒后调一次 `probeBackendHealth`，若 backend 不再 ready，则触发 `backendController.stopAndResetPort()` + `bootstrap()` 重启 sidecar；30 秒节流避免一次唤醒被重复触发。Windows/Linux 上 sleep/resume 语义差异较大，本任务范围只覆盖 macOS。
+- `desktop/src/main.ts` now registers a `powerMonitor.on('resume')` listener on macOS: on system wake, it runs one `probeBackendHealth` against the sidecar, and if the backend no longer reports ready it stops the sidecar (`backendController.stopAndResetPort()`) and re-runs `bootstrap()`. A 30 s throttle prevents a single wake from cascading into multiple restarts. The feature is macOS-only because Windows/Linux sleep/resume semantics differ enough to be out of scope here.
+
+### Added
+
 - 新增 `desktop/src/file-logger.ts` 提供 append 模式的 main.log 行缓冲 logger（默认 1s flush 或满 200 行），由 `desktop/src/main.ts` 在 `app.whenReady` 后用 `app.getPath('logs')` 初始化、`before-quit` flush + close。renderer console-message 现在同时落盘到 `logs/main.log`，方便用户出问题时把日志连同 backend 一并提供。错误页新增「打开日志目录」按钮（preload bridge 暴露 `bootstrap.openLogsDir()` → IPC `hbs:open-logs-dir` → `shell.openPath(app.getPath('logs'))`）。
 - Add `desktop/src/file-logger.ts`, an append-mode line-buffered logger for `main.log` (1 s flush or 200-line flush by default). `desktop/src/main.ts` initialises it once `app.whenReady` resolves (so `app.getPath('logs')` is valid) and flushes/closes it on `before-quit`. Renderer `console-message` lines now mirror to `logs/main.log` in addition to stdout/stderr, giving users an artefact they can attach when reporting issues. The startup error page gains an "Open logs directory" action that hits a new `bootstrap.openLogsDir()` preload bridge method, routed through the `hbs:open-logs-dir` IPC channel to `shell.openPath(app.getPath('logs'))`.
 

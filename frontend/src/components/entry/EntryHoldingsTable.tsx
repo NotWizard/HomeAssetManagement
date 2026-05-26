@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Pencil, Sparkles, Trash2, UserRound } from 'lucide-react';
 
 import { Badge } from '../ui/badge';
@@ -276,60 +276,126 @@ function GroupBlockBase({
               memberAssetTotal: visibleAssetTotal,
             });
             return (
-              <TableRow
+              <EntryHoldingRow
                 key={row.id}
-                className={cn(focused && 'bg-primary/5/40')}
-              >
-                <TableCell className="w-12 px-3">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border"
-                    checked={selectedIdSet.has(row.id)}
-                    onChange={(event) => onToggleHoldingSelection(row.id, event.target.checked)}
-                    aria-label={`选择 ${row.name}`}
-                  />
-                </TableCell>
-                <TableCell className="font-medium">{row.name}</TableCell>
-                <TableCell>
-                  <Badge variant={isAsset ? 'default' : 'secondary'}>{isAsset ? '资产' : '负债'}</Badge>
-                </TableCell>
-                <TableCell>{summary.memberName}</TableCell>
-                <TableCell>{row.currency}</TableCell>
-                <TableCell className="text-right">
-                  {formatCurrency(row.amount_original, row.currency)}
-                </TableCell>
-                <TableCell className="text-right">
-                  {formatCurrency(row.amount_base, baseCurrency)}
-                </TableCell>
-                <TableCell className={cn('text-right tabular-nums', ratioCellClass)}>
-                  {ratioValue == null
-                    ? '-'
-                    : overflowDanger && isAsset
-                      ? `${ratioValue}%`
-                      : `${ratioValue}%`}
-                </TableCell>
-                <TableCell>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="icon" onClick={() => onOpenEditDialog(row)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onDeleteHolding(row.id)}
-                      disabled={deletePending}
-                    >
-                      <Trash2 className="h-4 w-4 text-rose-500" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
+                row={row}
+                isAsset={isAsset}
+                ratioValue={ratioValue}
+                ratioCellClass={ratioCellClass}
+                overflowDanger={overflowDanger}
+                focused={focused}
+                selected={selectedIdSet.has(row.id)}
+                memberName={summary.memberName}
+                baseCurrency={baseCurrency}
+                deletePending={deletePending}
+                onToggleHoldingSelection={onToggleHoldingSelection}
+                onOpenEditDialog={onOpenEditDialog}
+                onDeleteHolding={onDeleteHolding}
+              />
             );
           })
         : null}
     </>
   );
 }
+
+type EntryHoldingRowProps = {
+  row: Holding;
+  isAsset: boolean;
+  ratioValue: number | null;
+  ratioCellClass: string;
+  overflowDanger: boolean;
+  focused: boolean;
+  selected: boolean;
+  memberName: string;
+  baseCurrency: string;
+  deletePending: boolean;
+  onToggleHoldingSelection: (id: number, checked: boolean) => void;
+  onOpenEditDialog: (row: Holding) => void;
+  onDeleteHolding: (id: number) => void;
+};
+
+function EntryHoldingRowBase({
+  row,
+  isAsset,
+  ratioValue,
+  ratioCellClass,
+  overflowDanger,
+  focused,
+  selected,
+  memberName,
+  baseCurrency,
+  deletePending,
+  onToggleHoldingSelection,
+  onOpenEditDialog,
+  onDeleteHolding,
+}: EntryHoldingRowProps) {
+  // 抽出为独立 memo 组件后，父 GroupBlock 重渲染时只有 props 变化的 row 重渲染；
+  // 三个 inline handler 用 useCallback 锁定，依赖只指向 row.id / row 引用与父稳定 handler，
+  // 避免再次击穿 memo。
+  const handleSelectionChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      onToggleHoldingSelection(row.id, event.target.checked);
+    },
+    [row.id, onToggleHoldingSelection]
+  );
+  const handleEditClick = useCallback(() => {
+    onOpenEditDialog(row);
+  }, [row, onOpenEditDialog]);
+  const handleDeleteClick = useCallback(() => {
+    onDeleteHolding(row.id);
+  }, [row.id, onDeleteHolding]);
+
+  return (
+    <TableRow className={cn(focused && 'bg-primary/5/40')}>
+      <TableCell className="w-12 px-3">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border"
+          checked={selected}
+          onChange={handleSelectionChange}
+          aria-label={`选择 ${row.name}`}
+        />
+      </TableCell>
+      <TableCell className="font-medium">{row.name}</TableCell>
+      <TableCell>
+        <Badge variant={isAsset ? 'default' : 'secondary'}>{isAsset ? '资产' : '负债'}</Badge>
+      </TableCell>
+      <TableCell>{memberName}</TableCell>
+      <TableCell>{row.currency}</TableCell>
+      <TableCell className="text-right">
+        {formatCurrency(row.amount_original, row.currency)}
+      </TableCell>
+      <TableCell className="text-right">
+        {formatCurrency(row.amount_base, baseCurrency)}
+      </TableCell>
+      <TableCell className={cn('text-right tabular-nums', ratioCellClass)}>
+        {ratioValue == null
+          ? '-'
+          : overflowDanger && isAsset
+            ? `${ratioValue}%`
+            : `${ratioValue}%`}
+      </TableCell>
+      <TableCell>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" size="icon" onClick={handleEditClick}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleDeleteClick}
+            disabled={deletePending}
+          >
+            <Trash2 className="h-4 w-4 text-rose-500" />
+          </Button>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+const EntryHoldingRow = memo(EntryHoldingRowBase);
 
 // GroupBlock 包 React.memo：父 EntryHoldingsTable 重渲染（如勾选 / 输入）时，
 // 只有 props 真正变化的 group 才重渲染，其它组短路。

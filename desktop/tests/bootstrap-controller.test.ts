@@ -198,5 +198,13 @@ test('准备阶段失败时仍会创建窗口并展示错误页', async () => {
 
   assert.equal(ensureWindowCalls, 1);
   assert.equal(startBackendCalls, 0);
-  assert.deepEqual(events, ['prepare', 'dialog:无法分配本地端口', 'focus', 'error:无法分配本地端口']);
+  // prepare 与 ensureWindow 并行：prepare 抛错时 window 已构造，loading + focus 已经
+  // 走完，再进入 catch 弹 dialog + 渲染 error 页。
+  assert.deepEqual(events, [
+    'prepare',
+    'loading',
+    'focus',
+    'dialog:无法分配本地端口',
+    'error:无法分配本地端口',
+  ]);
 });

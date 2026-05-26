@@ -11,6 +11,11 @@
 - `uiStore` 接入 zustand `persist` middleware：localStorage key `hbs-ui-store`，持久化分析时间段 / view / 选中币种 / 初始化标志四项；setter 由 partialize 显式过滤不写入存储。跨刷新 / 重启保留用户上次选择，避免每次进入分析页都要重选时间段与币种。
 - Persist `uiStore` via the zustand `persist` middleware. The analytics date range, view, selected currency, and initialization flag are saved to localStorage under key `hbs-ui-store`; setters are explicitly excluded via `partialize`. User selections now survive refreshes and app restarts so the analytics page no longer demands re-selecting the date range and currency on every visit.
 
+### Changed
+
+- `.github/workflows/ci.yml` 的 frontend / desktop job 把 `node-version` 从 `"20"` 升到 `"22"`，与 `release.yml` 对齐——测试通过版本与发布版本不再漂移，避免 CI 绿但 release build 红的情况。同步在两个 setup-node 步骤加注释说明：release 流水线 `make-macos-release.mjs` 通过 type-stripping 加载 `forge.config.ts`，Node 22 LTS 原生支持、Node 20 会报 `Unknown file extension .ts`。
+- Bump `node-version` from `"20"` to `"22"` in both the frontend and desktop jobs of `.github/workflows/ci.yml`, aligning CI with `release.yml`. The test version must equal the publish version, eliminating the "CI green but release build red" drift. Inline comments on both setup-node steps spell out the reason: the release pipeline's `make-macos-release.mjs` loads `forge.config.ts` via Node's native type-stripping, supported by Node 22 LTS but not by Node 20 (which reports `Unknown file extension .ts`).
+
 ### Fixed
 
 - EntryPage 修复 `memberDeleteOptions` useMemo 依赖数组语义不一致：`members` 之前是 `membersQuery.data ?? EMPTY_MEMBERS` 不带 useMemo，但下游 `memberDeleteOptions` 依赖数组用的是 `membersQuery.data`（而不是 `members`）。本次把 `members` 用 useMemo 兜底，下游统一改依赖 `members`，避免数据从 undefined → [] 切换时下游漏掉重算 / 重复 invalidate 的潜伏 bug。
@@ -48,6 +53,13 @@
 - Extract per-row `EntryHoldingRow` as a standalone React.memo component with `useCallback`-stable handlers.
 - ECharts 按图表类型按需注册：原 `ECharts.tsx` 顶层一次性 `echarts.use` 全 5 类 chart + 通用组件改为各 chart 组件按需 use 自己用到的类型。各 chart 组件被 vite 自动拆成独立小 chunk，为后续按 tab 拆分 lazy load echarts 子集打基础。
 - Register echarts types per chart instead of top-level eager use; vite now splits each chart component into its own chunk.
+
+#### Build & CI
+
+- `.github/workflows/release.yml` 增加 pip download cache 与 PyInstaller bytecode cache 两层缓存。原 release 流水线每次都重新 `pip install -r backend/requirements-desktop.txt`（含 PyInstaller 等大包，60-120 s），且 PyInstaller 每次冷打包都要重做完整 import-graph 分析。本次：(1) `actions/setup-python@v5` 加 `cache: pip` + `cache-dependency-path: backend/requirements-desktop.txt`（与 ci.yml backend job 同模式，setup-python 跨平台自动处理 macOS `~/Library/Caches/pip` 与 Linux `~/.cache/pip` 路径差异）；(2) 在 "Build DMG + ZIP (arm64)" 之前加 `actions/cache@v4` 缓存 `backend/.pyinstaller/`，key 由 `requirements-desktop.txt` + `build_desktop.py` 联合 hash 组成。release 流水线预估 -1 ~ -2 min。
+- Add a pip download cache and a PyInstaller bytecode cache to `.github/workflows/release.yml`. Previously every release run re-installed `backend/requirements-desktop.txt` from scratch (includes large packages like PyInstaller, 60-120 s) and re-ran PyInstaller's full import-graph analysis on every cold build. This commit (1) adds `cache: pip` + `cache-dependency-path: backend/requirements-desktop.txt` to the `actions/setup-python@v5` step — same pattern already used in ci.yml's backend job, with setup-python handling the macOS `~/Library/Caches/pip` vs Linux `~/.cache/pip` path difference transparently; and (2) adds an `actions/cache@v4` step before "Build DMG + ZIP (arm64)" that caches `backend/.pyinstaller/` keyed on a combined hash of `requirements-desktop.txt` + `build_desktop.py`. Estimated release pipeline saving 1-2 min.
+- `backend/build_desktop.py` PyInstaller `--exclude-module` 列表追加 9 个运行期不用的模块：`numpy`、`distutils`、`lib2to3`、`pydoc_data`、`wheel`、`pip`、`PIL.ImageTk`、`multiprocessing.tests`、`xml.dom.minidom.tests`。0.3.0 已 exclude watchfiles / tkinter / pytest 等，但 onedir `_internal` 仍带这批未引用模块。估计 DMG -8 ~ -15 MB（实际收益待 CI build 验证）。未启用 UPX：UPX 压缩与 macOS Gatekeeper / Notarize 历史上有兼容性问题，标为高风险延后。
+- Append nine more runtime-unused modules to the PyInstaller `--exclude-module` list in `backend/build_desktop.py`: `numpy`, `distutils`, `lib2to3`, `pydoc_data`, `wheel`, `pip`, `PIL.ImageTk`, `multiprocessing.tests`, `xml.dom.minidom.tests`. v0.3.0 already excluded watchfiles / tkinter / pytest / setuptools, but the onedir `_internal` directory still shipped these modules that the sidecar never imports. Estimated DMG drop 8-15 MB (actual saving to be measured on the next CI build). UPX is intentionally not enabled — UPX compression has a long history of breaking macOS Gatekeeper / Notarize and is filed as a high-risk follow-up.
 
 ## [0.3.0] - 2026-05-23
 

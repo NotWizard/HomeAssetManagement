@@ -44,7 +44,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 与 release.yml 同步使用 Node 22 LTS：测试通过版本必须等于发布版本，
+          # 避免 CI 绿但 release build 红的版本漂移；22 原生支持 type-stripping，
+          # 与 desktop job 共用同一约束。
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -71,7 +74,10 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 与 release.yml 同步使用 Node 22 LTS：测试通过版本必须等于发布版本；
+          # release 流水线 make-macos-release.mjs 通过 type-stripping 加载
+          # forge.config.ts，22 原生支持，20 会报 "Unknown file extension .ts"。
+          node-version: "22"
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 

@@ -61,6 +61,13 @@
 - `backend/build_desktop.py` PyInstaller `--exclude-module` 列表追加 9 个运行期不用的模块：`numpy`、`distutils`、`lib2to3`、`pydoc_data`、`wheel`、`pip`、`PIL.ImageTk`、`multiprocessing.tests`、`xml.dom.minidom.tests`。0.3.0 已 exclude watchfiles / tkinter / pytest 等，但 onedir `_internal` 仍带这批未引用模块。估计 DMG -8 ~ -15 MB（实际收益待 CI build 验证）。未启用 UPX：UPX 压缩与 macOS Gatekeeper / Notarize 历史上有兼容性问题，标为高风险延后。
 - Append nine more runtime-unused modules to the PyInstaller `--exclude-module` list in `backend/build_desktop.py`: `numpy`, `distutils`, `lib2to3`, `pydoc_data`, `wheel`, `pip`, `PIL.ImageTk`, `multiprocessing.tests`, `xml.dom.minidom.tests`. v0.3.0 already excluded watchfiles / tkinter / pytest / setuptools, but the onedir `_internal` directory still shipped these modules that the sidecar never imports. Estimated DMG drop 8-15 MB (actual saving to be measured on the next CI build). UPX is intentionally not enabled — UPX compression has a long history of breaking macOS Gatekeeper / Notarize and is filed as a high-risk follow-up.
 
+#### Desktop startup & UX
+
+- 新增：桌面端记住主窗口上次关闭时的位置与尺寸，启动时还原；外接屏拔掉或落到屏幕外时回退为默认 1440x960 居中 / Remember the main window's last position and size across desktop launches, falling back to the default 1440x960 centred when the saved bounds no longer overlap any current display.
+- 优化：bootstrap 阶段 prepare 与 ensureWindow 改并行，loading 页提前 20-100ms 出现 / Run prepare and ensureWindow in parallel during bootstrap so the loading page appears 20-100ms earlier.
+- 优化：electron-packager 限定 electronLanguages 为 zh_CN + en，DMG 体积减少 8-12 MB / Restrict electronLanguages to zh_CN + en to shrink the DMG by 8-12 MB.
+- 优化：BrowserWindow 改 show:false + ready-to-show，消除桌面端首启白闪 / Hide BrowserWindow until ready-to-show to remove desktop launch white flash.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

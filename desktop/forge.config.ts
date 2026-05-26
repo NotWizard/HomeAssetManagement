@@ -49,6 +49,12 @@ const config: ForgeConfig = {
     extraResource,
     icon: iconPath,
     name: 'HouseholdBalanceSheet',
+    // 默认 packager 会把 Electron Framework 内全部 ~55 个 .lproj 一并带出来
+    // (fr/de/es/ru/ja/ko/…)，而 UI 只面向 zh-CN/en 用户。限定 electronLanguages
+    // 可让 packager 在 stage 阶段把多余 .lproj 删掉，DMG -8 ~ -12 MB。
+    electronLanguages: ['zh_CN', 'en'],
+    // prune 默认即 true，显式声明避免后续若被改成 false 时无声裹入 devDependencies。
+    prune: true,
   },
   makers: [
     {

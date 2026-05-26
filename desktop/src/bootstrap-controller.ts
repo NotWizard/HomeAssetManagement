@@ -35,14 +35,20 @@ export function createBootstrapController(
     let window: BootstrapWindow | null = null;
     let loadingPromise: Promise<void> | null = null;
     try {
+      // 并行启动 prepare 与 window 构造：prepare 是异步 I/O（findAvailablePort 5-15ms），
+      // ensureWindow 是同步阻塞构造 BrowserWindow（80-150ms）。先发起 prepare 让其 I/O
+      // 在后台跑，紧接着同步构造窗口；窗口阻塞 JS 期间 libuv 仍能推进 prepare 的 I/O，
+      // 之后再 await preparePromise 通常已 resolve。spawnBackend 仍在 prepare resolve
+      // 后才发起（依赖 port）。
       const preparePromise = dependencies.prepare?.();
-      if (preparePromise) {
-        await preparePromise;
-      }
 
       window = dependencies.ensureWindow();
       loadingPromise = window.showLoading();
       window.focus();
+
+      if (preparePromise) {
+        await preparePromise;
+      }
       const backendPromise = dependencies.startBackend();
 
       await loadingPromise;

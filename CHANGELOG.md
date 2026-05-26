@@ -8,6 +8,7 @@
 
 ### Performance
 
+- 优化：HoldingItem 索引重构 — 删 `ix_holding_item_is_deleted` / `ix_holding_item_type`（selectivity 太低 planner 用不上），加 `(family_id, is_deleted, updated_at)` 与 `(family_id, member_id, is_deleted)` 复合索引匹配 list_holdings / per-member 热路径 / Refactor HoldingItem indexes — drop low-selectivity `is_deleted` / `type` singletons, add `(family_id, is_deleted, updated_at)` and `(family_id, member_id, is_deleted)` composites to cover list and per-member hot paths.
 - 优化：FX `_upsert_daily_rates` 改用 SQLite ON CONFLICT DO UPDATE batch upsert，单币种 SELECT 全消除，~150ms → ~30ms / Replace per-currency SELECT-then-add with batched `INSERT ... ON CONFLICT DO UPDATE` in FX upsert (~150ms → ~30ms).
 - 优化：`SnapshotDaily.payload_json` 改 deferred + `list_daily_snapshots` 不再附带 payload，单次端点 ~500ms → <50ms；新增 `get_daily_snapshot(date)` 走 undefer 单天取 payload / Mark `SnapshotDaily.payload_json` as deferred and drop payload from `list_daily_snapshots`; single-call latency ~500ms → <50ms with new `get_daily_snapshot(date)` for full payload.
 - 优化：CSV 导入逐行 SELECT 改为预取字典，1k 行从 ~10s 降到 <500ms / Refactor CSV import to use prefetched dictionaries (~10s → <500ms for 1k rows).

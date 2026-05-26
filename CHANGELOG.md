@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Performance
+
+- `backend/build_desktop.py` PyInstaller `--exclude-module` 列表追加 9 个运行期不用的模块：`numpy`、`distutils`、`lib2to3`、`pydoc_data`、`wheel`、`pip`、`PIL.ImageTk`、`multiprocessing.tests`、`xml.dom.minidom.tests`。0.3.0 已 exclude watchfiles / tkinter / pytest 等，但 onedir `_internal` 仍带这批未引用模块。估计 DMG -8 ~ -15 MB（实际收益待 CI build 验证）。未启用 UPX：UPX 压缩与 macOS Gatekeeper / Notarize 历史上有兼容性问题，标为高风险延后。
+- Append nine more runtime-unused modules to the PyInstaller `--exclude-module` list in `backend/build_desktop.py`: `numpy`, `distutils`, `lib2to3`, `pydoc_data`, `wheel`, `pip`, `PIL.ImageTk`, `multiprocessing.tests`, `xml.dom.minidom.tests`. v0.3.0 already excluded watchfiles / tkinter / pytest / setuptools, but the onedir `_internal` directory still shipped these modules that the sidecar never imports. Estimated DMG drop 8-15 MB (actual saving to be measured on the next CI build). UPX is intentionally not enabled — UPX compression has a long history of breaking macOS Gatekeeper / Notarize and is filed as a high-risk follow-up.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

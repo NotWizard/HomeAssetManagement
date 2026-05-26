@@ -89,7 +89,12 @@ def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
     #   - watchfiles：uvicorn[standard] 默认拉，仅 reload 模式用
     #   - tkinter / unittest / test：标准库巨大模块，sidecar 不用
     #   - pytest 套件：仅测试时用，运行时不需要
-    #   - setuptools / pkg_resources：少数库会 fall back 引用，PyInstaller 处理后多余
+    #   - setuptools / pkg_resources：少数库会 fall back 引用,PyInstaller 处理后多余
+    #   - numpy：CLAUDE.md 约束 analytics 不引入 numpy，少数依赖 fall back 引用
+    #   - distutils / lib2to3 / pydoc_data：废弃或仅供 2→3 转译/文档查看用
+    #   - wheel / pip：构建/装包工具，运行期不需要
+    #   - PIL.ImageTk：Pillow 的 tkinter 桥接,sidecar 无 GUI
+    #   - multiprocessing.tests / xml.dom.minidom.tests：标准库自测套件
     excludes = [
         "watchfiles",
         "tkinter",
@@ -98,6 +103,15 @@ def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
         "pytest",
         "_pytest",
         "setuptools",
+        "numpy",
+        "distutils",
+        "lib2to3",
+        "pydoc_data",
+        "wheel",
+        "pip",
+        "PIL.ImageTk",
+        "multiprocessing.tests",
+        "xml.dom.minidom.tests",
     ]
     for module in excludes:
         args.extend(["--exclude-module", module])

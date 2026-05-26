@@ -344,13 +344,23 @@ function ensureMainWindow(): BrowserWindow {
     minHeight: 760,
     autoHideMenuBar: true,
     title: '家庭资产负债表',
-    backgroundColor: '#ffffff',
+    // show:false + ready-to-show 消除首启白闪：原 backgroundColor:#ffffff 在 loadURL 之前
+    // 会用 Electron 默认白底渲染 200-500ms 才切换到 loading 页；改为窗口先隐藏，
+    // backgroundColor 匹配 loading 渐变首帧色（startup-page.ts --bg-top），
+    // ready-to-show 后再 show()，渲染过程对用户完全不可见。
+    // paintWhenInitiallyHidden:true 保证隐藏期间仍走完渲染管线，ready-to-show 能可靠触发。
+    show: false,
+    paintWhenInitiallyHidden: true,
+    backgroundColor: '#f4efe5',
     webPreferences: buildMainWindowWebPreferences(
       currentDir,
       buildWindowArguments()
     ),
   });
 
+  window.once('ready-to-show', () => {
+    window.show();
+  });
   window.on('closed', () => {
     if (mainWindow === window) {
       mainWindow = null;

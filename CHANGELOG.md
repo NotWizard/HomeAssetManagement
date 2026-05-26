@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- 优化：BrowserWindow 改 show:false + ready-to-show，消除桌面端首启白闪 / Hide BrowserWindow until ready-to-show to remove desktop launch white flash.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

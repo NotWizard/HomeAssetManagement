@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { FileUp, UploadCloud } from 'lucide-react';
 
 import { Badge } from '../components/ui/badge';
@@ -129,26 +130,7 @@ export function ImportPage() {
               <Badge variant={preview.failed_rows > 0 ? 'danger' : 'success'}>失败 {preview.failed_rows}</Badge>
             </div>
 
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>行号</TableHead>
-                    <TableHead>动作</TableHead>
-                    <TableHead>错误</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {preview.rows.map((row) => (
-                    <TableRow key={`${row.row}-${row.action}-${row.error ?? ''}`}>
-                      <TableCell>{row.row}</TableCell>
-                      <TableCell>{row.action}</TableCell>
-                      <TableCell>{row.error ?? '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <PreviewRowsTable rows={preview.rows} />
           </CardContent>
         </Card>
       ) : null}
@@ -209,6 +191,85 @@ export function ImportPage() {
           {downloadError ? <p className="mt-3 text-sm text-rose-600">{downloadError}</p> : null}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// 预检结果可能上千行（CSV 一次性可能导入数万条），>50 走 react-virtual 仅渲染
+// 可视区，<=50 直接 map 保持简单。表头始终可见，行高估为 44px，overscan 8。
+function PreviewRowsTable({ rows }: { rows: ImportPreview['rows'] }) {
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const shouldVirtualize = rows.length > 50;
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 44,
+    overscan: 8,
+  });
+
+  if (!shouldVirtualize) {
+    return (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>行号</TableHead>
+              <TableHead>动作</TableHead>
+              <TableHead>错误</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow key={`${row.row}-${row.action}-${row.error ?? ''}`}>
+                <TableCell>{row.row}</TableCell>
+                <TableCell>{row.action}</TableCell>
+                <TableCell>{row.error ?? '-'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  }
+
+  const items = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const paddingTop = items.length > 0 ? items[0].start : 0;
+  const paddingBottom = items.length > 0 ? totalSize - items[items.length - 1].end : 0;
+
+  return (
+    <div ref={parentRef} className="overflow-auto" style={{ maxHeight: 480 }}>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>行号</TableHead>
+            <TableHead>动作</TableHead>
+            <TableHead>错误</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {paddingTop > 0 ? (
+            <tr aria-hidden>
+              <td colSpan={3} style={{ height: paddingTop }} />
+            </tr>
+          ) : null}
+          {items.map((vrow) => {
+            const row = rows[vrow.index];
+            return (
+              <TableRow key={`${row.row}-${row.action}-${row.error ?? ''}`}>
+                <TableCell>{row.row}</TableCell>
+                <TableCell>{row.action}</TableCell>
+                <TableCell>{row.error ?? '-'}</TableCell>
+              </TableRow>
+            );
+          })}
+          {paddingBottom > 0 ? (
+            <tr aria-hidden>
+              <td colSpan={3} style={{ height: paddingBottom }} />
+            </tr>
+          ) : null}
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -8,6 +8,9 @@
 
 ### Performance
 
+- 大列表虚拟化：引入 `@tanstack/react-virtual`，在 ImportPage CSV 预检结果表和 CurrencyAnalyticsSection 币种明细表内按 `rows.length > 50` 走 `useVirtualizer`，仅渲染可视区行 + 上下 spacer `<tr>` 占位；<=50 行直接 map 保持简单。EntryHoldingsTable 跳过：嵌套 GroupBlock 结构（每 member 一组 header + rows）且单组通常 <50 行，已有 EntryHoldingRow memo（前一提交），虚拟化嵌套 group 改造复杂收益有限。
+- Add list virtualization via `@tanstack/react-virtual`. The CSV preview table in ImportPage and the per-currency detail table in CurrencyAnalyticsSection now use `useVirtualizer` when `rows.length > 50`, rendering only the visible window with spacer `<tr>` rows for top/bottom padding; tables with ≤50 rows still map directly to keep the simple path. EntryHoldingsTable is skipped: its nested GroupBlock structure (one header + rows per member) keeps each group below the threshold, and per-row memoization (previous commit) already covers the hot path; virtualizing nested groups would add complexity with limited gain.
+
 - 在 EntryPage / MembersPage / OverviewPage / ImportPage 的 useQuery 显式设置 staleTime：holdings 60s（页面切换 / tab 切换不会重复 fetch），members / categories / importLogs 5 分钟（变更频率低）。原 React Query 默认 `staleTime: 0`，每次组件挂载都会重新触发 fetch。
 - Set explicit `staleTime` on holdings / members / categories / importLogs useQuery calls in EntryPage, MembersPage, OverviewPage and ImportPage: holdings 60 s (page / tab switches no longer refetch), members / categories / importLogs 5 minutes (low change frequency). React Query's default `staleTime: 0` was forcing a refetch on every mount.
 

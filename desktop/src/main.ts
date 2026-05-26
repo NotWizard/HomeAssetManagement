@@ -43,8 +43,8 @@ let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
 
 // 进程级一次性 API token：每次 Electron 主进程启动时随机生成，注入 sidecar env，
-// 同时通过 webPreferences.additionalArguments 传给 preload，使 renderer 在每次
-// 调用 backend 时携带 X-HBS-Token 头；任何意外抓到 sidecar 端口的本机进程都无法仿冒。
+// 同时通过 IPC handler `hbs:get-runtime-token` 异步提供给 preload，使 renderer 在每次
+// 调用 backend 时携带 X-HBS-Token 头；token 不进 process.argv，避免被 ps -ef 旁路。
 const apiToken = randomBytes(32).toString('hex');
 const updateController = createUpdateController({
   appVersion: app.getVersion(),
@@ -181,10 +181,7 @@ function buildWindowArguments(): string[] {
     return [];
   }
 
-  return [
-    `--hbs-api-base-url=${buildApiBaseUrl(port)}`,
-    `--hbs-api-token=${apiToken}`,
-  ];
+  return [`--hbs-api-base-url=${buildApiBaseUrl(port)}`];
 }
 
 function isWindowAvailable(window: BrowserWindow | null): window is BrowserWindow {
@@ -433,6 +430,7 @@ ipcMain.handle('hbs:retry-bootstrap', async () => {
   backendController.stopAndResetPort();
   await bootstrap();
 });
+ipcMain.handle('hbs:get-runtime-token', () => apiToken);
 ipcMain.handle(UPDATE_IPC_CHANNELS.getState, async () => updateController.getState());
 ipcMain.handle(UPDATE_IPC_CHANNELS.check, async () => updateController.checkForUpdates());
 ipcMain.handle(UPDATE_IPC_CHANNELS.download, async () => updateController.downloadUpdate());

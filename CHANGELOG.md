@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- 安全：桌面端 API token 从 process.argv 改 IPC 获取，消除 ps -ef 暴露 / Migrate desktop API token from process.argv to IPC to remove ps -ef leak.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

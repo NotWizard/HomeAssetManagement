@@ -1,6 +1,6 @@
 export const API_BASE_ARG_PREFIX = '--hbs-api-base-url=';
-export const API_TOKEN_ARG_PREFIX = '--hbs-api-token=';
 export const API_TOKEN_HEADER = 'X-HBS-Token';
+export const RUNTIME_TOKEN_CHANNEL = 'hbs:get-runtime-token';
 export const RETRY_BOOTSTRAP_CHANNEL = 'hbs:retry-bootstrap';
 export const UPDATE_STATE_CHANNEL = 'hbs:update:changed';
 export const UPDATE_GET_STATE_CHANNEL = 'hbs:update:get-state';
@@ -29,18 +29,13 @@ export type DesktopBridgeDeps = {
   argv: string[];
   fetchImpl: typeof fetch;
   invokeIpc: (channel: string) => Promise<unknown>;
+  getRuntimeToken: () => Promise<unknown>;
   subscribeToUpdateState: (listener: UpdateListener) => (() => void);
 };
 
 export function resolveApiBaseUrl(argv: string[]): string | undefined {
   const argument = argv.find((value) => value.startsWith(API_BASE_ARG_PREFIX));
   return argument?.slice(API_BASE_ARG_PREFIX.length);
-}
-
-export function resolveApiToken(argv: string[]): string | undefined {
-  const argument = argv.find((value) => value.startsWith(API_TOKEN_ARG_PREFIX));
-  const token = argument?.slice(API_TOKEN_ARG_PREFIX.length);
-  return token && token.length > 0 ? token : undefined;
 }
 
 function mergeAuthHeaders(
@@ -86,7 +81,7 @@ export function serializeHeaders(headers: Headers): Record<string, string> {
 async function requestJson(
   fetchImpl: typeof fetch,
   apiBaseUrl: string | undefined,
-  apiToken: string | undefined,
+  getApiToken: () => Promise<string | undefined>,
   path: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   body?: string
@@ -95,7 +90,7 @@ async function requestJson(
     method === 'POST' || method === 'PUT'
       ? { 'Content-Type': 'application/json' }
       : undefined;
-  const headers = mergeAuthHeaders(baseHeaders, apiToken);
+  const headers = mergeAuthHeaders(baseHeaders, await getApiToken());
   const response = await fetchImpl(resolveApiUrl(path, apiBaseUrl), {
     method,
     headers,
@@ -108,11 +103,11 @@ async function requestJson(
 export async function requestBinary(
   fetchImpl: typeof fetch,
   apiBaseUrl: string | undefined,
-  apiToken: string | undefined,
+  getApiToken: () => Promise<string | undefined>,
   path: string,
   method: 'GET' | 'POST' = 'GET'
 ): Promise<BinaryResponse> {
-  const headers = mergeAuthHeaders(undefined, apiToken);
+  const headers = mergeAuthHeaders(undefined, await getApiToken());
   const response = await fetchImpl(resolveApiUrl(path, apiBaseUrl), {
     method,
     headers,
@@ -128,32 +123,46 @@ export async function requestBinary(
 
 export function createDesktopBridge(deps: DesktopBridgeDeps) {
   const apiBaseUrl = resolveApiBaseUrl(deps.argv);
-  const apiToken = resolveApiToken(deps.argv);
+
+  // 通过 IPC 拉 token 是异步过程；首次访问时触发并缓存 promise，后续调用复用同一结果，
+  // 避免每次 fetch 都打一次 IPC。IPC 失败或返回非字符串/空串时视作未注入 token。
+  let tokenPromise: Promise<string | undefined> | undefined;
+  const getApiToken = (): Promise<string | undefined> => {
+    if (!tokenPromise) {
+      tokenPromise = Promise.resolve()
+        .then(() => deps.getRuntimeToken())
+        .then((value) =>
+          typeof value === 'string' && value.length > 0 ? value : undefined
+        )
+        .catch(() => undefined);
+    }
+    return tokenPromise;
+  };
 
   return {
     isDesktop: true,
     api: {
       json: {
         get: (path: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'GET'),
+          requestJson(deps.fetchImpl, apiBaseUrl, getApiToken, path, 'GET'),
         post: (path: string, body: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'POST', body),
+          requestJson(deps.fetchImpl, apiBaseUrl, getApiToken, path, 'POST', body),
         put: (path: string, body: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'PUT', body),
+          requestJson(deps.fetchImpl, apiBaseUrl, getApiToken, path, 'PUT', body),
         delete: (path: string) =>
-          requestJson(deps.fetchImpl, apiBaseUrl, apiToken, path, 'DELETE'),
+          requestJson(deps.fetchImpl, apiBaseUrl, getApiToken, path, 'DELETE'),
       },
       binary: {
         get: (path: string) =>
-          requestBinary(deps.fetchImpl, apiBaseUrl, apiToken, path, 'GET'),
+          requestBinary(deps.fetchImpl, apiBaseUrl, getApiToken, path, 'GET'),
         post: (path: string) =>
-          requestBinary(deps.fetchImpl, apiBaseUrl, apiToken, path, 'POST'),
+          requestBinary(deps.fetchImpl, apiBaseUrl, getApiToken, path, 'POST'),
       },
       form: {
         post: async (path: string, entries: FormEntries) => {
           const response = await deps.fetchImpl(resolveApiUrl(path, apiBaseUrl), {
             method: 'POST',
-            headers: mergeAuthHeaders(undefined, apiToken),
+            headers: mergeAuthHeaders(undefined, await getApiToken()),
             body: toFormData(entries),
           });
 

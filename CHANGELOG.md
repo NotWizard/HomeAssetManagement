@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `.github/workflows/ci.yml` 的 frontend / desktop job 把 `node-version` 从 `"20"` 升到 `"22"`，与 `release.yml` 对齐——测试通过版本与发布版本不再漂移，避免 CI 绿但 release build 红的情况。同步在两个 setup-node 步骤加注释说明：release 流水线 `make-macos-release.mjs` 通过 type-stripping 加载 `forge.config.ts`，Node 22 LTS 原生支持、Node 20 会报 `Unknown file extension .ts`。
+- Bump `node-version` from `"20"` to `"22"` in both the frontend and desktop jobs of `.github/workflows/ci.yml`, aligning CI with `release.yml`. The test version must equal the publish version, eliminating the "CI green but release build red" drift. Inline comments on both setup-node steps spell out the reason: the release pipeline's `make-macos-release.mjs` loads `forge.config.ts` via Node's native type-stripping, supported by Node 22 LTS but not by Node 20 (which reports `Unknown file extension .ts`).
+
 ### Performance
 
 - `.github/workflows/release.yml` 增加 pip download cache 与 PyInstaller bytecode cache 两层缓存。原 release 流水线每次都重新 `pip install -r backend/requirements-desktop.txt`（含 PyInstaller 等大包，60-120 s），且 PyInstaller 每次冷打包都要重做完整 import-graph 分析。本次：(1) `actions/setup-python@v5` 加 `cache: pip` + `cache-dependency-path: backend/requirements-desktop.txt`（与 ci.yml backend job 同模式，setup-python 跨平台自动处理 macOS `~/Library/Caches/pip` 与 Linux `~/.cache/pip` 路径差异）；(2) 在 "Build DMG + ZIP (arm64)" 之前加 `actions/cache@v4` 缓存 `backend/.pyinstaller/`，key 由 `requirements-desktop.txt` + `build_desktop.py` 联合 hash 组成（任一变更即失效）。release 流水线预估 -1 ~ -2 min。`ci.yml` backend job 已通过 `setup-python` 的 `cache: pip` 实现等价缓存，本次不动。

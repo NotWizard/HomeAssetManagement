@@ -81,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               setMobileOpen(false);
             }}
             className={cn(
-              'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all',
+              'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-[background-color,color,box-shadow] duration-150',
               active
                 ? 'nav-pill-active font-semibold'
                 : 'text-muted-foreground hover:bg-secondary hover:text-foreground'

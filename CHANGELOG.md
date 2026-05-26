@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Performance
+
+- 替换 `transition-all` 为命名属性 transition：`.surface-card-interactive` 改 `transition-[box-shadow,transform,background-color] duration-150`、`will-change: transform` 仅在 :hover 时挂上；AppShell 侧边栏导航按钮改 `transition-[background-color,color,box-shadow] duration-150`。`transition-all` 会监听所有可动画属性的变化（含 width / height / margin 等会引发 layout 的属性），把不需要 transition 的属性也纳入合成层管理；显式枚举减少浏览器在每帧的对比工作。
+- Replace `transition-all` with explicit property lists. `.surface-card-interactive` now uses `transition-[box-shadow,transform,background-color] duration-150`, with `will-change: transform` applied only on `:hover` so idle cards do not pin a compositor layer. The AppShell sidebar nav button uses `transition-[background-color,color,box-shadow] duration-150`. `transition-all` instructs the browser to watch every animatable property (including layout-affecting ones like width / height / margin); enumerating the actual properties cuts per-frame diff work.
+
 ### Fixed
 
 - EntryPage 修复 `memberDeleteOptions` useMemo 依赖数组语义不一致：`members` 之前是 `membersQuery.data ?? EMPTY_MEMBERS` 不带 useMemo，但下游 `memberDeleteOptions` 依赖数组用的是 `membersQuery.data`（而不是 `members`）。本次把 `members` 用 useMemo 兜底，下游统一改依赖 `members`，避免数据从 undefined → [] 切换时下游漏掉重算 / 重复 invalidate 的潜伏 bug。

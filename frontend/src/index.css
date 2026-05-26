@@ -98,9 +98,14 @@ h1, h2, h3, h4 {
   @apply rounded-2xl border border-border/60 bg-card shadow-card;
 }
 
-/* hover 略微抬升的可点击卡片 */
+/* hover 略微抬升的可点击卡片：transition 仅命中 box-shadow / transform / background-color，
+   避免 transition-all 触发所有可动画属性（含 layout-affecting 的 width/height）的隐式合成。
+   will-change 仅在 :hover 时挂上，常态不占合成层。 */
 .surface-card-interactive {
-  @apply surface-card transition-all hover:shadow-elevated hover:-translate-y-0.5;
+  @apply surface-card transition-[box-shadow,transform,background-color] duration-150 hover:shadow-elevated hover:-translate-y-0.5;
+}
+.surface-card-interactive:hover {
+  will-change: transform;
 }
 
 /* 仪表盘 chip / 数据小标 */

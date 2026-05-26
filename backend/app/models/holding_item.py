@@ -45,4 +45,4 @@ class HoldingItem(Base):
         DateTime, default=utc_now_naive, onupdate=utc_now_naive, index=True
     )
 
-    member = relationship("Member", back_populates="holdings")
+    member = relationship("Member", back_populates="holdings", lazy="joined")

@@ -6,7 +6,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- `uiStore` 接入 zustand `persist` middleware：localStorage key `hbs-ui-store`，持久化分析时间段 / view / 选中币种 / 初始化标志四项；setter 由 partialize 显式过滤不写入存储。跨刷新 / 重启保留用户上次选择，避免每次进入分析页都要重选时间段与币种。
+- Persist `uiStore` via the zustand `persist` middleware. The analytics date range, view, selected currency, and initialization flag are saved to localStorage under key `hbs-ui-store`; setters are explicitly excluded via `partialize`. User selections now survive refreshes and app restarts so the analytics page no longer demands re-selecting the date range and currency on every visit.
+
+### Fixed
+
+- EntryPage 修复 `memberDeleteOptions` useMemo 依赖数组语义不一致：`members` 之前是 `membersQuery.data ?? EMPTY_MEMBERS` 不带 useMemo，但下游 `memberDeleteOptions` 依赖数组用的是 `membersQuery.data`（而不是 `members`）。本次把 `members` 用 useMemo 兜底，下游统一改依赖 `members`，避免数据从 undefined → [] 切换时下游漏掉重算 / 重复 invalidate 的潜伏 bug。
+- Fix the latent dependency-array inconsistency around `memberDeleteOptions` in EntryPage. `members` was previously the bare expression `membersQuery.data ?? EMPTY_MEMBERS` (not memoized), while a downstream `useMemo` listed `membersQuery.data` (not `members`) in its dependency array. The mix meant the downstream calculation could miss recomputes around the `undefined → []` transition. Wrap `members` in `useMemo` and point the downstream `useMemo` at `members` so the dependency is semantically explicit and consistent.
+
 ### Performance
+
+#### Backend hot path
 
 - 优化：`compute_correlation` 循环外预算每个资产的 returns，剔除 N² 次冗余 _returns 调用（语义略改：先 returns 后 align，更保守的 N/A 判定） / Pre-compute per-asset returns outside the N² loop, eliminating redundant _returns calls (semantic shift: returns-then-align is more conservative for N/A detection).
 - 优化：migration export 一次 IN(...) 预取所有 holdings 用到的 Category 名，替代 per-holding lazy `session.get` 三连查 / Prefetch all referenced Category names in one IN(...) query during migration export, replacing the per-holding lazy `session.get` triple lookup.
@@ -15,6 +27,27 @@
 - 优化：FX `_upsert_daily_rates` 改用 SQLite ON CONFLICT DO UPDATE batch upsert，单币种 SELECT 全消除，~150ms → ~30ms / Replace per-currency SELECT-then-add with batched `INSERT ... ON CONFLICT DO UPDATE` in FX upsert (~150ms → ~30ms).
 - 优化：`SnapshotDaily.payload_json` 改 deferred + `list_daily_snapshots` 不再附带 payload，单次端点 ~500ms → <50ms；新增 `get_daily_snapshot(date)` 走 undefer 单天取 payload / Mark `SnapshotDaily.payload_json` as deferred and drop payload from `list_daily_snapshots`; single-call latency ~500ms → <50ms with new `get_daily_snapshot(date)` for full payload.
 - 优化：CSV 导入逐行 SELECT 改为预取字典，1k 行从 ~10s 降到 <500ms / Refactor CSV import to use prefetched dictionaries (~10s → <500ms for 1k rows).
+
+#### Frontend render & paint
+
+- Sankey chart label formatter 提到模块顶层 + 节点预计算 `__label` / `__displayName`：原 `buildSankeyChartOption` 在 `data.nodes.map` 内对每个节点创建 `formatter: () => getDefaultLabel(node)` 与 `formatter: () => getDisplayName(node)` 两个新闭包（节点数百时是 N×2 个 captured-this 函数 + 持有 node 引用阻碍 GC）。改为模块顶层 `sankeyLabelFormatter` / `sankeyEmphasisLabelFormatter` 共享读 `params.data.__label / __displayName`，节点 map 时直接预计算字符串字段。
+- Lift the Sankey label formatters to module top-level and pre-compute `__label` / `__displayName` on each node. `buildSankeyChartOption` previously created `formatter: () => getDefaultLabel(node)` and `formatter: () => getDisplayName(node)` closures per node inside `data.nodes.map` — N×2 captured-this closures holding node references, which hurts GC at hundreds of nodes. Two top-level formatters (`sankeyLabelFormatter` / `sankeyEmphasisLabelFormatter`) now read `params.data.__label` / `__displayName` precomputed during the map.
+- AppShell 移动端 sticky header 的 `backdrop-blur-md` 改为条件挂载：仅在侧边抽屉打开（mobileOpen）时挂上毛玻璃效果，抽屉关闭时回退 `bg-background/95` 不再付 GPU 合成开销。
+- Gate the mobile sticky header's `backdrop-blur-md` in AppShell on the sidebar drawer state.
+- 替换 `transition-all` 为命名属性 transition：`.surface-card-interactive` 改 `transition-[box-shadow,transform,background-color] duration-150`、`will-change: transform` 仅在 :hover 时挂上；AppShell 侧边栏导航按钮改 `transition-[background-color,color,box-shadow] duration-150`。
+- Replace `transition-all` with explicit property lists across `.surface-card-interactive` and AppShell sidebar nav buttons.
+- 三个 entry 组件 React.memo 包装并稳定父端 handler：CategoryTreePicker / EntryHoldingFormDialog / EntryTargetRatioSummary（含内部 MemberAllocationCard）均改为 `export const X = memo(XBase)`；EntryPage 端将原 inline arrow handler 替换为 useCallback 稳定 handler。
+- Wrap three entry components in React.memo and stabilize their parent handlers (CategoryTreePicker, EntryHoldingFormDialog, EntryTargetRatioSummary).
+- 大列表虚拟化：引入 `@tanstack/react-virtual`，在 ImportPage CSV 预检结果表和 CurrencyAnalyticsSection 币种明细表内按 `rows.length > 50` 走 `useVirtualizer`。EntryHoldingsTable 跳过（嵌套 GroupBlock 单组通常 <50 行，已有 EntryHoldingRow memo）。
+- Add list virtualization via `@tanstack/react-virtual` in ImportPage and CurrencyAnalyticsSection (>50 rows). EntryHoldingsTable skipped (nested GroupBlock keeps each group below threshold).
+- 在 EntryPage / MembersPage / OverviewPage / ImportPage 的 useQuery 显式设置 staleTime：holdings 60s，members / categories / importLogs 5 分钟。
+- Set explicit `staleTime` on holdings / members / categories / importLogs queries.
+- AnalyticsPage 合并 7 次独立 `useUIStore` selector 为单次 `useShallow` 解构。
+- Replace 7 individual `useUIStore` selector calls in AnalyticsPage with a single `useShallow` destructure.
+- EntryHoldingsTable 行级抽出 `EntryHoldingRow` 为独立 React.memo 组件，三个 inline handler 用 useCallback 锁定。
+- Extract per-row `EntryHoldingRow` as a standalone React.memo component with `useCallback`-stable handlers.
+- ECharts 按图表类型按需注册：原 `ECharts.tsx` 顶层一次性 `echarts.use` 全 5 类 chart + 通用组件改为各 chart 组件按需 use 自己用到的类型。各 chart 组件被 vite 自动拆成独立小 chunk，为后续按 tab 拆分 lazy load echarts 子集打基础。
+- Register echarts types per chart instead of top-level eager use; vite now splits each chart component into its own chunk.
 
 ## [0.3.0] - 2026-05-23
 

@@ -2,23 +2,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import type { EChartsReactProps } from 'echarts-for-react/lib/types';
 import * as echarts from 'echarts/core';
-import { BarChart, HeatmapChart, LineChart, PieChart, SankeyChart } from 'echarts/charts';
-import { GraphicComponent, GridComponent, LegendComponent, TooltipComponent, VisualMapComponent } from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
 
-echarts.use([
-  LineChart,
-  BarChart,
-  HeatmapChart,
-  PieChart,
-  SankeyChart,
-  GraphicComponent,
-  GridComponent,
-  LegendComponent,
-  TooltipComponent,
-  VisualMapComponent,
-  CanvasRenderer,
-]);
+// 注意：顶层不再 echarts.use 任何 chart / component / renderer。
+// 各 chart 组件（TrendChart/VolatilityChart/...）在自己模块按需 echarts.use
+// 让 tree-shaking 能识别真正用到的子集；多个组件 use 同一类型时 echarts 内部会去重。
 
 type Props = Omit<EChartsReactProps, 'echarts'>;
 

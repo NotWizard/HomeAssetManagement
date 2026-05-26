@@ -1,4 +1,5 @@
-import { Suspense, lazy, type ReactNode } from 'react';
+import { Suspense, lazy, useRef, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Coins } from 'lucide-react';
 
 import { Badge } from '../ui/badge';
@@ -162,34 +163,107 @@ export function CurrencyAnalyticsSection({
           <CardDescription>查看该币种下各项资产与负债的分类路径、金额和占比。</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>三级分类路径</TableHead>
-                <TableHead className="text-right">原币金额</TableHead>
-                <TableHead className="text-right">占比</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {selectedDetail.items.map((item) => (
-                <TableRow key={`${item.type}-${item.id}`}>
-                  <TableCell className="font-medium">{item.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.type === 'asset' ? 'success' : 'danger'}>
-                      {item.type === 'asset' ? '资产' : '负债'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{item.category_path || '—'}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(item.amount_original, item.currency)}</TableCell>
-                  <TableCell className="text-right">{formatPercent(item.share_pct)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <CurrencyDetailTable items={selectedDetail.items} currency={selectedSummary.currency} />
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// 单币种 items 上百条时 >50 走 react-virtual；<=50 直接 map。行高估为 48px，overscan 8。
+function CurrencyDetailTable({
+  items,
+  currency,
+}: {
+  items: CurrencyOverviewDetail['items'];
+  currency: string;
+}) {
+  const parentRef = useRef<HTMLDivElement | null>(null);
+  const shouldVirtualize = items.length > 50;
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 48,
+    overscan: 8,
+  });
+
+  if (!shouldVirtualize) {
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>名称</TableHead>
+            <TableHead>类型</TableHead>
+            <TableHead>三级分类路径</TableHead>
+            <TableHead className="text-right">原币金额</TableHead>
+            <TableHead className="text-right">占比</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {items.map((item) => (
+            <TableRow key={`${item.type}-${item.id}`}>
+              <TableCell className="font-medium">{item.name}</TableCell>
+              <TableCell>
+                <Badge variant={item.type === 'asset' ? 'success' : 'danger'}>
+                  {item.type === 'asset' ? '资产' : '负债'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-muted-foreground">{item.category_path || '—'}</TableCell>
+              <TableCell className="text-right">{formatCurrency(item.amount_original, item.currency)}</TableCell>
+              <TableCell className="text-right">{formatPercent(item.share_pct)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const totalSize = virtualizer.getTotalSize();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom = virtualItems.length > 0 ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+
+  return (
+    <div ref={parentRef} className="overflow-auto" style={{ maxHeight: 520 }}>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>名称</TableHead>
+            <TableHead>类型</TableHead>
+            <TableHead>三级分类路径</TableHead>
+            <TableHead className="text-right">原币金额</TableHead>
+            <TableHead className="text-right">占比</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {paddingTop > 0 ? (
+            <tr aria-hidden>
+              <td colSpan={5} style={{ height: paddingTop }} />
+            </tr>
+          ) : null}
+          {virtualItems.map((vrow) => {
+            const item = items[vrow.index];
+            return (
+              <TableRow key={`${item.type}-${item.id}`}>
+                <TableCell className="font-medium">{item.name}</TableCell>
+                <TableCell>
+                  <Badge variant={item.type === 'asset' ? 'success' : 'danger'}>
+                    {item.type === 'asset' ? '资产' : '负债'}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-muted-foreground">{item.category_path || '—'}</TableCell>
+                <TableCell className="text-right">{formatCurrency(item.amount_original, item.currency)}</TableCell>
+                <TableCell className="text-right">{formatPercent(item.share_pct)}</TableCell>
+              </TableRow>
+            );
+          })}
+          {paddingBottom > 0 ? (
+            <tr aria-hidden>
+              <td colSpan={5} style={{ height: paddingBottom }} />
+            </tr>
+          ) : null}
+        </TableBody>
+      </Table>
     </div>
   );
 }

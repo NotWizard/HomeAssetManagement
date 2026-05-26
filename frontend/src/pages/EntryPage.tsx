@@ -90,10 +90,26 @@ export function EntryPage() {
   const [normalizeMemberId, setNormalizeMemberId] = useState<number | null>(null);
   const [normalizeError, setNormalizeError] = useState<string | null>(null);
 
-  const membersQuery = useQuery({ queryKey: queryKeys.members.all(), queryFn: fetchMembers });
-  const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
-  const assetCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('asset'), queryFn: () => fetchCategories('asset') });
-  const liabilityCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('liability'), queryFn: () => fetchCategories('liability') });
+  const membersQuery = useQuery({
+    queryKey: queryKeys.members.all(),
+    queryFn: fetchMembers,
+    staleTime: 5 * 60_000,
+  });
+  const holdingsQuery = useQuery({
+    queryKey: queryKeys.holdings.all(),
+    queryFn: fetchHoldings,
+    staleTime: 60_000,
+  });
+  const assetCategoryQuery = useQuery({
+    queryKey: queryKeys.categories.type('asset'),
+    queryFn: () => fetchCategories('asset'),
+    staleTime: 5 * 60_000,
+  });
+  const liabilityCategoryQuery = useQuery({
+    queryKey: queryKeys.categories.type('liability'),
+    queryFn: () => fetchCategories('liability'),
+    staleTime: 5 * 60_000,
+  });
   const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 
@@ -172,7 +188,13 @@ export function EntryPage() {
   // 用模块级 EMPTY 常量替代 `?? []`，保证 query 数据未加载时下游 useMemo 依赖引用稳定，
   // 不会因为每次 render 新建空数组而被击穿。
   const allHoldings = holdingsQuery.data ?? EMPTY_HOLDINGS;
-  const members = membersQuery.data ?? EMPTY_MEMBERS;
+  // useMemo 兜底：在 query 数据未加载时返回模块级 EMPTY_MEMBERS，让下游 useMemo 依赖
+  // 直接用 `members` 而不是 `membersQuery.data`，避免数据从 undefined → [] 切换时
+  // 下游漏掉重算或重复 invalidate 的潜伏 bug。
+  const members = useMemo(
+    () => membersQuery.data ?? EMPTY_MEMBERS,
+    [membersQuery.data]
+  );
   const hasMembers = members.length > 0;
   const hasLoadedHoldings = holdingsQuery.data != null;
 
@@ -272,7 +294,7 @@ export function EntryPage() {
           value: member.id,
         };
       }),
-    [allHoldings, membersQuery.data]
+    [allHoldings, members]
   );
 
   const allVisibleSelected = filteredHoldings.length > 0 && filteredHoldings.every((row) => selectedIdSet.has(row.id));
@@ -324,7 +346,7 @@ export function EntryPage() {
     setMemberDeleteOpen(true);
   };
 
-  const submitForm = () => {
+  const submitForm = useCallback(() => {
     setError(null);
     const validation = validateEntryForm(form);
     if (validation.error || validation.category == null) {
@@ -342,7 +364,21 @@ export function EntryPage() {
     } else {
       createHoldingMutation.mutate(payload);
     }
-  };
+  }, [form, editing, updateHoldingMutation, createHoldingMutation]);
+
+  const closeEntryDialog = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleFocusMember = useCallback((memberId: number | null) => {
+    setFocusedMemberId(memberId);
+    if (memberId != null) {
+      const target = document.getElementById(`entry-group-${memberId}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, []);
 
   const toggleHoldingSelection = useCallback((holdingId: number, checked: boolean) => {
     setSelectedHoldingIds((current) => {
@@ -444,19 +480,8 @@ export function EntryPage() {
             memberSummaries={memberSummaries}
             overview={memberAllocationOverview}
             focusedMemberId={focusedMemberId}
-            onFocusMember={(memberId) => {
-              setFocusedMemberId(memberId);
-              if (memberId != null) {
-                const target = document.getElementById(`entry-group-${memberId}`);
-                if (target) {
-                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-              }
-            }}
-            onOpenNormalize={(memberId) => {
-              setNormalizeError(null);
-              setNormalizeMemberId(memberId);
-            }}
+            onFocusMember={handleFocusMember}
+            onOpenNormalize={handleOpenNormalize}
           />
           <EntryFiltersBar
             keyword={keyword}
@@ -533,7 +558,7 @@ export function EntryPage() {
           createHoldingMutation.isPending || updateHoldingMutation.isPending
         }
         setForm={setForm}
-        onClose={() => setOpen(false)}
+        onClose={closeEntryDialog}
         onSubmit={submitForm}
       />
 

@@ -33,7 +33,11 @@ function formatDelta(value: number | null): string {
 export function OverviewPage() {
   const trendQuery = useQuery({ queryKey: queryKeys.trend.scope('overview'), queryFn: () => fetchTrend(90) });
   // 与 EntryPage 共用 holdings.all() 缓存，避免页面切换时重复 fetch
-  const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
+  const holdingsQuery = useQuery({
+    queryKey: queryKeys.holdings.all(),
+    queryFn: fetchHoldings,
+    staleTime: 60_000,
+  });
   const rebalanceQuery = useQuery({ queryKey: queryKeys.rebalance.scope('overview'), queryFn: () => fetchRebalance() });
   const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';

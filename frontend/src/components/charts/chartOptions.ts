@@ -41,6 +41,17 @@ type TooltipParams = {
 
 const MISSING_CORRELATION = 2;
 
+// Sankey label formatter 提到模块顶层，避免每个节点都创建一个新闭包 formatter
+// （节点数百时这是 N 个 captured-this 函数 + 持有 node 引用，妨碍 GC）。
+// 节点 map 时预计算 __label / __displayName 字符串，formatter 只从 params.data 读字段。
+type SankeyLabelParamsWithCache = LabelParams & {
+  data?: LabelParams['data'] & { __label?: string; __displayName?: string };
+};
+const sankeyLabelFormatter = (params: SankeyLabelParamsWithCache) =>
+  params.data?.__label ?? '';
+const sankeyEmphasisLabelFormatter = (params: SankeyLabelParamsWithCache) =>
+  params.data?.__displayName ?? '';
+
 function formatAxisValue(value: number): string {
   const numeric = Number(value ?? 0);
   if (!Number.isFinite(numeric)) {
@@ -553,6 +564,8 @@ export function buildSankeyChartOption(data: SankeyData) {
       name: node.id,
       value: node.amount ?? 0,
       draggable: false,
+      __label: getDefaultLabel(node),
+      __displayName: getDisplayName(node),
       itemStyle: {
         color: getNodeColor(node),
         borderColor: getNodeBorderColor(node),
@@ -574,14 +587,14 @@ export function buildSankeyChartOption(data: SankeyData) {
         distance: isMember ? 0 : 10,
         width: isMember ? 112 : isCategory ? 156 : 148,
         overflow: 'break',
-        formatter: () => getDefaultLabel(node),
+        formatter: sankeyLabelFormatter,
       },
       emphasis: {
         label: {
           show: isHolding || isCategory || isMember,
           width: 168,
           overflow: 'break',
-          formatter: () => getDisplayName(node),
+          formatter: sankeyEmphasisLabelFormatter,
         },
       },
     };

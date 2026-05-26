@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 
 import type { CategoryNode, Member } from '../../types';
 import { Button } from '../ui/button';
@@ -34,7 +34,7 @@ type EntryHoldingFormDialogProps = {
   onSubmit: () => void;
 };
 
-export function EntryHoldingFormDialog({
+function EntryHoldingFormDialogBase({
   open,
   editingTitle,
   editing,
@@ -188,3 +188,7 @@ export function EntryHoldingFormDialog({
     </Dialog>
   );
 }
+
+// memo 包装：表单内部维护 ref + 大量条件渲染，父 EntryPage 重渲染时只要 form / 树 /
+// onClose / onSubmit / setForm 引用稳定就能短路。
+export const EntryHoldingFormDialog = memo(EntryHoldingFormDialogBase);

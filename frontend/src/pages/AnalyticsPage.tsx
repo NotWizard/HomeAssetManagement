@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useShallow } from 'zustand/react/shallow';
 
 import { AnalyticsDateRangePicker } from '../components/analytics/AnalyticsDateRangePicker';
 import {
@@ -48,13 +49,25 @@ const CURRENCY_LABELS: Record<string, string> = {
 };
 
 export function AnalyticsPage() {
-  const storedAnalyticsDateRange = useUIStore((state) => state.analyticsDateRange);
-  const analyticsDateRangeInitialized = useUIStore((state) => state.analyticsDateRangeInitialized);
-  const analyticsView = useUIStore((state) => state.analyticsView);
-  const selectedCurrency = useUIStore((state) => state.selectedAnalyticsCurrency);
-  const setAnalyticsDateRange = useUIStore((state) => state.setAnalyticsDateRange);
-  const setAnalyticsView = useUIStore((state) => state.setAnalyticsView);
-  const setSelectedAnalyticsCurrency = useUIStore((state) => state.setSelectedAnalyticsCurrency);
+  const {
+    analyticsDateRange: storedAnalyticsDateRange,
+    analyticsDateRangeInitialized,
+    analyticsView,
+    selectedAnalyticsCurrency: selectedCurrency,
+    setAnalyticsDateRange,
+    setAnalyticsView,
+    setSelectedAnalyticsCurrency,
+  } = useUIStore(
+    useShallow((state) => ({
+      analyticsDateRange: state.analyticsDateRange,
+      analyticsDateRangeInitialized: state.analyticsDateRangeInitialized,
+      analyticsView: state.analyticsView,
+      selectedAnalyticsCurrency: state.selectedAnalyticsCurrency,
+      setAnalyticsDateRange: state.setAnalyticsDateRange,
+      setAnalyticsView: state.setAnalyticsView,
+      setSelectedAnalyticsCurrency: state.setSelectedAnalyticsCurrency,
+    }))
+  );
 
   const analyticsDateBoundsQuery = useQuery({
     queryKey: queryKeys.analyticsDateBounds.all(),

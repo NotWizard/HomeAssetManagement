@@ -8,6 +8,9 @@
 
 ### Performance
 
+- AppShell 移动端 sticky header 的 `backdrop-blur-md` 改为条件挂载：仅在侧边抽屉打开（mobileOpen）时挂上毛玻璃效果，抽屉关闭时回退 `bg-background/95` 不再付 GPU 合成开销。原本无条件 backdrop-blur 在移动端滚动 / 切换页面时持续合成，但抽屉关闭时背后并没有半透明遮罩，毛玻璃没有视觉收益。
+- Gate the mobile sticky header's `backdrop-blur-md` in AppShell on the sidebar drawer state. The blur is now applied only when `mobileOpen` is true (the drawer is open); when closed, the header falls back to a solid `bg-background/95` so the browser stops compositing the blur layer on every scroll / route change. The unconditional blur did not buy any visual effect when the drawer was closed (no semi-transparent overlay was behind it) yet still cost the GPU per frame.
+
 - 替换 `transition-all` 为命名属性 transition：`.surface-card-interactive` 改 `transition-[box-shadow,transform,background-color] duration-150`、`will-change: transform` 仅在 :hover 时挂上；AppShell 侧边栏导航按钮改 `transition-[background-color,color,box-shadow] duration-150`。`transition-all` 会监听所有可动画属性的变化（含 width / height / margin 等会引发 layout 的属性），把不需要 transition 的属性也纳入合成层管理；显式枚举减少浏览器在每帧的对比工作。
 - Replace `transition-all` with explicit property lists. `.surface-card-interactive` now uses `transition-[box-shadow,transform,background-color] duration-150`, with `will-change: transform` applied only on `:hover` so idle cards do not pin a compositor layer. The AppShell sidebar nav button uses `transition-[background-color,color,box-shadow] duration-150`. `transition-all` instructs the browser to watch every animatable property (including layout-affecting ones like width / height / margin); enumerating the actual properties cuts per-frame diff work.
 

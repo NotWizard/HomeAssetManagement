@@ -167,7 +167,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* 主内容区 */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* 移动端顶部条：仅汉堡菜单 + 当前页名；桌面端隐藏，由各页面自身 PageHeader 承担标题 */}
-          <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur-md md:hidden">
+          {/* backdrop-blur-md 只在侧边抽屉打开时挂上：抽屉打开会铺一层半透明遮罩，毛玻璃才有
+              视觉收益；抽屉关闭时回退到 bg-background/95 节省 GPU 合成成本（移动端尤甚） */}
+          <header
+            className={cn(
+              'sticky top-0 z-30 border-b border-border/60 md:hidden',
+              mobileOpen ? 'bg-background/85 backdrop-blur-md' : 'bg-background/95'
+            )}
+          >
             <div className="flex h-14 items-center gap-3 px-4">
               <Button
                 variant="ghost"

@@ -1,5 +1,4 @@
 import hashlib
-import json
 import logging
 import shutil
 import tempfile
@@ -20,6 +19,9 @@ from app.core.clock import normalize_utc_naive
 from app.core.clock import utc_now_naive
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.utils.serialization import dumps as _json_dumps
+from app.utils.serialization import dumps_bytes as _json_dumps_bytes
+from app.utils.serialization import loads as _json_loads
 
 logger = logging.getLogger(__name__)
 from app.models.category import Category
@@ -165,7 +167,7 @@ class MigrationService:
                     {
                         "snapshot_date": row.snapshot_date.isoformat(),
                         "created_at": format_utc_iso_z(row.created_at),
-                        "payload": json.loads(row.payload_json),
+                        "payload": _json_loads(row.payload_json),
                     }
                     for row in snapshot_rows
                 ),
@@ -349,7 +351,7 @@ def _load_package(archive_path: Path, filename: str) -> dict[str, Any]:
                 raise AppError(4002, "迁移包缺少 manifest.json")
 
             manifest_bytes = _read_archive_entry_safe(archive, "manifest.json", _MAX_MANIFEST_BYTES)
-            manifest = json.loads(manifest_bytes)
+            manifest = _json_loads(manifest_bytes)
             if manifest.get("package_type") != PACKAGE_TYPE:
                 raise AppError(4002, "迁移包类型不受支持")
             if manifest.get("schema_version") != SCHEMA_VERSION:
@@ -375,7 +377,7 @@ def _load_package(archive_path: Path, filename: str) -> dict[str, Any]:
                     payload_bytes = _read_archive_entry_safe(archive, file_name, _MAX_ENTRY_BYTES)
                     if domain.get("checksum") != _bytes_checksum(payload_bytes):
                         raise AppError(4002, f"迁移包校验失败: {domain_name}")
-                    payload = json.loads(payload_bytes)
+                    payload = _json_loads(payload_bytes)
                     row_count = 1 if domain_name in {"family", "settings"} else len(payload)
                     if row_count != domain.get("row_count"):
                         raise AppError(4002, f"迁移包行数不匹配: {domain_name}")
@@ -580,7 +582,7 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
             SnapshotDaily(
                 family_id=family.id,
                 snapshot_date=_parse_date(snapshot_payload["snapshot_date"]),
-                payload_json=json.dumps(snapshot_payload["payload"], ensure_ascii=False),
+                payload_json=_json_dumps(snapshot_payload["payload"]),
                 created_at=_parse_datetime(snapshot_payload.get("created_at")) or utc_now_naive(),
             )
         )
@@ -596,16 +598,16 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
 
 
 def _write_json_file(path: Path, payload: Any) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    path.write_bytes(_json_dumps_bytes(payload))
 
 
 def _write_ndjson_file(path: Path, items: Iterable[dict[str, Any]]) -> int:
     count = 0
-    with path.open("w", encoding="utf-8") as handle:
+    with path.open("wb") as handle:
         for item in items:
             if count > 0:
-                handle.write("\n")
-            handle.write(json.dumps(item, ensure_ascii=False))
+                handle.write(b"\n")
+            handle.write(_json_dumps_bytes(item))
             count += 1
     return count
 
@@ -640,7 +642,7 @@ def _iter_ndjson_records(archive_path: Path, file_name: str) -> Iterator[dict[st
             for raw_line in handle:
                 if not raw_line.strip():
                     continue
-                yield json.loads(raw_line.decode("utf-8"))
+                yield _json_loads(raw_line)
 
 
 def _parse_datetime(value: Any) -> datetime | None:

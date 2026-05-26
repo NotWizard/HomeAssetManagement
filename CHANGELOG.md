@@ -25,6 +25,7 @@
 
 #### Backend hot path
 
+<<<<<<< HEAD
 - 优化：`compute_correlation` 循环外预算每个资产的 returns，剔除 N² 次冗余 _returns 调用（语义略改：先 returns 后 align，更保守的 N/A 判定） / Pre-compute per-asset returns outside the N² loop, eliminating redundant _returns calls (semantic shift: returns-then-align is more conservative for N/A detection).
 - 优化：migration export 一次 IN(...) 预取所有 holdings 用到的 Category 名，替代 per-holding lazy `session.get` 三连查 / Prefetch all referenced Category names in one IN(...) query during migration export, replacing the per-holding lazy `session.get` triple lookup.
 - 优化：`build_daily_series` cache fingerprint 改绑 `daily_totals` 表三元组（MAX snapshot_date / COUNT / MAX generated_at），剔除 holdings SELECT；`DailyTotal.generated_at` 加 `onupdate` 让同日重算也能让 cache 失效 / Switch `build_daily_series` cache fingerprint to `daily_totals` triple (drop holdings SELECT); add `onupdate` to `DailyTotal.generated_at` so same-day recompute invalidates cache.
@@ -79,6 +80,15 @@
 ### Security
 
 - 安全：桌面端 API token 从 process.argv 改 IPC 获取，消除 ps -ef 暴露 / Migrate desktop API token from process.argv to IPC to remove ps -ef leak.
+
+#### Backend tail
+
+- `backend/app/models/holding_item.py` 的 `member` relationship 由默认的 `lazy="select"` 改为 `lazy="joined"`：v0.3.0 当前 list_holdings / list_daily 等热路径不直接读 `holding.member`（前端用 `member_id` + 单独的 members 列表自己 join），所以这步是预防性 — 一旦未来某条新路径开始 `holding.member.name` 用法，避免悄无声息引入 N+1，每条 holding 多一次 SELECT。joined 加载在单条主表查询里通过 LEFT OUTER JOIN 一次性带回 member 行，不影响现有 family-scope 过滤与 `holdings.id ASC` 排序。
+- Switch the `member` relationship on `HoldingItem` from the implicit `lazy="select"` to `lazy="joined"`. The v0.3.0 hot paths don't currently dereference `holding.member` — the frontend joins via the separate members list using `member_id` — so this is a preventive change: any future code path that reaches for `holding.member.name` would otherwise silently introduce an N+1 (one extra SELECT per holding). With `joined`, the member row is fetched in the same statement via LEFT OUTER JOIN, leaving the family-scope filter and `holdings.id ASC` ordering unchanged.
+- `backend/app/utils/serialization.py` 扩展为 orjson 薄包装（`dumps` / `dumps_bytes` / `loads`），全 `backend/app/` 下的 `import json` + `json.dumps` / `json.loads` 统一改走 orjson：snapshot 序列化与反序列化、migration manifest / ndjson 读写。orjson 默认产 UTF-8 bytes 等价 `ensure_ascii=False`，序列化速度比标准 `json` 快数倍；1 MB snapshot payload 每次写入预计 -10 ~ -30 ms。`backend/requirements.txt` 加 `orjson==3.11.9`（lock 同步），`backend/build_desktop.py` PyInstaller 命令行加 `--hidden-import=orjson` 兜底防打包丢 native 依赖。
+- Swap the backend hot path from stdlib `json` to `orjson` via a thin wrapper in `backend/app/utils/serialization.py` (`dumps` / `dumps_bytes` / `loads`). Every `import json` + `json.dumps` / `json.loads` under `backend/app/` is rewritten across snapshot serialise/deserialise and migration manifest/ndjson I/O. orjson's default byte output equals `json.dumps(..., ensure_ascii=False)` and is several times faster than stdlib; an estimated 10-30 ms saving per 1 MB snapshot write. `backend/requirements.txt` gains `orjson==3.11.9` (lock synced); `backend/build_desktop.py` adds `--hidden-import=orjson` so PyInstaller reliably bundles the native extension.
+- `backend/tests/conftest.py` 改 in-memory SQLite + per-test SAVEPOINT 隔离：原跑 file-based `data/test.db` 跨 test 状态污染（family.id 漂移、import 残留 holdings、settings.fx_provider 不复位等）。新 conftest 覆写 engine 为 `sqlite:///:memory:` + StaticPool 让所有 SessionLocal 共享，跨过 alembic 用 `create_all` + `ensure_seed_data` 建一次 schema；function-scoped autouse fixture 给每个 test 包 outer transaction + nested SAVEPOINT 隔离，test 结束 rollback 抹掉本次 mutate。套件总时长 16.74s → 13.42s（-20%），同时顺手修复了 baseline 中因 fx_provider 污染失败的 `test_update_settings_without_fx_provider_succeeds_and_keeps_default_provider`（剩余 2 个 FX 网络 baseline fail 无关）。
+- Move the backend test suite to in-memory SQLite with per-test SAVEPOINT isolation. The previous `backend/tests/conftest.py` ran a file-based `data/test.db` shared across all tests, leaking state (family-id drift, residual holdings from import tests, `settings.fx_provider` not reset, etc.). The new conftest overrides the engine to `sqlite:///:memory:` with `StaticPool` so every `SessionLocal()` shares the same database, bootstraps the schema once via `create_all` + `ensure_seed_data`, and wraps each test in an outer transaction + nested SAVEPOINT that rolls back at exit. Total suite time 16.74s → 13.42s (-20%); also fixes the previously-failing `test_update_settings_without_fx_provider_succeeds_and_keeps_default_provider` (baseline FX-provider pollution). The two remaining `test_import_service` failures are a pre-existing FX network issue unrelated to this change.
 
 ## [0.3.0] - 2026-05-23
 

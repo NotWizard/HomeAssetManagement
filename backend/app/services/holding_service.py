@@ -44,24 +44,40 @@ class HoldingService:
         payload: dict,
         source: str = "manual",
         refresh_snapshots: bool = True,
+        *,
+        prefetched_family_id: int | None = None,
+        prefetched_base_currency: str | None = None,
+        prefetched_fx_rate: Decimal | None = None,
+        skip_member_db_check: bool = False,
     ) -> HoldingItem:
-        family = get_default_family(session)
-        _validate_member(session, payload["member_id"])
+        # 预取参数让 CSV 批量导入路径跳过 family/member/settings/FX 的逐行 SELECT；
+        # 单条手工录入仍走默认 None 分支保持原行为。
+        family_id = (
+            prefetched_family_id
+            if prefetched_family_id is not None
+            else get_default_family(session).id
+        )
+        if not skip_member_db_check:
+            _validate_member(session, payload["member_id"])
         _validate_holding_payload(session, payload)
 
-        settings = SettingsService.get_settings(session)
-        rate, _estimated = FXService.resolve_rate(
-            session=session,
-            quote_currency=payload["currency"],
-            base_currency=settings.base_currency,
-            as_of=business_today(session),
-        )
+        if prefetched_fx_rate is not None:
+            rate = prefetched_fx_rate
+        else:
+            settings = SettingsService.get_settings(session)
+            base_currency = prefetched_base_currency or settings.base_currency
+            rate, _estimated = FXService.resolve_rate(
+                session=session,
+                quote_currency=payload["currency"],
+                base_currency=base_currency,
+                as_of=business_today(session),
+            )
 
         amount_original = Decimal(str(payload["amount_original"]))
         amount_base = convert_to_base_amount(amount_original, rate)
 
         row = HoldingItem(
-            family_id=family.id,
+            family_id=family_id,
             member_id=payload["member_id"],
             type=payload["type"],
             name=payload["name"].strip(),
@@ -86,19 +102,29 @@ class HoldingService:
         holding_id: int,
         payload: dict,
         refresh_snapshots: bool = True,
+        *,
+        prefetched_row: HoldingItem | None = None,
+        prefetched_base_currency: str | None = None,
+        prefetched_fx_rate: Decimal | None = None,
+        skip_member_db_check: bool = False,
     ) -> HoldingItem:
-        row = get_scoped_holding(session, holding_id)
+        row = prefetched_row if prefetched_row is not None else get_scoped_holding(session, holding_id)
 
-        _validate_member(session, payload["member_id"])
+        if not skip_member_db_check:
+            _validate_member(session, payload["member_id"])
         _validate_holding_payload(session, payload)
 
-        settings = SettingsService.get_settings(session)
-        rate, _estimated = FXService.resolve_rate(
-            session=session,
-            quote_currency=payload["currency"],
-            base_currency=settings.base_currency,
-            as_of=business_today(session),
-        )
+        if prefetched_fx_rate is not None:
+            rate = prefetched_fx_rate
+        else:
+            settings = SettingsService.get_settings(session)
+            base_currency = prefetched_base_currency or settings.base_currency
+            rate, _estimated = FXService.resolve_rate(
+                session=session,
+                quote_currency=payload["currency"],
+                base_currency=base_currency,
+                as_of=business_today(session),
+            )
 
         amount_original = Decimal(str(payload["amount_original"]))
         amount_base = convert_to_base_amount(amount_original, rate)

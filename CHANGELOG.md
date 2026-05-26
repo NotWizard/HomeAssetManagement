@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Performance
+
+- 优化：CSV 导入逐行 SELECT 改为预取字典，1k 行从 ~10s 降到 <500ms / Refactor CSV import to use prefetched dictionaries (~10s → <500ms for 1k rows).
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

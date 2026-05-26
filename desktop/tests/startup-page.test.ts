@@ -26,3 +26,13 @@ test('错误页会提示先重试，再在必要时查看系统设置', async ()
   assert.match(html, /系统设置/);
   assert.match(html, /window\.__HBS_DESKTOP__\?\.bootstrap\?\.retry/);
 });
+
+test('错误页会提供一键打开日志目录按钮', async () => {
+  const startupPageModule = await import('../src/startup-page.ts');
+
+  const html = startupPageModule.createErrorPage('后端健康检查超时');
+
+  assert.match(html, /打开日志目录/);
+  assert.match(html, /data-open-logs-dir/);
+  assert.match(html, /window\.__HBS_DESKTOP__\?\.bootstrap\?\.openLogsDir/);
+});

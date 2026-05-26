@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -264,3 +264,77 @@ test('检测到新候选包后会自动后台触发下载，状态不停留在 a
     global.fetch = originalFetch;
   }
 });
+
+test('启动期清理会删除遗留的 .partial 半截下载文件', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const userDataDir = '/tmp/hbs-userdata-partial-cleanup';
+  const updatesDir = join(userDataDir, 'updates');
+  mkdirSync(updatesDir, { recursive: true });
+
+  const leftoverPartial = join(updatesDir, 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip.partial');
+  writeFileSync(leftoverPartial, 'half-zip-bytes');
+  assert.equal(existsSync(leftoverPartial), true, '前置：.partial 文件应已写入');
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.1.0',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir,
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: () => undefined,
+    now: () => 1_700_000_000_000,
+  });
+
+  await controller.start();
+
+  assert.equal(
+    existsSync(leftoverPartial),
+    false,
+    '启动期清理应当删除遗留的 .partial 文件，避免下次下载混淆'
+  );
+});
+
+test('listener 抛出异常不会影响其他 listener 与状态广播', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.1.0',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-listener-isolation',
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: () => undefined,
+    now: () => 1_700_000_000_000,
+  });
+
+  const goodLog: string[] = [];
+  controller.subscribe(() => {
+    throw new Error('boom from bad listener');
+  });
+  controller.subscribe((s) => {
+    goodLog.push(s.status);
+  });
+
+  // 静默 stderr 噪声：D7 emitState 会把 listener 异常打到 stderr，测试期间隔离
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((_chunk: string | Uint8Array) => true) as typeof process.stderr.write;
+  try {
+    await controller.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  assert.ok(
+    goodLog.length > 0,
+    '即使前一个 listener 抛错，后续 listener 仍应收到状态广播'
+  );
+});
+

@@ -68,6 +68,14 @@
 - 优化：electron-packager 限定 electronLanguages 为 zh_CN + en，DMG 体积减少 8-12 MB / Restrict electronLanguages to zh_CN + en to shrink the DMG by 8-12 MB.
 - 优化：BrowserWindow 改 show:false + ready-to-show，消除桌面端首启白闪 / Hide BrowserWindow until ready-to-show to remove desktop launch white flash.
 
+#### Desktop runtime
+
+- 新增：macOS 休眠唤醒后 `powerMonitor.on('resume')` 探活 sidecar，必要时重启（30 s 节流） / On macOS, probe the sidecar via `powerMonitor.on('resume')` after system wake and restart it if unhealthy (30 s throttled).
+- 新增：append 模式 main.log file logger（1 s 或 200 行 flush），renderer console-message 同时落盘；错误页加「打开日志目录」按钮 / Append-mode `main.log` logger (1 s or 200-line flush); renderer console output also mirrored to disk; startup error page gains "open logs directory" action.
+- 优化：renderer console-message 转发限级——打包态仅转发 warning/error，开发态仍全量；配合 file logger 不丢失 warning/error / Downgrade renderer console-message forwarding in packaged mode to `level >= 2`; combined with the file logger, packaged stdio is much quieter without losing warnings/errors.
+- 优化：update state.json 改 `fs/promises.writeFile` 异步写，listener 全部 try/catch 包裹避免单个 listener 抛错阻塞广播 / Persist update state.json via `fs/promises.writeFile` and wrap each listener invocation in try/catch.
+- 修复：update 下载改写 `.partial` 临时文件，SHA-256 通过后 atomic rename；避免半截 zip 触发 sanitize 重下整包 / Write update downloads to `<asset>.zip.partial` and atomically rename to the final archive only after SHA-256 passes; eliminates half-downloaded zips and forced re-downloads.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

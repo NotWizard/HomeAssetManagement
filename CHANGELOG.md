@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- `uiStore` 接入 zustand `persist` middleware：localStorage key `hbs-ui-store`，持久化分析时间段 / view / 选中币种 / 初始化标志四项；setter 由 partialize 显式过滤不写入存储。跨刷新 / 重启保留用户上次选择，避免每次进入分析页都要重选时间段与币种。
+- Persist `uiStore` via the zustand `persist` middleware. The analytics date range, view, selected currency, and initialization flag are saved to localStorage under key `hbs-ui-store`; setters are explicitly excluded via `partialize`. User selections now survive refreshes and app restarts so the analytics page no longer demands re-selecting the date range and currency on every visit.
+
 ### Performance
 
 - Sankey chart label formatter 提到模块顶层 + 节点预计算 `__label` / `__displayName`：原 `buildSankeyChartOption` 在 `data.nodes.map` 内对每个节点创建 `formatter: () => getDefaultLabel(node)` 与 `formatter: () => getDisplayName(node)` 两个新闭包（节点数百时是 N×2 个 captured-this 函数 + 持有 node 引用阻碍 GC）。改为模块顶层 `sankeyLabelFormatter` / `sankeyEmphasisLabelFormatter` 共享读 `params.data.__label / __displayName`，节点 map 时直接预计算字符串字段。

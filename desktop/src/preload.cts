@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 import {
+  RUNTIME_TOKEN_CHANNEL,
   createDesktopBridge,
   type UpdateListener,
 } from './preload-bridge.js';
@@ -11,6 +12,7 @@ contextBridge.exposeInMainWorld(
     argv: process.argv,
     fetchImpl: fetch,
     invokeIpc: (channel: string) => ipcRenderer.invoke(channel),
+    getRuntimeToken: () => ipcRenderer.invoke(RUNTIME_TOKEN_CHANNEL),
     subscribeToUpdateState: (listener: UpdateListener) => {
       const wrapped = (_event: unknown, payload: unknown) => {
         listener(payload);

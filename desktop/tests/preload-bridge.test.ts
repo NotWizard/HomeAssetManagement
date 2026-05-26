@@ -3,15 +3,14 @@ import test from 'node:test';
 
 import {
   API_BASE_ARG_PREFIX,
-  API_TOKEN_ARG_PREFIX,
   API_TOKEN_HEADER,
+  RUNTIME_TOKEN_CHANNEL,
   UPDATE_CHECK_CHANNEL,
   UPDATE_DOWNLOAD_CHANNEL,
   UPDATE_GET_STATE_CHANNEL,
   UPDATE_INSTALL_CHANNEL,
   createDesktopBridge,
   resolveApiBaseUrl,
-  resolveApiToken,
   resolveApiUrl,
   serializeHeaders,
 } from '../src/preload-bridge.ts';
@@ -29,17 +28,8 @@ test('resolveApiBaseUrl 与 resolveApiUrl 会正确拼接桌面 sidecar 地址',
   assert.throws(() => resolveApiUrl('/health', undefined), /未检测到桌面运行时 API 基地址/);
 });
 
-test('resolveApiToken 解析 --hbs-api-token 参数', () => {
-  assert.equal(
-    resolveApiToken(['electron', `${API_TOKEN_ARG_PREFIX}abc-123`]),
-    'abc-123'
-  );
-  assert.equal(resolveApiToken(['electron']), undefined);
-  assert.equal(
-    resolveApiToken(['electron', `${API_TOKEN_ARG_PREFIX}`]),
-    undefined,
-    '空 token 视为未注入'
-  );
+test('RUNTIME_TOKEN_CHANNEL 指向 hbs:get-runtime-token IPC 通道', () => {
+  assert.equal(RUNTIME_TOKEN_CHANNEL, 'hbs:get-runtime-token');
 });
 
 test('createDesktopBridge 在每次后端调用时都会附加 X-HBS-Token 头', async () => {
@@ -49,12 +39,12 @@ test('createDesktopBridge 在每次后端调用时都会附加 X-HBS-Token 头',
     headers: Record<string, string>;
   };
   const fetchCalls: FetchCall[] = [];
+  let tokenInvocations = 0;
 
   const bridge = createDesktopBridge({
     argv: [
       'electron',
       `${API_BASE_ARG_PREFIX}http://127.0.0.1:18991/api/v1`,
-      `${API_TOKEN_ARG_PREFIX}secret-token-99`,
     ],
     fetchImpl: async (input, init) => {
       const headers: Record<string, string> = {};
@@ -82,6 +72,10 @@ test('createDesktopBridge 在每次后端调用时都会附加 X-HBS-Token 头',
       );
     },
     invokeIpc: async () => undefined,
+    getRuntimeToken: async () => {
+      tokenInvocations += 1;
+      return 'secret-token-99';
+    },
     subscribeToUpdateState: () => () => undefined,
   });
 
@@ -98,9 +92,10 @@ test('createDesktopBridge 在每次后端调用时都会附加 X-HBS-Token 头',
       `${call.method} ${call.url} 缺少 X-HBS-Token 头`
     );
   }
+  assert.equal(tokenInvocations, 1, 'getRuntimeToken 应只触发一次 IPC 调用并缓存结果');
 });
 
-test('createDesktopBridge 未注入 token 时不附加 X-HBS-Token 头', async () => {
+test('createDesktopBridge 在 getRuntimeToken 返回空时不附加 X-HBS-Token 头', async () => {
   let captured: Record<string, string> = {};
   const bridge = createDesktopBridge({
     argv: ['electron', `${API_BASE_ARG_PREFIX}http://127.0.0.1:18991/api/v1`],
@@ -113,11 +108,35 @@ test('createDesktopBridge 未注入 token 时不附加 X-HBS-Token 头', async (
       );
     },
     invokeIpc: async () => undefined,
+    getRuntimeToken: async () => '',
     subscribeToUpdateState: () => () => undefined,
   });
 
   await bridge.api.json.get('/settings');
   assert.equal(captured[API_TOKEN_HEADER], undefined);
+  assert.equal(captured[API_TOKEN_HEADER.toLowerCase()], undefined);
+});
+
+test('createDesktopBridge 在 getRuntimeToken 抛错时安全降级为无 token', async () => {
+  let captured: Record<string, string> = {};
+  const bridge = createDesktopBridge({
+    argv: ['electron', `${API_BASE_ARG_PREFIX}http://127.0.0.1:18991/api/v1`],
+    fetchImpl: async (_input, init) => {
+      const incoming = init?.headers as Record<string, string> | undefined;
+      captured = { ...(incoming ?? {}) };
+      return new Response(
+        JSON.stringify({ code: 0, message: 'ok', data: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    },
+    invokeIpc: async () => undefined,
+    getRuntimeToken: async () => {
+      throw new Error('ipc unavailable');
+    },
+    subscribeToUpdateState: () => () => undefined,
+  });
+
+  await bridge.api.json.get('/settings');
   assert.equal(captured[API_TOKEN_HEADER.toLowerCase()], undefined);
 });
 
@@ -150,6 +169,7 @@ test('createDesktopBridge 会按能力域暴露 api、bootstrap、updates', asyn
       invokedChannels.push(channel);
       return channel;
     },
+    getRuntimeToken: async () => undefined,
     subscribeToUpdateState: (listener) => {
       subscribed = true;
       listener({ status: 'idle' });

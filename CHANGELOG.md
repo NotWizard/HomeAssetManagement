@@ -76,6 +76,10 @@
 - 优化：update state.json 改 `fs/promises.writeFile` 异步写，listener 全部 try/catch 包裹避免单个 listener 抛错阻塞广播 / Persist update state.json via `fs/promises.writeFile` and wrap each listener invocation in try/catch.
 - 修复：update 下载改写 `.partial` 临时文件，SHA-256 通过后 atomic rename；避免半截 zip 触发 sanitize 重下整包 / Write update downloads to `<asset>.zip.partial` and atomically rename to the final archive only after SHA-256 passes; eliminates half-downloaded zips and forced re-downloads.
 
+### Security
+
+- 安全：桌面端 API token 从 process.argv 改 IPC 获取，消除 ps -ef 暴露 / Migrate desktop API token from process.argv to IPC to remove ps -ef leak.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

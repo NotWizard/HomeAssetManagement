@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import undefer
 
 from app.core.database import SessionLocal
 from app.models.family import Family
@@ -617,7 +618,12 @@ def test_update_settings_only_revalues_current_family_holdings_and_snapshots():
     with SessionLocal() as session:
         current_holding = session.query(HoldingItem).filter(HoldingItem.name == "家庭备用金").one()
         untouched_holding = session.query(HoldingItem).filter(HoldingItem.id == outsider_holding_id).one()
-        untouched_snapshot = session.query(SnapshotDaily).filter(SnapshotDaily.id == outsider_snapshot_id).one()
+        untouched_snapshot = (
+            session.query(SnapshotDaily)
+            .options(undefer(SnapshotDaily.payload_json))
+            .filter(SnapshotDaily.id == outsider_snapshot_id)
+            .one()
+        )
         untouched_event = session.query(SnapshotEvent).filter(SnapshotEvent.id == outsider_event_id).one()
 
     assert float(current_holding.amount_base) == 100.0

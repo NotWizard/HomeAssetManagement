@@ -13,6 +13,7 @@ from typing import Any, BinaryIO
 from sqlalchemy import delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import undefer
 
 from app.core.clock import format_utc_iso_z
 from app.core.clock import normalize_utc_naive
@@ -63,6 +64,7 @@ class MigrationService:
         )
         snapshot_rows = session.scalars(
             select(SnapshotDaily)
+            .options(undefer(SnapshotDaily.payload_json))
             .where(SnapshotDaily.family_id == family.id)
             .order_by(SnapshotDaily.snapshot_date.asc())
         )

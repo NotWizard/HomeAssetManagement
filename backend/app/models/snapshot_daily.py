@@ -20,5 +20,8 @@ class SnapshotDaily(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     family_id: Mapped[int] = mapped_column(ForeignKey("family.id"), nullable=False, index=True)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    # payload_json 默认 deferred：list_daily_snapshots / list_event_summaries 等元数据端点
+    # 不再附带数 MB 的反序列化负担。需要 payload 的路径（get_daily_snapshot / build_daily_series /
+    # revalue_all_snapshots / migration export / get_latest_daily_snapshot）显式 .options(undefer(...))。
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, deferred=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)

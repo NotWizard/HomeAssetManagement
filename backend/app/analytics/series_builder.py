@@ -3,6 +3,7 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import undefer
 
 from app.core.clock import format_utc_iso_z
 from app.models.holding_item import HoldingItem
@@ -75,7 +76,11 @@ def _build_daily_series_uncached(
     start_date: date | None,
     end_date: date | None,
 ) -> dict:
-    stmt = select(SnapshotDaily).where(SnapshotDaily.family_id == family_id)
+    stmt = (
+        select(SnapshotDaily)
+        .options(undefer(SnapshotDaily.payload_json))
+        .where(SnapshotDaily.family_id == family_id)
+    )
     if start_date is not None:
         stmt = stmt.where(SnapshotDaily.snapshot_date >= start_date)
     if end_date is not None:

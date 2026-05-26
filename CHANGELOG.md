@@ -8,6 +8,7 @@
 
 ### Performance
 
+- 优化：`SnapshotDaily.payload_json` 改 deferred + `list_daily_snapshots` 不再附带 payload，单次端点 ~500ms → <50ms；新增 `get_daily_snapshot(date)` 走 undefer 单天取 payload / Mark `SnapshotDaily.payload_json` as deferred and drop payload from `list_daily_snapshots`; single-call latency ~500ms → <50ms with new `get_daily_snapshot(date)` for full payload.
 - 优化：CSV 导入逐行 SELECT 改为预取字典，1k 行从 ~10s 降到 <500ms / Refactor CSV import to use prefetched dictionaries (~10s → <500ms for 1k rows).
 
 ## [0.3.0] - 2026-05-23

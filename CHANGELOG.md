@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Performance
+
+- ECharts 按图表类型按需注册：原 `ECharts.tsx` 顶层一次性 `echarts.use` 全 5 类 chart + 通用组件，导致 echarts-core chunk 锁死全量。改为 ECharts.tsx 不再 use 任何模块，6 个 chart 组件（TrendChart/VolatilityChart/CorrelationHeatmap/SankeyChart/CurrencyBreakdownChart/CurrencyExposureChart）在自身模块顶层按需 `echarts.use([...])` 注册自己用到的 chart + components + renderer。各 chart 组件被 vite 自动拆成独立小 chunk（0.4-0.6 KB），为后续按 tab 进一步拆分 lazy load echarts 子集打基础。
+- Register echarts types per chart instead of top-level eager use. `ECharts.tsx` previously called `echarts.use` for all 5 chart types and common components at module load, locking echarts-core to the full surface. It now skips registration entirely; each of the 6 chart components (TrendChart, VolatilityChart, CorrelationHeatmap, SankeyChart, CurrencyBreakdownChart, CurrencyExposureChart) registers exactly the chart + components + renderer it needs at the top of its own module. Vite now splits each chart component into its own tiny chunk (0.4-0.6 KB), enabling per-tab lazy loading of echarts subsets in the future.
+
 ## [0.3.0] - 2026-05-23
 
 ### Added

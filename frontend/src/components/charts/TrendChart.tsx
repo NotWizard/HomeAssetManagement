@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
+import * as echarts from 'echarts/core';
+import { LineChart } from 'echarts/charts';
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 
 import { ECharts } from './ECharts';
 import { buildTrendChartOption } from './chartOptions';
+
+echarts.use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
 
 type Props = {
   dates: string[];

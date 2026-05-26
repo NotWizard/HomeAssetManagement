@@ -1,8 +1,14 @@
 import { useMemo } from 'react';
+import * as echarts from 'echarts/core';
+import { HeatmapChart } from 'echarts/charts';
+import { GridComponent, TooltipComponent, VisualMapComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
 
 import { ECharts } from './ECharts';
 import { buildCorrelationHeatmapOption, getCorrelationHeatmapHeight } from './chartOptions';
 import type { CorrelationData } from '../../services/analytics';
+
+echarts.use([HeatmapChart, GridComponent, TooltipComponent, VisualMapComponent, CanvasRenderer]);
 
 type Props = {
   data: CorrelationData;

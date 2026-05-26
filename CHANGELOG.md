@@ -8,6 +8,9 @@
 
 ### Performance
 
+- 在 EntryPage / MembersPage / OverviewPage / ImportPage 的 useQuery 显式设置 staleTime：holdings 60s（页面切换 / tab 切换不会重复 fetch），members / categories / importLogs 5 分钟（变更频率低）。原 React Query 默认 `staleTime: 0`，每次组件挂载都会重新触发 fetch。
+- Set explicit `staleTime` on holdings / members / categories / importLogs useQuery calls in EntryPage, MembersPage, OverviewPage and ImportPage: holdings 60 s (page / tab switches no longer refetch), members / categories / importLogs 5 minutes (low change frequency). React Query's default `staleTime: 0` was forcing a refetch on every mount.
+
 - AnalyticsPage 合并 7 次独立 `useUIStore` selector 为单次 `useShallow` 解构：原 7 次独立调用每次 store action 触发都会执行 7 个比较，且每个 selector 都建立一个订阅。改为 `useUIStore(useShallow(state => ({...})))` 单订阅 + 浅比较 7 字段，减少重渲染传播与比较开销。
 - Replace 7 individual `useUIStore` selector calls in AnalyticsPage with a single `useShallow` destructure. The previous pattern created seven independent store subscriptions, each running its own comparison on every store action. The component now uses one `useShallow` subscription that returns all seven fields and shallow-compares them in a single pass, cutting subscription and comparison overhead.
 

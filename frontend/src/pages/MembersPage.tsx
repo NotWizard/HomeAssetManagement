@@ -20,7 +20,11 @@ export function MembersPage() {
   const [newMemberName, setNewMemberName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const membersQuery = useQuery({ queryKey: queryKeys.members.all(), queryFn: fetchMembers });
+  const membersQuery = useQuery({
+    queryKey: queryKeys.members.all(),
+    queryFn: fetchMembers,
+    staleTime: 5 * 60_000,
+  });
   const members = membersQuery.data ?? [];
   const membersUnavailable = membersQuery.isError && !membersQuery.data;
   const membersErrorMessage = membersQuery.isError ? formatError(membersQuery.error) : null;

@@ -25,7 +25,11 @@ export function ImportPage() {
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingImportId, setDownloadingImportId] = useState<number | null>(null);
 
-  const logsQuery = useQuery({ queryKey: queryKeys.importLogs.all(), queryFn: fetchImportLogs });
+  const logsQuery = useQuery({
+    queryKey: queryKeys.importLogs.all(),
+    queryFn: fetchImportLogs,
+    staleTime: 5 * 60_000,
+  });
 
   const previewMutation = useMutation({
     mutationFn: (target: File) => previewImport(target),

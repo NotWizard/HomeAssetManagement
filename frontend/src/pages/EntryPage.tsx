@@ -90,10 +90,26 @@ export function EntryPage() {
   const [normalizeMemberId, setNormalizeMemberId] = useState<number | null>(null);
   const [normalizeError, setNormalizeError] = useState<string | null>(null);
 
-  const membersQuery = useQuery({ queryKey: queryKeys.members.all(), queryFn: fetchMembers });
-  const holdingsQuery = useQuery({ queryKey: queryKeys.holdings.all(), queryFn: fetchHoldings });
-  const assetCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('asset'), queryFn: () => fetchCategories('asset') });
-  const liabilityCategoryQuery = useQuery({ queryKey: queryKeys.categories.type('liability'), queryFn: () => fetchCategories('liability') });
+  const membersQuery = useQuery({
+    queryKey: queryKeys.members.all(),
+    queryFn: fetchMembers,
+    staleTime: 5 * 60_000,
+  });
+  const holdingsQuery = useQuery({
+    queryKey: queryKeys.holdings.all(),
+    queryFn: fetchHoldings,
+    staleTime: 60_000,
+  });
+  const assetCategoryQuery = useQuery({
+    queryKey: queryKeys.categories.type('asset'),
+    queryFn: () => fetchCategories('asset'),
+    staleTime: 5 * 60_000,
+  });
+  const liabilityCategoryQuery = useQuery({
+    queryKey: queryKeys.categories.type('liability'),
+    queryFn: () => fetchCategories('liability'),
+    staleTime: 5 * 60_000,
+  });
   const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 

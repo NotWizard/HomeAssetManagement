@@ -8,6 +8,9 @@
 
 ### Performance
 
+- Sankey chart label formatter 提到模块顶层 + 节点预计算 `__label` / `__displayName`：原 `buildSankeyChartOption` 在 `data.nodes.map` 内对每个节点创建 `formatter: () => getDefaultLabel(node)` 与 `formatter: () => getDisplayName(node)` 两个新闭包（节点数百时是 N×2 个 captured-this 函数 + 持有 node 引用阻碍 GC）。改为模块顶层 `sankeyLabelFormatter` / `sankeyEmphasisLabelFormatter` 共享读 `params.data.__label / __displayName`，节点 map 时直接预计算字符串字段。
+- Lift the Sankey label formatters to module top-level and pre-compute `__label` / `__displayName` on each node. `buildSankeyChartOption` previously created `formatter: () => getDefaultLabel(node)` and `formatter: () => getDisplayName(node)` closures per node inside `data.nodes.map` — N×2 captured-this closures holding node references, which hurts GC at hundreds of nodes. Two top-level formatters (`sankeyLabelFormatter` / `sankeyEmphasisLabelFormatter`) now read `params.data.__label` / `__displayName` precomputed during the map.
+
 - AppShell 移动端 sticky header 的 `backdrop-blur-md` 改为条件挂载：仅在侧边抽屉打开（mobileOpen）时挂上毛玻璃效果，抽屉关闭时回退 `bg-background/95` 不再付 GPU 合成开销。原本无条件 backdrop-blur 在移动端滚动 / 切换页面时持续合成，但抽屉关闭时背后并没有半透明遮罩，毛玻璃没有视觉收益。
 - Gate the mobile sticky header's `backdrop-blur-md` in AppShell on the sidebar drawer state. The blur is now applied only when `mobileOpen` is true (the drawer is open); when closed, the header falls back to a solid `bg-background/95` so the browser stops compositing the blur layer on every scroll / route change. The unconditional blur did not buy any visual effect when the drawer was closed (no semi-transparent overlay was behind it) yet still cost the GPU per frame.
 

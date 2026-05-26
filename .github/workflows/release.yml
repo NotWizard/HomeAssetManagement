@@ -41,6 +41,11 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          # 缓存 pip download cache（macOS 下为 ~/Library/Caches/pip）。
+          # setup-python 内部 hashFiles(cache-dependency-path) 做 key，
+          # 与 ci.yml backend job 同模式，避免每次 release 都重下依赖。
+          cache: pip
+          cache-dependency-path: backend/requirements-desktop.txt
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -66,6 +71,17 @@ jobs:
 
       - name: Install desktop deps
         run: npm --prefix desktop ci
+
+      - name: Cache PyInstaller bytecode
+        uses: actions/cache@v4
+        with:
+          # backend/build_desktop.py 把 PYINSTALLER_CONFIG_DIR 指到
+          # backend/.pyinstaller/<arch>/，存 PyInstaller 解析/编译产物的
+          # bytecode cache。命中后冷打包阶段省一次完整 import-graph 计算。
+          path: backend/.pyinstaller
+          key: pyinstaller-${{ runner.os }}-${{ hashFiles('backend/requirements-desktop.txt', 'backend/build_desktop.py') }}
+          restore-keys: |
+            pyinstaller-${{ runner.os }}-
 
       - name: Build DMG + ZIP (arm64)
         run: npm --prefix desktop run make:dmg:arm64

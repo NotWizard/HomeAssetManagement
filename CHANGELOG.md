@@ -8,6 +8,9 @@
 
 ### Performance
 
+- AnalyticsPage 合并 7 次独立 `useUIStore` selector 为单次 `useShallow` 解构：原 7 次独立调用每次 store action 触发都会执行 7 个比较，且每个 selector 都建立一个订阅。改为 `useUIStore(useShallow(state => ({...})))` 单订阅 + 浅比较 7 字段，减少重渲染传播与比较开销。
+- Replace 7 individual `useUIStore` selector calls in AnalyticsPage with a single `useShallow` destructure. The previous pattern created seven independent store subscriptions, each running its own comparison on every store action. The component now uses one `useShallow` subscription that returns all seven fields and shallow-compares them in a single pass, cutting subscription and comparison overhead.
+
 - EntryHoldingsTable 行级抽出 `EntryHoldingRow` 为独立 React.memo 组件：原 GroupBlock 内部 `rows.map()` 行内使用 inline arrow handler（`onChange={(e)=>onToggleHoldingSelection(row.id,...)}` / `onClick={()=>onOpenEditDialog(row)}` / `onClick={()=>onDeleteHolding(row.id)}`），每次父级重渲染都会重新创建函数引用，迫使所有 row TableRow 子树跟随重渲染。本次将 row 抽为 memo 组件，selectedIdSet 改成传布尔 `selected` 让 props 全是基本值利于浅比较，三个 inline handler 用 useCallback 锁定，依赖仅指向 row.id / row 引用与父稳定 handler。
 - Extract per-row `EntryHoldingRow` as a standalone React.memo component. Previously `GroupBlock` mapped rows inline with three inline arrow handlers (selection toggle, open-edit, delete) that recreated function references every parent re-render, forcing every TableRow subtree to re-render even when its own data was unchanged. The row is now a memo component that receives a boolean `selected` (instead of the full `selectedIdSet` Set) so all props are primitives, and the three handlers are wrapped in `useCallback` whose dependencies are only `row.id` / `row` plus the already-stable parent handlers. Per the plan, 200-row interactions should drop from 80-150 ms to under 16 ms.
 

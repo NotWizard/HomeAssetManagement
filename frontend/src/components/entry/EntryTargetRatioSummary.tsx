@@ -1,3 +1,4 @@
+import { memo, type MouseEvent } from 'react';
 import { CheckCircle2, ChevronRight, Sparkles, TriangleAlert } from 'lucide-react';
 
 import { Badge } from '../ui/badge';
@@ -19,7 +20,7 @@ type EntryTargetRatioSummaryProps = {
   onOpenNormalize: (memberId: number) => void;
 };
 
-export function EntryTargetRatioSummary({
+function EntryTargetRatioSummaryBase({
   hasLoadedHoldings,
   memberSummaries,
   overview,
@@ -87,10 +88,9 @@ export function EntryTargetRatioSummary({
             key={summary.memberId}
             summary={summary}
             focused={focusedMemberId === summary.memberId}
-            onFocus={() =>
-              onFocusMember(focusedMemberId === summary.memberId ? null : summary.memberId)
-            }
-            onNormalize={() => onOpenNormalize(summary.memberId)}
+            focusedMemberId={focusedMemberId}
+            onFocusMember={onFocusMember}
+            onOpenNormalize={onOpenNormalize}
           />
         ))}
       </div>
@@ -98,14 +98,26 @@ export function EntryTargetRatioSummary({
   );
 }
 
+// memo 包装：父 EntryPage 因 form 编辑 / 输入触发的频繁重渲染，只要 summaries / overview
+// 与稳定 handler 引用不变就能短路。需配合 EntryPage 端 useCallback 稳定化 onFocusMember
+// / onOpenNormalize。
+export const EntryTargetRatioSummary = memo(EntryTargetRatioSummaryBase);
+
 type MemberAllocationCardProps = {
   summary: MemberAllocationSummary;
   focused: boolean;
-  onFocus: () => void;
-  onNormalize: () => void;
+  focusedMemberId: number | null;
+  onFocusMember: (memberId: number | null) => void;
+  onOpenNormalize: (memberId: number) => void;
 };
 
-function MemberAllocationCard({ summary, focused, onFocus, onNormalize }: MemberAllocationCardProps) {
+function MemberAllocationCardBase({
+  summary,
+  focused,
+  focusedMemberId,
+  onFocusMember,
+  onOpenNormalize,
+}: MemberAllocationCardProps) {
   const isBalanced = summary.status.label === '已达标';
   const isOverAllocated = summary.status.label === '已超出';
   const StatusIcon = isBalanced ? CheckCircle2 : TriangleAlert;
@@ -121,6 +133,14 @@ function MemberAllocationCard({ summary, focused, onFocus, onNormalize }: Member
       ? 'bg-amber-400'
       : 'bg-rose-400';
 
+  const handleFocusClick = () => {
+    onFocusMember(focusedMemberId === summary.memberId ? null : summary.memberId);
+  };
+  const handleNormalizeClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onOpenNormalize(summary.memberId);
+  };
+
   return (
     <article
       className={cn(
@@ -133,7 +153,7 @@ function MemberAllocationCard({ summary, focused, onFocus, onNormalize }: Member
       <div className="flex items-center justify-between gap-2">
         <button
           type="button"
-          onClick={onFocus}
+          onClick={handleFocusClick}
           className="flex min-w-0 items-center gap-1 text-left"
           aria-pressed={focused}
           aria-label={
@@ -166,10 +186,7 @@ function MemberAllocationCard({ summary, focused, onFocus, onNormalize }: Member
           variant={summary.needsAdjustment ? 'default' : 'outline'}
           size="sm"
           className="h-6 gap-1 px-2 text-[11px]"
-          onClick={(event) => {
-            event.stopPropagation();
-            onNormalize();
-          }}
+          onClick={handleNormalizeClick}
           disabled={summary.assetCount === 0}
         >
           <Sparkles className="h-3 w-3" />
@@ -193,3 +210,7 @@ function MemberAllocationCard({ summary, focused, onFocus, onNormalize }: Member
     </article>
   );
 }
+
+// memo 包装：父 EntryTargetRatioSummary 重渲染时，summary 引用一般稳定（来自上游 memo）+
+// 父级稳定 onFocusMember / onOpenNormalize 让 props 浅比较短路未变 card。
+const MemberAllocationCard = memo(MemberAllocationCardBase);

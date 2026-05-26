@@ -340,7 +340,7 @@ export function EntryPage() {
     setMemberDeleteOpen(true);
   };
 
-  const submitForm = () => {
+  const submitForm = useCallback(() => {
     setError(null);
     const validation = validateEntryForm(form);
     if (validation.error || validation.category == null) {
@@ -358,7 +358,21 @@ export function EntryPage() {
     } else {
       createHoldingMutation.mutate(payload);
     }
-  };
+  }, [form, editing, updateHoldingMutation, createHoldingMutation]);
+
+  const closeEntryDialog = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const handleFocusMember = useCallback((memberId: number | null) => {
+    setFocusedMemberId(memberId);
+    if (memberId != null) {
+      const target = document.getElementById(`entry-group-${memberId}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }, []);
 
   const toggleHoldingSelection = useCallback((holdingId: number, checked: boolean) => {
     setSelectedHoldingIds((current) => {
@@ -460,19 +474,8 @@ export function EntryPage() {
             memberSummaries={memberSummaries}
             overview={memberAllocationOverview}
             focusedMemberId={focusedMemberId}
-            onFocusMember={(memberId) => {
-              setFocusedMemberId(memberId);
-              if (memberId != null) {
-                const target = document.getElementById(`entry-group-${memberId}`);
-                if (target) {
-                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-              }
-            }}
-            onOpenNormalize={(memberId) => {
-              setNormalizeError(null);
-              setNormalizeMemberId(memberId);
-            }}
+            onFocusMember={handleFocusMember}
+            onOpenNormalize={handleOpenNormalize}
           />
           <EntryFiltersBar
             keyword={keyword}
@@ -549,7 +552,7 @@ export function EntryPage() {
           createHoldingMutation.isPending || updateHoldingMutation.isPending
         }
         setForm={setForm}
-        onClose={() => setOpen(false)}
+        onClose={closeEntryDialog}
         onSubmit={submitForm}
       />
 

@@ -8,6 +8,9 @@
 
 ### Performance
 
+- 三个 entry 组件 React.memo 包装并稳定父端 handler：CategoryTreePicker / EntryHoldingFormDialog / EntryTargetRatioSummary（含内部 MemberAllocationCard）均改为 `export const X = memo(XBase)`；EntryPage 端将原 inline arrow `onClose={()=>setOpen(false)}` / `onFocusMember={(id)=>{...}}` 替换为 useCallback 稳定 handler，并把 `submitForm` 也改 useCallback。父 EntryPage 因表单输入 / 筛选 / 选择频繁重渲染时，三块大组件依靠 memo 浅比较短路。
+- Wrap three entry components in React.memo and stabilize their parent handlers. CategoryTreePicker, EntryHoldingFormDialog, EntryTargetRatioSummary (and the internal MemberAllocationCard) are now `export const X = memo(XBase)`. In EntryPage, inline arrow handlers (`onClose={() => setOpen(false)}`, the long `onFocusMember={(id) => { ... }}`) are replaced with `useCallback`-stable handlers, and `submitForm` is also wrapped in `useCallback`. Frequent EntryPage re-renders driven by form input / filter / selection now short-circuit through memo shallow comparison on these three sizeable subtrees.
+
 - 大列表虚拟化：引入 `@tanstack/react-virtual`，在 ImportPage CSV 预检结果表和 CurrencyAnalyticsSection 币种明细表内按 `rows.length > 50` 走 `useVirtualizer`，仅渲染可视区行 + 上下 spacer `<tr>` 占位；<=50 行直接 map 保持简单。EntryHoldingsTable 跳过：嵌套 GroupBlock 结构（每 member 一组 header + rows）且单组通常 <50 行，已有 EntryHoldingRow memo（前一提交），虚拟化嵌套 group 改造复杂收益有限。
 - Add list virtualization via `@tanstack/react-virtual`. The CSV preview table in ImportPage and the per-currency detail table in CurrencyAnalyticsSection now use `useVirtualizer` when `rows.length > 50`, rendering only the visible window with spacer `<tr>` rows for top/bottom padding; tables with ≤50 rows still map directly to keep the simple path. EntryHoldingsTable is skipped: its nested GroupBlock structure (one header + rows per member) keeps each group below the threshold, and per-row memoization (previous commit) already covers the hot path; virtualizing nested groups would add complexity with limited gain.
 

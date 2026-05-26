@@ -1,5 +1,6 @@
 import { Check, ChevronDown, ChevronRight, Search } from 'lucide-react';
 import * as React from 'react';
+import { memo } from 'react';
 
 import { cn } from '../../lib/cn';
 import type { CategoryNode } from '../../types';
@@ -22,7 +23,7 @@ type CategoryTreePickerProps = {
 
 type CategoryType = 'asset' | 'liability';
 
-export function CategoryTreePicker({
+function CategoryTreePickerBase({
   value,
   onChange,
   assetTree,
@@ -290,3 +291,7 @@ export function CategoryTreePicker({
     </div>
   );
 }
+
+// memo 包装：CategoryTreePicker 内部维护大量 search state，但父 EntryHoldingFormDialog
+// 频繁因 form 编辑重渲染时，只要 value / 树 / onChange / onOpenChange 引用稳定就能短路。
+export const CategoryTreePicker = memo(CategoryTreePickerBase);

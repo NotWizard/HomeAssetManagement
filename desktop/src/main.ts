@@ -29,6 +29,7 @@ import {
   UPDATE_IPC_CHANNELS,
   createUpdateController,
 } from './update-controller.js';
+import { createFileLogger, type FileLogger } from './file-logger.js';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(currentDir, '..', '..');
@@ -41,6 +42,9 @@ const BACKEND_KILL_GRACE_MS = 4_000;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
+// 主进程进程级 file logger：app.whenReady 之后才允许 app.getPath('logs')，
+// 因此 ready 之前为 null；console-message handler 在判空后写入。
+let fileLogger: FileLogger | null = null;
 
 // 进程级一次性 API token：每次 Electron 主进程启动时随机生成，注入 sidecar env，
 // 同时通过 webPreferences.additionalArguments 传给 preload，使 renderer 在每次
@@ -314,13 +318,21 @@ function wireWindowDiagnostics(window: BrowserWindow): void {
   });
 
   window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    // Electron level：0=verbose, 1=info, 2=warning, 3=error。
+    // 打包态只转发 warning/error，避免 renderer 大量 info/debug 噪声把日志撑爆；
+    // 开发态依旧全转，方便调试。
+    if (app.isPackaged && level < 2) {
+      return;
+    }
     const channel = level >= 2 ? 'stderr' : 'stdout';
     const prefix = `[hbs-renderer] ${sourceId || 'unknown'}:${line} ${message}\n`;
     if (channel === 'stderr') {
       process.stderr.write(prefix);
-      return;
+    } else {
+      process.stdout.write(prefix);
     }
-    process.stdout.write(prefix);
+    // 同时落到磁盘 main.log（行缓冲 1s flush），仅在 logger 已初始化后写
+    fileLogger?.write(prefix);
   });
 }
 
@@ -433,6 +445,11 @@ ipcMain.handle('hbs:retry-bootstrap', async () => {
   backendController.stopAndResetPort();
   await bootstrap();
 });
+ipcMain.handle('hbs:open-logs-dir', async () => {
+  // 错误页 / future 设置面板可一键拉起系统文件管理器到 log 目录，
+  // 方便用户把 main.log + backend log 提交给开发者排查。
+  await shell.openPath(app.getPath('logs'));
+});
 ipcMain.handle(UPDATE_IPC_CHANNELS.getState, async () => updateController.getState());
 ipcMain.handle(UPDATE_IPC_CHANNELS.check, async () => updateController.checkForUpdates());
 ipcMain.handle(UPDATE_IPC_CHANNELS.download, async () => updateController.downloadUpdate());
@@ -446,6 +463,15 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.whenReady().then(async () => {
+    // app.getPath('logs') 只有在 ready 之后才可调用，在这里初始化 file logger，
+    // 让随后的 wireWindowDiagnostics console-message 转发能落盘。
+    try {
+      fileLogger = createFileLogger({ logsDir: app.getPath('logs') });
+    } catch (error) {
+      process.stderr.write(
+        `[hbs-file-logger] init failed: ${error instanceof Error ? error.message : String(error)}\n`
+      );
+    }
     wireNavigationGuards();
     wireContentSecurityPolicy();
     const updateStartup = updateController.start().catch((error) => {
@@ -481,6 +507,8 @@ app.on('activate', async () => {
 app.on('before-quit', () => {
   updateController.stop();
   backendController.stopAndResetPort();
+  // 把残余缓冲 flush + end stream；fire-and-forget，不阻塞退出。
+  void fileLogger?.close();
 });
 
 app.on('window-all-closed', () => {

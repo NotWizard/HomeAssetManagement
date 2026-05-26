@@ -6,6 +6,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `desktop/src/file-logger.ts` 提供 append 模式的 main.log 行缓冲 logger（默认 1s flush 或满 200 行），由 `desktop/src/main.ts` 在 `app.whenReady` 后用 `app.getPath('logs')` 初始化、`before-quit` flush + close。renderer console-message 现在同时落盘到 `logs/main.log`，方便用户出问题时把日志连同 backend 一并提供。错误页新增「打开日志目录」按钮（preload bridge 暴露 `bootstrap.openLogsDir()` → IPC `hbs:open-logs-dir` → `shell.openPath(app.getPath('logs'))`）。
+- Add `desktop/src/file-logger.ts`, an append-mode line-buffered logger for `main.log` (1 s flush or 200-line flush by default). `desktop/src/main.ts` initialises it once `app.whenReady` resolves (so `app.getPath('logs')` is valid) and flushes/closes it on `before-quit`. Renderer `console-message` lines now mirror to `logs/main.log` in addition to stdout/stderr, giving users an artefact they can attach when reporting issues. The startup error page gains an "Open logs directory" action that hits a new `bootstrap.openLogsDir()` preload bridge method, routed through the `hbs:open-logs-dir` IPC channel to `shell.openPath(app.getPath('logs'))`.
+
+### Changed
+
+- `desktop/src/main.ts` renderer `console-message` 转发分级：打包态只转发 `level >= 2`（warning/error），开发态依旧全量转发。配合新增 file logger，stderr/stdout 的 renderer 噪声大幅下降，但 warning/error 仍同时落 stdio + main.log 不丢失。
+- `desktop/src/main.ts` now downgrades renderer `console-message` forwarding in packaged mode: only `level >= 2` (warning/error) is forwarded, while dev mode keeps the full pipe. Combined with the new file logger, packaged stdout/stderr is much quieter, while warnings/errors still reach both stdio and `main.log`.
+
 ### Changed
 
 - `desktop/src/update-controller.ts` state.json 持久化改 `fs/promises.writeFile`，`persist` 不再每次 `mkdirSync`；目录在 `controller.start()` 一次性建好。`emitState` 同步用 try/catch 包裹每个 listener，单个 listener（如已销毁的 webContents.send）抛错不再阻塞其他 listener 与状态广播。持久化失败也只打 stderr 不向上抛。

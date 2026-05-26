@@ -465,6 +465,13 @@ export function createErrorPage(message: string): string {
     '  retryButton.removeAttribute("disabled");',
     '  retryButton.textContent = "重新尝试启动";',
     '});',
+    'const logsButton = document.querySelector("[data-open-logs-dir]");',
+    'logsButton?.addEventListener("click", async () => {',
+    '  try {',
+    '    const open = window.__HBS_DESKTOP__?.bootstrap?.openLogsDir;',
+    '    if (typeof open === "function") { await open(); }',
+    '  } catch (_error) { /* ignore */ }',
+    '});',
     '</script>',
   ].join('');
 
@@ -483,7 +490,7 @@ export function createErrorPage(message: string): string {
     steps: ['先尝试应用内重试', '如系统拦截则去设置允许', '仍有问题时反馈错误详情'],
     tone: 'error',
     actions:
-      '<div class="actions"><button type="button" class="action-button" data-retry-bootstrap>重新尝试启动</button></div>',
+      '<div class="actions"><button type="button" class="action-button" data-retry-bootstrap>重新尝试启动</button><button type="button" class="action-button" data-open-logs-dir>打开日志目录</button></div>',
     script,
   });
 }

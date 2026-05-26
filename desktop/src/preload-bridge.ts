@@ -2,6 +2,7 @@ export const API_BASE_ARG_PREFIX = '--hbs-api-base-url=';
 export const API_TOKEN_ARG_PREFIX = '--hbs-api-token=';
 export const API_TOKEN_HEADER = 'X-HBS-Token';
 export const RETRY_BOOTSTRAP_CHANNEL = 'hbs:retry-bootstrap';
+export const OPEN_LOGS_DIR_CHANNEL = 'hbs:open-logs-dir';
 export const UPDATE_STATE_CHANNEL = 'hbs:update:changed';
 export const UPDATE_GET_STATE_CHANNEL = 'hbs:update:get-state';
 export const UPDATE_CHECK_CHANNEL = 'hbs:update:check';
@@ -163,6 +164,7 @@ export function createDesktopBridge(deps: DesktopBridgeDeps) {
     },
     bootstrap: {
       retry: () => deps.invokeIpc(RETRY_BOOTSTRAP_CHANNEL),
+      openLogsDir: () => deps.invokeIpc(OPEN_LOGS_DIR_CHANNEL),
     },
     updates: {
       getState: () => deps.invokeIpc(UPDATE_GET_STATE_CHANNEL),

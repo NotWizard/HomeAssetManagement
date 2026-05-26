@@ -8,5 +8,6 @@ alembic==1.18.4
 pydantic-settings==2.14.1
 apscheduler==3.11.2
 httpx==0.28.1
+orjson==3.11.9
 python-multipart==0.0.29
 pytest==9.0.3

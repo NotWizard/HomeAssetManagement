@@ -1,4 +1,3 @@
-import json
 from datetime import UTC
 from datetime import date
 from decimal import Decimal
@@ -21,6 +20,8 @@ from app.services.common import get_scoped_member
 from app.services.fx_service import FXService
 from app.utils.fx import convert_to_base_amount
 from app.utils.serialization import decimal_to_float
+from app.utils.serialization import dumps as _json_dumps
+from app.utils.serialization import loads as _json_loads
 
 SNAPSHOT_PAYLOAD_SCHEMA_VERSION = 2
 LEGACY_SNAPSHOT_PAYLOAD_VERSION = 1
@@ -42,7 +43,7 @@ class SnapshotService:
             family_id=family.id,
             trigger_type=trigger_type,
             snapshot_at=utc_now_naive(),
-            payload_json=json.dumps(payload, ensure_ascii=False),
+            payload_json=_json_dumps(payload),
         )
         session.add(row)
         session.flush()
@@ -69,11 +70,11 @@ class SnapshotService:
             row = SnapshotDaily(
                 family_id=family.id,
                 snapshot_date=snapshot_date,
-                payload_json=json.dumps(payload, ensure_ascii=False),
+                payload_json=_json_dumps(payload),
             )
             session.add(row)
         else:
-            row.payload_json = json.dumps(payload, ensure_ascii=False)
+            row.payload_json = _json_dumps(payload)
 
         # 双写 daily_totals（slim 副本，给 totals-only 端点用）
         _upsert_daily_total(session, family.id, snapshot_date, payload.get("totals") or {})
@@ -247,7 +248,7 @@ class SnapshotService:
         )
         for row in daily_rows:
             payload = parse_snapshot_payload(row.payload_json)
-            row.payload_json = json.dumps(
+            row.payload_json = _json_dumps(
                 _revalue_snapshot_payload(
                     session,
                     payload,
@@ -255,8 +256,7 @@ class SnapshotService:
                     as_of=row.snapshot_date,
                     rate_cache=rate_cache,
                     allow_rate_refresh=allow_rate_refresh,
-                ),
-                ensure_ascii=False,
+                )
             )
 
         event_rows = list(
@@ -268,7 +268,7 @@ class SnapshotService:
         )
         for row in event_rows:
             payload = parse_snapshot_payload(row.payload_json)
-            row.payload_json = json.dumps(
+            row.payload_json = _json_dumps(
                 _revalue_snapshot_payload(
                     session,
                     payload,
@@ -276,15 +276,14 @@ class SnapshotService:
                     as_of=row.snapshot_at.date(),
                     rate_cache=rate_cache,
                     allow_rate_refresh=allow_rate_refresh,
-                ),
-                ensure_ascii=False,
+                )
             )
 
         session.flush()
 
 
 def parse_snapshot_payload(payload_json: str) -> dict:
-    payload = json.loads(payload_json)
+    payload = _json_loads(payload_json)
     if not isinstance(payload, dict):
         return {
             "schema_version": LEGACY_SNAPSHOT_PAYLOAD_VERSION,

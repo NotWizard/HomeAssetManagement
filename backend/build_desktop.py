@@ -79,6 +79,8 @@ def build_pyinstaller_args(project_root: Path, target_arch: str) -> list[str]:
         str(paths.spec_dir),
         "--paths",
         str(backend_dir),
+        "--hidden-import",
+        "orjson",
         "--add-data",
         f"{backend_dir / 'db_migrations'}:db_migrations",
         "--add-data",

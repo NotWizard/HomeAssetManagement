@@ -112,6 +112,7 @@ export async function signAndNotarizeApp({
   securityConfig,
   osxSignModule,
   notarizeModule,
+  runCommand = runSpawnCommand,
 } = {}) {
   if (!securityConfig?.enabled) {
     return false;
@@ -119,6 +120,15 @@ export async function signAndNotarizeApp({
 
   if (!existsSync(appPath) || !statSync(appPath).isDirectory()) {
     throw new Error(`找不到待签名的 .app 目录：${appPath}`);
+  }
+
+  if (securityConfig.mode === 'unsigned') {
+    // @electron/osx-sign 不把字符串 '-' 视作 ad-hoc sentinel：它会调 security
+    // find-identity 在 keychain 里查 '-' 这个名字，找不到就抛 "No identity
+    // found for signing." 直接退出。系统 codesign CLI 才是 macOS 长期约定的
+    // ad-hoc 签名入口（-s -），这条路径不依赖任何 keychain identity。
+    runCommand('codesign', ['--force', '--deep', '--sign', '-', appPath], dirname(appPath));
+    return true;
   }
 
   const osxSign = osxSignModule ?? (await import('@electron/osx-sign'));
@@ -133,15 +143,11 @@ export async function signAndNotarizeApp({
     identity: securityConfig.identity,
     keychain: securityConfig.keychain,
     platform: 'darwin',
-    hardenedRuntime: securityConfig.mode !== 'unsigned',
+    hardenedRuntime: true,
     strictVerify: true,
     preAutoEntitlements: false,
     preEmbedProvisioningProfile: false,
   });
-
-  if (securityConfig.mode === 'unsigned') {
-    return true;
-  }
 
   if (typeof notarizeApi.notarize !== 'function') {
     throw new Error('@electron/notarize 未暴露 notarize');

@@ -9,19 +9,14 @@ function escapeHtml(value: string): string {
 
 function createBrandMark(): string {
   return [
-    '<svg viewBox="0 0 64 64" role="img" aria-label="家庭资产负债表">',
-    '<defs>',
-    '<linearGradient id="hbs-gradient" x1="10%" y1="10%" x2="90%" y2="90%">',
-    '<stop offset="0%" stop-color="#2563eb" />',
-    '<stop offset="100%" stop-color="#0f766e" />',
-    '</linearGradient>',
-    '</defs>',
-    '<rect x="6" y="6" width="52" height="52" rx="16" fill="url(#hbs-gradient)" />',
-    '<path d="M20 31.5 32 20l12 11.5v12.5a2 2 0 0 1-2 2h-5.5V37h-9v9H22a2 2 0 0 1-2-2Z" fill="#f8fafc" />',
-    '<path d="M26 46V34h12v12" fill="none" stroke="#0f172a" stroke-width="2.5" stroke-linejoin="round" />',
-    '<circle cx="46" cy="18" r="7" fill="#facc15" />',
-    '<path d="M42.5 18h7" stroke="#0f172a" stroke-width="2" stroke-linecap="round" />',
-    '<path d="M46 14.5v7" stroke="#0f172a" stroke-width="2" stroke-linecap="round" />',
+    '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="家庭资产负债表">',
+    '<rect x="2" y="2" width="60" height="60" rx="14" fill="#FFFFFF" stroke="#0E1E3F" stroke-opacity="0.12" stroke-width="1" />',
+    '<g transform="translate(32 32)">',
+    '<g transform="translate(4 -12) rotate(45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#2490F3" /></g>',
+    '<g transform="translate(-4 12) rotate(45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#2490F3" /></g>',
+    '<g transform="translate(-12 -4) rotate(-45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#0E1E3F" /></g>',
+    '<g transform="translate(12 4) rotate(-45)"><rect x="-10.5" y="-5" width="21" height="10" rx="5" fill="#0E1E3F" /></g>',
+    '</g>',
     '</svg>',
   ].join('');
 }

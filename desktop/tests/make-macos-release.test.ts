@@ -201,13 +201,13 @@ test('签名流程会把 Developer ID identity 与公证凭据传给 Electron �
   }
 });
 
-test('unsigned 签名流程跳过 osx-sign，直接走系统 codesign ad-hoc', async () => {
+test('unsigned 签名流程跳过 osx-sign，走 inside-out 系统 codesign ad-hoc', async () => {
   const signing = await import('../scripts/macos-release-security.mjs');
   const tempRoot = mkdtempSync(join(tmpdir(), 'hbs-release-adhoc-sign-test-'));
 
   try {
     const appPath = join(tempRoot, 'HouseholdBalanceSheet.app');
-    mkdirSync(join(appPath, 'Contents'), { recursive: true });
+    mkdirSync(join(appPath, 'Contents', 'Frameworks', 'Helper.app'), { recursive: true });
     const signCalls = [];
     const notarizeCalls = [];
     const commandCalls = [];
@@ -238,13 +238,17 @@ test('unsigned 签名流程跳过 osx-sign，直接走系统 codesign ad-hoc', a
     assert.equal(result, true);
     assert.deepEqual(signCalls, []);
     assert.deepEqual(notarizeCalls, []);
-    assert.deepEqual(commandCalls, [
-      {
-        command: 'codesign',
-        args: ['--force', '--deep', '--sign', '-', appPath],
-        cwd: tempRoot,
-      },
-    ]);
+    assert.equal(commandCalls.length, 2);
+    assert.equal(commandCalls[0]?.args[0], '--force');
+    assert.equal(commandCalls[0]?.args[1], '--deep');
+    assert.equal(commandCalls[0]?.args[2], '--sign');
+    assert.equal(commandCalls[0]?.args[3], '-');
+    assert.ok(commandCalls[0]?.args[4]?.includes('Helper.app'));
+    assert.deepEqual(commandCalls[1], {
+      command: 'codesign',
+      args: ['--force', '--sign', '-', appPath],
+      cwd: tempRoot,
+    });
   } finally {
     rmSync(tempRoot, { force: true, recursive: true });
   }

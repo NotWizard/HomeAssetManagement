@@ -241,7 +241,7 @@ test('unsigned 签名流程走系统 codesign ad-hoc，绕开 @electron/osx-sign
     assert.deepEqual(commandCalls, [
       {
         command: 'codesign',
-        args: ['--force', '--deep', '--sign', '-', appPath],
+        args: ['--force', '--sign', '-', appPath],
         cwd: tempRoot,
       },
     ]);
@@ -306,7 +306,7 @@ test('unsigned 签名验收只跑 codesign，避免把未公证包误判为构�
     assert.deepEqual(calls, [
       {
         command: 'codesign',
-        args: ['--verify', '--deep', '--strict', '--verbose=4', appPath],
+        args: ['--verify', '--strict', '--verbose=4', appPath],
         cwd: tempRoot,
       },
     ]);

@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-01
+
 ### Added
 
 - `uiStore` 接入 zustand `persist` middleware：localStorage key `hbs-ui-store`，持久化分析时间段 / view / 选中币种 / 初始化标志四项；setter 由 partialize 显式过滤不写入存储。跨刷新 / 重启保留用户上次选择，避免每次进入分析页都要重选时间段与币种。

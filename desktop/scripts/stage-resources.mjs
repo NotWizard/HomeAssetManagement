@@ -38,7 +38,7 @@ export function stageResources(targetArch) {
     );
   }
 
-  cpSync(backendSourceDir, backendTargetDir, { recursive: true });
+  cpSync(backendSourceDir, backendTargetDir, { recursive: true, verbatimSymlinks: true });
 }
 
 function isDirectExecution() {

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 
 import { buildReleaseArtifactName, normalizeDesktopArch } from './release-utils.mjs';
@@ -123,6 +123,8 @@ export async function signAndNotarizeApp({
   }
 
   if (securityConfig.mode === 'unsigned') {
+    stripPyInstallerFrameworkSymlinks(appPath);
+    runCommand('codesign', ['--force', '--deep', '--sign', '-', appPath], dirname(appPath));
     return true;
   }
 
@@ -157,6 +159,38 @@ export async function signAndNotarizeApp({
   return true;
 }
 
+function stripPyInstallerFrameworkSymlinks(appPath) {
+  const internalDir = join(appPath, 'Contents', 'Resources', 'backend', 'hbs-backend', '_internal');
+  if (!existsSync(internalDir)) {
+    return;
+  }
+
+  for (const entry of readdirSync(internalDir)) {
+    if (!entry.endsWith('.framework')) {
+      continue;
+    }
+    const fwDir = join(internalDir, entry);
+    if (!lstatSync(fwDir).isDirectory()) {
+      continue;
+    }
+    for (const child of readdirSync(fwDir)) {
+      const childPath = join(fwDir, child);
+      if (lstatSync(childPath).isSymbolicLink()) {
+        rmSync(childPath);
+      }
+    }
+    const versionsDir = join(fwDir, 'Versions');
+    if (existsSync(versionsDir)) {
+      for (const vChild of readdirSync(versionsDir)) {
+        const vChildPath = join(versionsDir, vChild);
+        if (lstatSync(vChildPath).isSymbolicLink()) {
+          rmSync(vChildPath);
+        }
+      }
+    }
+  }
+}
+
 function runSpawnCommand(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,
@@ -182,13 +216,11 @@ export function verifySignedApp({
   }
 
   if (securityConfig?.mode === 'unsigned') {
+    runCommand('codesign', ['--verify', '--verbose=4', appPath], dirname(appPath));
     return;
   }
 
   runCommand('codesign', ['--verify', '--deep', '--strict', '--verbose=4', appPath], dirname(appPath));
-  if (securityConfig?.mode === 'unsigned') {
-    return;
-  }
   runCommand('spctl', ['-a', '-vvv', '-t', 'exec', appPath], dirname(appPath));
 }
 

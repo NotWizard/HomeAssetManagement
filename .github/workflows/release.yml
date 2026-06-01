@@ -23,6 +23,17 @@ jobs:
     name: Build macOS arm64 DMG/ZIP
     runs-on: macos-latest
     timeout-minutes: 30
+    env:
+      HBS_MACOS_CODESIGN_IDENTITY: ${{ secrets.HBS_MACOS_CODESIGN_IDENTITY }}
+      HBS_MACOS_CODESIGN_KEYCHAIN: ${{ secrets.HBS_MACOS_CODESIGN_KEYCHAIN }}
+      HBS_MACOS_NOTARY_APPLE_ID: ${{ secrets.HBS_MACOS_NOTARY_APPLE_ID }}
+      HBS_MACOS_NOTARY_APPLE_ID_PASSWORD: ${{ secrets.HBS_MACOS_NOTARY_APPLE_ID_PASSWORD }}
+      HBS_MACOS_NOTARY_TEAM_ID: ${{ secrets.HBS_MACOS_NOTARY_TEAM_ID }}
+      HBS_MACOS_NOTARY_KEYCHAIN_PROFILE: ${{ secrets.HBS_MACOS_NOTARY_KEYCHAIN_PROFILE }}
+      HBS_MACOS_NOTARY_KEYCHAIN: ${{ secrets.HBS_MACOS_NOTARY_KEYCHAIN }}
+      HBS_MACOS_NOTARY_API_KEY: ${{ secrets.HBS_MACOS_NOTARY_API_KEY }}
+      HBS_MACOS_NOTARY_API_KEY_ID: ${{ secrets.HBS_MACOS_NOTARY_API_KEY_ID }}
+      HBS_MACOS_NOTARY_API_ISSUER: ${{ secrets.HBS_MACOS_NOTARY_API_ISSUER }}
     outputs:
       release_tag: ${{ steps.resolve_tag.outputs.tag }}
     steps:

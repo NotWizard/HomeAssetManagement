@@ -1,15 +1,20 @@
-import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  buildReleaseArtifactName,
   parseArchFlag,
   resolveReleaseArchitectures,
   resolveReleasePaths,
 } from './release-utils.mjs';
 import { buildDmgArtifact, resolveAppPath } from './build-dmg.mjs';
+import {
+  buildSignedZipArtifact,
+  resolveMacReleaseSecurityConfig,
+  signAndNotarizeApp,
+  verifySignedApp,
+} from './macos-release-security.mjs';
 
 const scriptFile = fileURLToPath(import.meta.url);
 const scriptDir = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -24,7 +29,7 @@ const electronForgeCliPath = resolve(
   'electron-forge.js'
 );
 
-function runCommand(command, args, cwd) {
+function runSubprocessCommand(command, args, cwd) {
   const result = spawnSync(command, args, {
     cwd,
     env: process.env,
@@ -40,37 +45,9 @@ function runCommand(command, args, cwd) {
   }
 }
 
-function statSafe(filePath) {
-  try {
-    return statSync(filePath);
-  } catch {
-    return null;
-  }
-}
-
-function walkFiles(rootDir) {
-  return readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
-    const fullPath = resolve(rootDir, entry.name);
-    if (entry.isDirectory()) {
-      return walkFiles(fullPath);
-    }
-    return [fullPath];
-  });
-}
-
 export function isMatchingArtifactPath(filePath, arch) {
   const lowerPath = filePath.toLowerCase();
   return lowerPath.includes(`-${arch}`) && (lowerPath.endsWith('.dmg') || lowerPath.endsWith('.zip'));
-}
-
-function collectZipArtifacts(makeRoot, arch) {
-  if (!statSafe(makeRoot)?.isDirectory()) {
-    return [];
-  }
-
-  return walkFiles(makeRoot).filter(
-    (filePath) => filePath.toLowerCase().endsWith('.zip') && filePath.toLowerCase().includes(`-${arch}`)
-  );
 }
 
 function readPackageVersion() {
@@ -85,11 +62,22 @@ async function loadDmgVisualConfig() {
   return forgeModule.dmgVisualConfig;
 }
 
-export async function makeMacOSRelease(targetArchOption = 'all') {
+export async function makeMacOSRelease(targetArchOption = 'all', overrides = {}) {
   const architectures = resolveReleaseArchitectures(targetArchOption);
   const version = readPackageVersion();
   const { makeRoot, outRoot, releaseRoot } = resolveReleasePaths(desktopRoot);
-  const dmgConfig = await loadDmgVisualConfig();
+  const {
+    buildDmgArtifact: buildDmgArtifactOverride = buildDmgArtifact,
+    buildSignedZipArtifact: buildSignedZipArtifactOverride = buildSignedZipArtifact,
+    loadDmgVisualConfig: loadDmgVisualConfigOverride = loadDmgVisualConfig,
+    runCommand = runSubprocessCommand,
+    resolveAppPath: resolveAppPathOverride = resolveAppPath,
+    resolveSecurityConfig: resolveSecurityConfigOverride = resolveMacReleaseSecurityConfig,
+    signAndNotarizeApp: signAndNotarizeAppOverride = signAndNotarizeApp,
+    verifySignedApp: verifySignedAppOverride = verifySignedApp,
+  } = overrides;
+  const dmgConfig = await loadDmgVisualConfigOverride();
+  const securityConfig = resolveSecurityConfigOverride();
 
   rmSync(makeRoot, { force: true, recursive: true });
   rmSync(releaseRoot, { force: true, recursive: true });
@@ -114,28 +102,25 @@ export async function makeMacOSRelease(targetArchOption = 'all') {
     );
 
     // forge make 已产出 ProductName-darwin-<arch>/ProductName.app + zip。
-    // dmg 这一步改用 macOS 自带 hdiutil 自制，避开 maker-dmg 那条会被 Node 版本影响的
-    // appdmg/macos-alias 原生编译链路。
-    const appPath = resolveAppPath({ makeRoot, productName: 'HouseholdBalanceSheet', arch });
-    buildDmgArtifact({
+    // 先对 .app 做 codesign/notarize，再用这份已签名 bundle 生成 dmg / zip。
+    const appPath = resolveAppPathOverride({ makeRoot, productName: 'HouseholdBalanceSheet', arch });
+    if (securityConfig.enabled) {
+      await signAndNotarizeAppOverride({ appPath, securityConfig });
+      verifySignedAppOverride({ appPath });
+    }
+    buildDmgArtifactOverride({
       appPath,
       arch,
       version,
       releaseDir: releaseRoot,
       dmgConfig,
     });
-
-    for (const artifactPath of collectZipArtifacts(makeRoot, arch)) {
-      const releasePath = resolve(
-        releaseRoot,
-        buildReleaseArtifactName({
-          arch,
-          extension: 'zip',
-          version,
-        })
-      );
-      cpSync(artifactPath, releasePath);
-    }
+    buildSignedZipArtifactOverride({
+      appPath,
+      arch,
+      version,
+      releaseDir: releaseRoot,
+    });
   }
 }
 

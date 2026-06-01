@@ -511,7 +511,7 @@ V1 固定使用 `frankfurter`：
 3. Electron 主进程拉起本地后端，等待健康检查通过后再切换到正式页面。
 4. FastAPI 在桌面模式下托管前端静态资源，并通过运行时注入或同源回退解析 API 地址。
 5. 安装包由 `Electron Forge` 产出，当前以 macOS `DMG/ZIP` 为主。
-6. 当前尚未接入代码签名与 notarization，首次打开仍可能需要按手册在系统设置中手动放行。
+6. macOS 发布链路已加入代码签名与 notarization 校验；若 CI 未配置签名/公证凭据，发布会显式失败，避免上传会被 Gatekeeper 判坏的安装包。
 
 ---
 

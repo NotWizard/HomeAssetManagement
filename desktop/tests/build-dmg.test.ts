@@ -16,6 +16,7 @@ import {
   copyAppToStaging,
   resolveAppPath,
   resolveStagingLayout,
+  runHdiutil,
   validateMacAppBundleForDistribution,
 } from '../scripts/build-dmg.mjs';
 
@@ -153,4 +154,37 @@ test('validateMacAppBundleForDistribution 拒绝 framework 中的绝对 symlink'
   } finally {
     rmSync(tempRoot, { force: true, recursive: true });
   }
+});
+
+test('runHdiutil 会在可恢复的 convert 错误上重试', () => {
+  const calls = [];
+  let sleepCount = 0;
+
+  const result = runHdiutil(['convert', '/tmp/source.dmg'], {
+    maxAttempts: 2,
+    retryDelayMs: 1,
+    runner: () => {
+      calls.push('convert');
+      if (calls.length === 1) {
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'hdiutil: convert failed - Resource temporarily unavailable',
+        };
+      }
+
+      return {
+        status: 0,
+        stdout: 'converted',
+        stderr: '',
+      };
+    },
+    sleep: () => {
+      sleepCount += 1;
+    },
+  });
+
+  assert.equal(result, 'converted');
+  assert.equal(calls.length, 2);
+  assert.equal(sleepCount, 1);
 });

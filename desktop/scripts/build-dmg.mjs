@@ -47,20 +47,44 @@ export function resolveStagingLayout({ tempRoot, volumeName }) {
   };
 }
 
-function runHdiutil(args, { input, env } = {}) {
-  const result = spawnSync('hdiutil', args, {
-    encoding: 'utf8',
-    env: env ?? process.env,
+export function runHdiutil(
+  args,
+  {
     input,
-    stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
-  });
+    env,
+    maxAttempts = 1,
+    retryDelayMs = 0,
+    runner = (command, commandArgs, options) =>
+      spawnSync(command, commandArgs, options),
+    sleep = sleepSync,
+  } = {}
+) {
+  let lastError = null;
 
-  if (result.status !== 0) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = runner('hdiutil', args, {
+      encoding: 'utf8',
+      env: env ?? process.env,
+      input,
+      stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
+    });
+
+    if (result.status === 0) {
+      return result.stdout ?? '';
+    }
+
     const stderr = result.stderr?.trim() ?? '';
-    throw new Error(`hdiutil ${args[0]} 失败 (exit=${result.status}): ${stderr}`);
+    lastError = new Error(`hdiutil ${args[0]} 失败 (exit=${result.status}): ${stderr}`);
+
+    if (attempt < maxAttempts && isRetryableHdiutilError(stderr)) {
+      sleep(retryDelayMs);
+      continue;
+    }
+
+    break;
   }
 
-  return result.stdout ?? '';
+  throw lastError ?? new Error(`hdiutil ${args[0]} 执行失败`);
 }
 
 function runOsascript(script) {
@@ -74,6 +98,19 @@ function runOsascript(script) {
   }
 
   return true;
+}
+
+function sleepSync(ms) {
+  if (ms <= 0) {
+    return;
+  }
+
+  const sharedBuffer = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(sharedBuffer), 0, 0, ms);
+}
+
+function isRetryableHdiutilError(stderr) {
+  return /Resource temporarily unavailable/i.test(stderr);
 }
 
 function detachIfMounted(mountPoint) {
@@ -225,7 +262,10 @@ function detachImage(mountPoint) {
 
 function convertToCompressed({ rwImage, format, output }) {
   rmSync(output, { force: true });
-  runHdiutil(['convert', rwImage, '-format', format, '-o', output]);
+  runHdiutil(['convert', rwImage, '-format', format, '-o', output], {
+    maxAttempts: 3,
+    retryDelayMs: 1500,
+  });
 }
 
 export function buildDmgArtifact({

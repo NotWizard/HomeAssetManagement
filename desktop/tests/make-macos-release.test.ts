@@ -201,7 +201,7 @@ test('签名流程会把 Developer ID identity 与公证凭据传给 Electron �
   }
 });
 
-test('unsigned 签名流程走系统 codesign ad-hoc，绕开 @electron/osx-sign 的 keychain 查询', async () => {
+test('unsigned 签名流程直接跳过，不调用任何 codesign 或 osx-sign', async () => {
   const signing = await import('../scripts/macos-release-security.mjs');
   const tempRoot = mkdtempSync(join(tmpdir(), 'hbs-release-adhoc-sign-test-'));
 
@@ -238,13 +238,7 @@ test('unsigned 签名流程走系统 codesign ad-hoc，绕开 @electron/osx-sign
     assert.equal(result, true);
     assert.deepEqual(signCalls, []);
     assert.deepEqual(notarizeCalls, []);
-    assert.deepEqual(commandCalls, [
-      {
-        command: 'codesign',
-        args: ['--force', '--sign', '-', appPath],
-        cwd: tempRoot,
-      },
-    ]);
+    assert.deepEqual(commandCalls, []);
   } finally {
     rmSync(tempRoot, { force: true, recursive: true });
   }
@@ -303,13 +297,7 @@ test('unsigned 签名验收只跑 codesign，避免把未公证包误判为构�
       },
     });
 
-    assert.deepEqual(calls, [
-      {
-        command: 'codesign',
-        args: ['--verify', '--strict', '--verbose=4', appPath],
-        cwd: tempRoot,
-      },
-    ]);
+    assert.deepEqual(calls, []);
   } finally {
     rmSync(tempRoot, { force: true, recursive: true });
   }

@@ -123,17 +123,6 @@ export async function signAndNotarizeApp({
   }
 
   if (securityConfig.mode === 'unsigned') {
-    // @electron/osx-sign 不把字符串 '-' 视作 ad-hoc sentinel：它会调 security
-    // find-identity 在 keychain 里查 '-' 这个名字，找不到就抛 "No identity
-    // found for signing." 直接退出。系统 codesign CLI 才是 macOS 长期约定的
-    // ad-hoc 签名入口（-s -），这条路径不依赖任何 keychain identity。
-    //
-    // 注意不带 --deep：bundle 里 Resources/backend/hbs-backend/_internal/
-    // Python.framework 是 PyInstaller 打包的 Python framework，内部 symlink
-    // 不被 codesign 接受（invalid destination for symbolic link in bundle）。
-    // unsigned 模式的语义就是只签 .app 顶层让 bundle 结构合法，nested
-    // framework / Electron helper 保持出厂签名即可。
-    runCommand('codesign', ['--force', '--sign', '-', appPath], dirname(appPath));
     return true;
   }
 
@@ -192,13 +181,11 @@ export function verifySignedApp({
     throw new Error(`找不到待校验的 .app 目录：${appPath}`);
   }
 
-  // 与 signAndNotarizeApp 一致：unsigned 模式只校验 .app 顶层签名（不 --deep
-  // 进 nested PyInstaller Python.framework 这种 codesign 不接受的 bundle）。
-  const verifyArgs =
-    securityConfig?.mode === 'unsigned'
-      ? ['--verify', '--strict', '--verbose=4', appPath]
-      : ['--verify', '--deep', '--strict', '--verbose=4', appPath];
-  runCommand('codesign', verifyArgs, dirname(appPath));
+  if (securityConfig?.mode === 'unsigned') {
+    return;
+  }
+
+  runCommand('codesign', ['--verify', '--deep', '--strict', '--verbose=4', appPath], dirname(appPath));
   if (securityConfig?.mode === 'unsigned') {
     return;
   }

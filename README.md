@@ -260,11 +260,15 @@ git push origin v0.3.1
 
 `.github/workflows/release.yml` 会在 `macos-latest` runner 上跑 `make:dmg:arm64`，先对 `.app` 进行 Developer ID 签名与 notarization，再重新生成 DMG / ZIP / `.sha256` 并上传到 release，release notes 自动从 `CHANGELOG.md` 抠取对应版本段落。
 
-发布 workflow 需要配置 macOS 签名与公证凭据，至少提供以下一组：
+发布 workflow 需要配置 macOS 签名证书与公证凭据：
 
+- `HBS_MACOS_CERTIFICATE_P12`：Developer ID Application `.p12` 的 base64 内容
+- `HBS_MACOS_CERTIFICATE_PASSWORD`：导出 `.p12` 时设置的密码
+- `HBS_MACOS_KEYCHAIN_PASSWORD`：CI 临时 keychain 密码；可不设，workflow 会自动生成
 - `HBS_MACOS_CODESIGN_IDENTITY`
 - `HBS_MACOS_NOTARY_KEYCHAIN_PROFILE` + `HBS_MACOS_NOTARY_KEYCHAIN`
 - 或 `HBS_MACOS_NOTARY_API_KEY` + `HBS_MACOS_NOTARY_API_KEY_ID` + `HBS_MACOS_NOTARY_API_ISSUER`
+- 或 `HBS_MACOS_NOTARY_APPLE_ID` + `HBS_MACOS_NOTARY_APPLE_ID_PASSWORD` + `HBS_MACOS_NOTARY_TEAM_ID`
 
 x64 暂未在 workflow 中构建。如有 Intel Mac 用户反馈，可按上一节说明本地构建后用 `gh release upload v0.3.x ...` 追加上传。
 

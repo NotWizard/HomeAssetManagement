@@ -1,15 +1,18 @@
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
+  readlinkSync,
   rmSync,
   statSync,
   symlinkSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { resolve, join, basename } from 'node:path';
+import { resolve, join, basename, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -44,20 +47,44 @@ export function resolveStagingLayout({ tempRoot, volumeName }) {
   };
 }
 
-function runHdiutil(args, { input, env } = {}) {
-  const result = spawnSync('hdiutil', args, {
-    encoding: 'utf8',
-    env: env ?? process.env,
+export function runHdiutil(
+  args,
+  {
     input,
-    stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
-  });
+    env,
+    maxAttempts = 1,
+    retryDelayMs = 0,
+    runner = (command, commandArgs, options) =>
+      spawnSync(command, commandArgs, options),
+    sleep = sleepSync,
+  } = {}
+) {
+  let lastError = null;
 
-  if (result.status !== 0) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const result = runner('hdiutil', args, {
+      encoding: 'utf8',
+      env: env ?? process.env,
+      input,
+      stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
+    });
+
+    if (result.status === 0) {
+      return result.stdout ?? '';
+    }
+
     const stderr = result.stderr?.trim() ?? '';
-    throw new Error(`hdiutil ${args[0]} 失败 (exit=${result.status}): ${stderr}`);
+    lastError = new Error(`hdiutil ${args[0]} 失败 (exit=${result.status}): ${stderr}`);
+
+    if (attempt < maxAttempts && isRetryableHdiutilError(stderr)) {
+      sleep(retryDelayMs);
+      continue;
+    }
+
+    break;
   }
 
-  return result.stdout ?? '';
+  throw lastError ?? new Error(`hdiutil ${args[0]} 执行失败`);
 }
 
 function runOsascript(script) {
@@ -71,6 +98,19 @@ function runOsascript(script) {
   }
 
   return true;
+}
+
+function sleepSync(ms) {
+  if (ms <= 0) {
+    return;
+  }
+
+  const sharedBuffer = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(sharedBuffer), 0, 0, ms);
+}
+
+function isRetryableHdiutilError(stderr) {
+  return /Resource temporarily unavailable/i.test(stderr);
 }
 
 function detachIfMounted(mountPoint) {
@@ -109,11 +149,66 @@ export function buildAppleScriptForDmgWindow({ volumeName, dmgConfig, hasBackgro
   ].join('\n');
 }
 
-function copyAppToStaging(appPath, stagingDir) {
+export function copyAppToStaging(appPath, stagingDir) {
   if (!existsSync(appPath) || !statSync(appPath).isDirectory()) {
     throw new Error(`找不到 .app 目录：${appPath}`);
   }
-  cpSync(appPath, join(stagingDir, basename(appPath)), { recursive: true });
+  const stagedAppPath = join(stagingDir, basename(appPath));
+  cpSync(appPath, stagedAppPath, {
+    recursive: true,
+    // macOS framework bundle 依赖相对 symlink，例如：
+    // Electron Framework -> Versions/A/Electron Framework。Node 默认 cpSync
+    // 会把它解析成构建机绝对路径，导致 DMG 安装后启动时 dyld 报 "Library missing"。
+    verbatimSymlinks: true,
+  });
+  return stagedAppPath;
+}
+
+function findAbsoluteSymlinks(rootDir) {
+  if (!existsSync(rootDir)) {
+    return [];
+  }
+
+  return readdirSync(rootDir, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = join(rootDir, entry.name);
+    const stat = lstatSync(fullPath);
+
+    if (stat.isSymbolicLink()) {
+      const target = readlinkSync(fullPath);
+      return isAbsolute(target) ? [{ path: fullPath, target }] : [];
+    }
+
+    if (stat.isDirectory()) {
+      return findAbsoluteSymlinks(fullPath);
+    }
+
+    return [];
+  });
+}
+
+export function validateMacAppBundleForDistribution(appPath) {
+  const frameworksDir = join(appPath, 'Contents', 'Frameworks');
+  const electronFrameworkBinary = join(
+    frameworksDir,
+    'Electron Framework.framework',
+    'Electron Framework'
+  );
+
+  if (!existsSync(electronFrameworkBinary)) {
+    throw new Error(
+      `Electron Framework 缺失，安装后会在启动时被 dyld 拒绝: ${electronFrameworkBinary}`
+    );
+  }
+
+  const absoluteSymlinks = findAbsoluteSymlinks(frameworksDir);
+  if (absoluteSymlinks.length > 0) {
+    const details = absoluteSymlinks
+      .map((link) => `${link.path} -> ${link.target}`)
+      .join('\n');
+    throw new Error(
+      `macOS framework bundle 内存在指向构建机的绝对 symlink，安装后会失效:\n${details}`
+    );
+  }
 }
 
 function ensureApplicationsSymlink(stagingDir) {
@@ -167,7 +262,10 @@ function detachImage(mountPoint) {
 
 function convertToCompressed({ rwImage, format, output }) {
   rmSync(output, { force: true });
-  runHdiutil(['convert', rwImage, '-format', format, '-o', output]);
+  runHdiutil(['convert', rwImage, '-format', format, '-o', output], {
+    maxAttempts: 3,
+    retryDelayMs: 1500,
+  });
 }
 
 export function buildDmgArtifact({
@@ -189,7 +287,9 @@ export function buildDmgArtifact({
   try {
     mkdirSync(layout.stagingDir, { recursive: true });
 
-    copyAppToStaging(appPath, layout.stagingDir);
+    validateMacAppBundleForDistribution(appPath);
+    const stagedAppPath = copyAppToStaging(appPath, layout.stagingDir);
+    validateMacAppBundleForDistribution(stagedAppPath);
     ensureApplicationsSymlink(layout.stagingDir);
     const hasBackground = ensureBackgroundImage(layout.stagingDir, dmgConfig.background);
 

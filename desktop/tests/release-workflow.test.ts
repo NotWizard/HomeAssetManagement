@@ -8,6 +8,13 @@ const workflowSource = readFileSync(
   'utf8'
 );
 
+test('release workflow 支持手动选择 unsigned 发布模式', () => {
+  assert.match(workflowSource, /release_mode:/);
+  assert.match(workflowSource, /description: 'macOS 发布模式/);
+  assert.match(workflowSource, /options:\s*\n\s+- developer-id\s*\n\s+- unsigned/);
+  assert.match(workflowSource, /HBS_MACOS_RELEASE_MODE: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.release_mode \|\| 'developer-id' \}\}/);
+});
+
 test('release workflow 会把 Developer ID p12 证书导入临时 keychain', () => {
   assert.match(
     workflowSource,

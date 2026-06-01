@@ -10,6 +10,14 @@ on:
         description: '版本 tag（必填，如 v0.2.0）；workflow 不会自动打 tag，仅基于该名字 build 并 create release / Required tag name (e.g. v0.2.0); the workflow does not create the tag, only builds and publishes the release under this name.'
         required: true
         type: string
+      release_mode:
+        description: 'macOS 发布模式：developer-id 需要 Apple Developer 凭据；unsigned 使用 ad-hoc 签名，仅解决包结构损坏问题。'
+        required: true
+        default: developer-id
+        type: choice
+        options:
+          - developer-id
+          - unsigned
 
 permissions:
   contents: write
@@ -24,6 +32,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     env:
+      HBS_MACOS_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'developer-id' }}
       HBS_MACOS_CODESIGN_IDENTITY: ${{ secrets.HBS_MACOS_CODESIGN_IDENTITY }}
       HBS_MACOS_CODESIGN_KEYCHAIN: ${{ secrets.HBS_MACOS_CODESIGN_KEYCHAIN }}
       HBS_MACOS_NOTARY_APPLE_ID: ${{ secrets.HBS_MACOS_NOTARY_APPLE_ID }}

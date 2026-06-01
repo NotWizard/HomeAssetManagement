@@ -7,6 +7,7 @@ import process from 'node:process';
 import { buildReleaseArtifactName, normalizeDesktopArch } from './release-utils.mjs';
 
 const PRODUCT_NAME = 'HouseholdBalanceSheet';
+const RELEASE_MODES = new Set(['developer-id', 'unsigned']);
 
 function compactObject(value) {
   return Object.fromEntries(
@@ -59,6 +60,22 @@ export function resolveMacReleaseSecurityConfig({
   env = process.env,
   requireSigning = env.CI === 'true' || env.HBS_MACOS_REQUIRE_SIGNING === 'true',
 } = {}) {
+  const releaseMode = readEnvValue(env, 'HBS_MACOS_RELEASE_MODE') ?? 'developer-id';
+  if (!RELEASE_MODES.has(releaseMode)) {
+    throw new Error(
+      `macOS 发布模式不合法：${releaseMode}。请使用 developer-id 或 unsigned。`
+    );
+  }
+
+  if (releaseMode === 'unsigned') {
+    return {
+      enabled: true,
+      mode: 'unsigned',
+      identity: '-',
+      notarize: null,
+    };
+  }
+
   const identity = readEnvValue(env, 'HBS_MACOS_CODESIGN_IDENTITY');
   const notarize = resolveNotarizeConfig(env);
 
@@ -83,6 +100,7 @@ export function resolveMacReleaseSecurityConfig({
 
   return {
     enabled: true,
+    mode: 'developer-id',
     identity,
     keychain: readEnvValue(env, 'HBS_MACOS_CODESIGN_KEYCHAIN'),
     notarize,
@@ -115,11 +133,15 @@ export async function signAndNotarizeApp({
     identity: securityConfig.identity,
     keychain: securityConfig.keychain,
     platform: 'darwin',
-    hardenedRuntime: true,
+    hardenedRuntime: securityConfig.mode !== 'unsigned',
     strictVerify: true,
     preAutoEntitlements: false,
     preEmbedProvisioningProfile: false,
   });
+
+  if (securityConfig.mode === 'unsigned') {
+    return true;
+  }
 
   if (typeof notarizeApi.notarize !== 'function') {
     throw new Error('@electron/notarize 未暴露 notarize');
@@ -151,6 +173,7 @@ function runSpawnCommand(command, args, cwd) {
 
 export function verifySignedApp({
   appPath,
+  securityConfig,
   runCommand = runSpawnCommand,
 } = {}) {
   if (!existsSync(appPath) || !statSync(appPath).isDirectory()) {
@@ -158,6 +181,9 @@ export function verifySignedApp({
   }
 
   runCommand('codesign', ['--verify', '--deep', '--strict', '--verbose=4', appPath], dirname(appPath));
+  if (securityConfig?.mode === 'unsigned') {
+    return;
+  }
   runCommand('spctl', ['-a', '-vvv', '-t', 'exec', appPath], dirname(appPath));
 }
 

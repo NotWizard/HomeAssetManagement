@@ -106,7 +106,7 @@ export async function makeMacOSRelease(targetArchOption = 'all', overrides = {})
     const appPath = resolveAppPathOverride({ makeRoot, productName: 'HouseholdBalanceSheet', arch });
     if (securityConfig.enabled) {
       await signAndNotarizeAppOverride({ appPath, securityConfig });
-      verifySignedAppOverride({ appPath });
+      verifySignedAppOverride({ appPath, securityConfig });
     }
     buildDmgArtifactOverride({
       appPath,

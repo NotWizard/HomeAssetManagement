@@ -70,12 +70,31 @@ test('macOS release 安全配置会从环境变量解析签名与公证凭据', 
 
   assert.deepEqual(config, {
     enabled: true,
+    mode: 'developer-id',
     identity: 'Developer ID Application: Example Inc (TEAM123456)',
     keychain: undefined,
     notarize: {
       keychainProfile: 'hbs-notary',
       keychain: '/tmp/notary.keychain-db',
     },
+  });
+});
+
+test('unsigned release 模式会启用 ad-hoc 签名并跳过公证要求', async () => {
+  const signing = await import('../scripts/macos-release-security.mjs');
+
+  const config = signing.resolveMacReleaseSecurityConfig({
+    env: {
+      CI: 'true',
+      HBS_MACOS_RELEASE_MODE: 'unsigned',
+    },
+  });
+
+  assert.deepEqual(config, {
+    enabled: true,
+    mode: 'unsigned',
+    identity: '-',
+    notarize: null,
   });
 });
 
@@ -182,6 +201,46 @@ test('签名流程会把 Developer ID identity 与公证凭据传给 Electron �
   }
 });
 
+test('unsigned 签名流程只做 ad-hoc 签名，不调用公证工具', async () => {
+  const signing = await import('../scripts/macos-release-security.mjs');
+  const tempRoot = mkdtempSync(join(tmpdir(), 'hbs-release-adhoc-sign-test-'));
+
+  try {
+    const appPath = join(tempRoot, 'HouseholdBalanceSheet.app');
+    mkdirSync(join(appPath, 'Contents'), { recursive: true });
+    const signCalls = [];
+    const notarizeCalls = [];
+
+    const result = await signing.signAndNotarizeApp({
+      appPath,
+      securityConfig: {
+        enabled: true,
+        mode: 'unsigned',
+        identity: '-',
+        notarize: null,
+      },
+      osxSignModule: {
+        signAsync: async (options) => {
+          signCalls.push(options);
+        },
+      },
+      notarizeModule: {
+        notarize: async (options) => {
+          notarizeCalls.push(options);
+        },
+      },
+    });
+
+    assert.equal(result, true);
+    assert.equal(signCalls.length, 1);
+    assert.equal(signCalls[0]?.identity, '-');
+    assert.equal(signCalls[0]?.hardenedRuntime, false);
+    assert.deepEqual(notarizeCalls, []);
+  } finally {
+    rmSync(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test('签名验收会同时跑 codesign 与 spctl', async () => {
   const signing = await import('../scripts/macos-release-security.mjs');
   const tempRoot = mkdtempSync(join(tmpdir(), 'hbs-release-verify-test-'));
@@ -207,6 +266,38 @@ test('签名验收会同时跑 codesign 与 spctl', async () => {
       {
         command: 'spctl',
         args: ['-a', '-vvv', '-t', 'exec', appPath],
+        cwd: tempRoot,
+      },
+    ]);
+  } finally {
+    rmSync(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test('unsigned 签名验收只跑 codesign，避免把未公证包误判为构建失败', async () => {
+  const signing = await import('../scripts/macos-release-security.mjs');
+  const tempRoot = mkdtempSync(join(tmpdir(), 'hbs-release-adhoc-verify-test-'));
+
+  try {
+    const appPath = join(tempRoot, 'HouseholdBalanceSheet.app');
+    mkdirSync(join(appPath, 'Contents'), { recursive: true });
+    const calls = [];
+
+    signing.verifySignedApp({
+      appPath,
+      securityConfig: {
+        enabled: true,
+        mode: 'unsigned',
+      },
+      runCommand: (command, args, cwd) => {
+        calls.push({ command, args, cwd });
+      },
+    });
+
+    assert.deepEqual(calls, [
+      {
+        command: 'codesign',
+        args: ['--verify', '--deep', '--strict', '--verbose=4', appPath],
         cwd: tempRoot,
       },
     ]);

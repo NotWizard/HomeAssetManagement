@@ -270,6 +270,8 @@ git push origin v0.3.1
 - 或 `HBS_MACOS_NOTARY_API_KEY` + `HBS_MACOS_NOTARY_API_KEY_ID` + `HBS_MACOS_NOTARY_API_ISSUER`
 - 或 `HBS_MACOS_NOTARY_APPLE_ID` + `HBS_MACOS_NOTARY_APPLE_ID_PASSWORD` + `HBS_MACOS_NOTARY_TEAM_ID`
 
+如果暂时没有 Apple Developer 账号，可以在手动触发 Release workflow 时把 `release_mode` 选为 `unsigned`。该模式会对 `.app` 做 ad-hoc 签名并运行 `codesign --verify --deep --strict`，用于避免产物因签名结构损坏而显示“已损坏，无法打开”。它不会进行 notarization，首次安装仍需要用户在 macOS 隐私与安全设置中手动放行。
+
 x64 暂未在 workflow 中构建。如有 Intel Mac 用户反馈，可按上一节说明本地构建后用 `gh release upload v0.3.x ...` 追加上传。
 
 ### 环境配置

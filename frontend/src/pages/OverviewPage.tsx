@@ -56,13 +56,11 @@ export function OverviewPage() {
   const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings, ...OVERVIEW_QUERY_OPTIONS });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
 
-  const anyLoading = trendQuery.isLoading || holdingsQuery.isLoading || settingsQuery.isLoading || rebalanceQuery.isLoading;
-  const anyNetworkError = [trendQuery, holdingsQuery, settingsQuery, rebalanceQuery].some(
-    (q) => q.isError && isNetworkError(q.error)
-  );
-  const anyRealError = [trendQuery, holdingsQuery, settingsQuery, rebalanceQuery].some(
-    (q) => q.isError && !isNetworkError(q.error)
-  );
+  const queries = [trendQuery, holdingsQuery, settingsQuery, rebalanceQuery];
+  const anyLoading = queries.some((q) => q.isLoading);
+  const anySuccess = queries.some((q) => q.isSuccess);
+  const allNetworkError = queries.every((q) => q.isError && isNetworkError(q.error));
+  const anyRealError = queries.some((q) => q.isError && !isNetworkError(q.error));
 
   const trendUnavailable = trendQuery.isError && !trendQuery.data;
   const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;
@@ -131,14 +129,14 @@ export function OverviewPage() {
         }
       />
 
-      {anyNetworkError && !anyLoading ? (
+      {allNetworkError && !anyLoading ? (
         <Card className="border-amber-200 bg-amber-50/50">
           <CardContent className="flex items-start gap-2 p-4 text-sm text-amber-700">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <p>正在连接本地服务，请稍候…如持续无法连接，请尝试重启应用。</p>
           </CardContent>
         </Card>
-      ) : anyRealError ? (
+      ) : anyRealError && !anySuccess ? (
         <Card className="border-rose-200 bg-rose-50/50">
           <CardContent className="flex items-start gap-2 p-4 text-sm text-rose-700">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

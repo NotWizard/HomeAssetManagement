@@ -35,20 +35,18 @@ export function createBootstrapController(
     let window: BootstrapWindow | null = null;
     let loadingPromise: Promise<void> | null = null;
     try {
-      // 并行启动 prepare 与 window 构造：prepare 是异步 I/O（findAvailablePort 5-15ms），
-      // ensureWindow 是同步阻塞构造 BrowserWindow（80-150ms）。先发起 prepare 让其 I/O
-      // 在后台跑，紧接着同步构造窗口；窗口阻塞 JS 期间 libuv 仍能推进 prepare 的 I/O，
-      // 之后再 await preparePromise 通常已 resolve。spawnBackend 仍在 prepare resolve
-      // 后才发起（依赖 port）。
-      const preparePromise = dependencies.prepare?.();
+      // 必须先完成 prepare 再创建窗口：BrowserWindow 在 main.ts 里通过
+      // additionalArguments 注入 `--hbs-api-base-url=http://127.0.0.1:<port>/api/v1`，
+      // 这一步在窗口构造时同步求值。如果在 prepare（异步分配端口）resolve 之前就同步
+      // 调 ensureWindow，preload 拿到的会是空 argv，apiBaseUrl 永远是 undefined。
+      // findAvailablePort 跨 tick 的 libuv I/O 决定了\"先 fire prepare 再同步建窗口\"
+      // 不可能让窗口拿到端口，原本注释里写的并行优化不成立。
+      await dependencies.prepare?.();
 
       window = dependencies.ensureWindow();
       loadingPromise = window.showLoading();
       window.focus();
 
-      if (preparePromise) {
-        await preparePromise;
-      }
       const backendPromise = dependencies.startBackend();
 
       await loadingPromise;
@@ -71,11 +69,13 @@ export function createBootstrapController(
       await window.showApp(appUrl);
     } catch (error) {
       const message = getErrorMessage(error);
-      dependencies.showErrorDialog?.(message);
+      // 先确保有窗口再弹错误对话框：prepare 阶段失败时 window 仍是 null，必须先建一个
+      // BrowserWindow 让 showErrorDialog 有合适的 parent，避免无主对话框抢焦点。
       const errorWindow = window ?? dependencies.ensureWindow();
       if (!window) {
         errorWindow.focus();
       }
+      dependencies.showErrorDialog?.(message);
       await loadingPromise?.catch(() => undefined);
       await errorWindow.showError(message);
     }

@@ -16,7 +16,8 @@
     "typecheck": "tsc --pretty false --noEmit",
     "dev": "npm run build:frontend && npm run build && electron-forge start",
     "package": "npm run build:frontend && npm run build:backend && npm run build && npm run stage:resources && electron-forge package",
-    "make": "npm run build:frontend && npm run build:backend && npm run build && npm run stage:resources && electron-forge make"
+    "make": "npm run build:frontend && npm run build:backend && npm run build && npm run stage:resources && electron-forge make",
+    "postinstall": "npm rebuild macos-alias --if-present"
   },
   "config": {
     "forge": "./forge.config.ts"

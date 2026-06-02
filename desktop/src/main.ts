@@ -128,6 +128,10 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
       port,
       storageDir: desktopPaths.storageDir,
       databaseUrl: desktopPaths.databaseUrl,
+      // 让 backend 通过 HBS_FRONTEND_DIST_DIR serve 前端，避免 file:// → http://127.0.0.1
+      // 跨 origin 触发的 CORS 预检失败（带 X-HBS-Token + JSON Content-Type 必预检，
+      // 而桌面同源场景 CORSMiddleware 不挂载，预检永远拿不到 Access-Control-Allow-*）。
+      frontendDistDir: desktopPaths.frontendDistDir,
       apiToken,
       requireAuth: true,
     }),
@@ -485,8 +489,16 @@ const bootstrapController = createBootstrapController({
   startBackend: async () => {
     await backendController.ensureReady();
     const desktopPaths = resolveDesktopPaths();
+    // 仍然校验前端构建产物存在：让后端 serve 前端（同源）后，dist 缺失从启动时就报错，
+    // 而不是等用户跳到某个路由才看到 404。
     ensureFrontendEntryExists(desktopPaths.frontendEntryUrl);
-    return { appUrl: desktopPaths.frontendEntryUrl };
+    const currentPort = backendController.getPort();
+    if (currentPort === null) {
+      throw new Error('后端端口尚未分配，无法构造前端入口 URL');
+    }
+    // 改走 http://127.0.0.1:<port>/ 让前端与后端同源，消除 file:// 跨 origin 引发的
+    // CORS 预检失败。前端的 HashRouter 不依赖 server-side rewrite，仍能正常工作。
+    return { appUrl: `${buildAppUrl(currentPort)}/` };
   },
 });
 

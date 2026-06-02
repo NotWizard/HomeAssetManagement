@@ -6,13 +6,14 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-02
+
+> 本版本重新打了 v0.3.1 tag，覆盖了 2026-06-01 首次发出的同名版本（见下方 `[0.3.1-pre]` 段）。原 v0.3.1 因桌面 preload 在 sandbox 下加载失败、首页持续触发 CORS 误报与 HTTP 401，实质不可用，故重发覆盖。
+
 ### Fixed
 
 - 修复资产负债录入页「当前还没有可用成员」黄色提示卡里的文案与按钮垂直方向贴顶、卡片底部留白：`CardContent` 默认带 `pt-0`（设计上是和 `CardHeader` 配套使用），单独用它做 banner 时只加 `pt-5` 在 ≥md 屏幕上会被默认的 `md:pt-0` 覆盖回零。改为显式 `p-5 md:p-6` 让上下 padding 一致，文字与按钮在 flex 居中后整体视觉居中卡片。
 - Fix the vertical alignment of the "no member yet" amber banner on the Entry page: `CardContent` defaults to `pt-0` (designed to pair with `CardHeader`); using it standalone with only an added `pt-5` got reset to zero by the default `md:pt-0` on ≥md screens, leaving the text/button hugging the top with empty space below. Switch to explicit `p-5 md:p-6` so top and bottom paddings match and the flex-centered content sits visually centered in the card.
-
-### Fixed
-
 - 修复桌面端打开几秒后 OverviewPage 黄色 banner "正在连接本地服务" 误报：根因是 frontend 通过 `file://` 加载、`fetch` 到 `http://127.0.0.1:<port>` 触发 CORS 预检，但 `desktop/src/config.ts` 主动注入 `HBS_CORS_ORIGINS=''` 让 `CORSMiddleware` 完全不挂载（而 `X-HBS-Token` + JSON Content-Type 会强制带上预检），所有 `/api/v1/*` 请求都以 `TypeError: Failed to fetch` 失败，命中 `OverviewPage` 网络错误正则，4 个 query 全部 isError → `allNetworkError=true`。改成同源：`spawnBackend` 把 `HBS_FRONTEND_DIST_DIR` 注入 sidecar，bootstrap 的 `startBackend` 把 appUrl 从 `file://...index.html` 改成 `http://127.0.0.1:<port>/`，让 frontend 与后端 origin 一致，浏览器直接放行同源请求，不再发预检。HashRouter 在 http:// 下行为不变。
 - Fix the desktop OverviewPage incorrectly showing the yellow "connecting to local service" banner a few seconds after launch. Root cause: the frontend was loaded via `file://` and `fetch`-ing `http://127.0.0.1:<port>` triggered a CORS preflight, but `desktop/src/config.ts` set `HBS_CORS_ORIGINS=''` which skips `CORSMiddleware` entirely. Combined with `X-HBS-Token` + JSON `Content-Type` (both non-safelisted, forcing a preflight), every `/api/v1/*` request failed with `TypeError: Failed to fetch`, matching `OverviewPage`'s network-error regex; all four queries hit `isError` → `allNetworkError=true` → yellow banner. Make the desktop runtime same-origin: `spawnBackend` now passes `HBS_FRONTEND_DIST_DIR` so the sidecar serves the SPA, and the bootstrap `startBackend` returns `http://127.0.0.1:<port>/` as the app URL instead of the `file://...index.html`. The browser no longer cross-origin-checks the API; HashRouter behavior is unchanged on http://.
 - 修复 `desktop/src/bootstrap-controller.ts` 的端口竞态：原本「先 fire prepare 再同步建窗口」的并行优化在生产中根本拿不到端口——`findAvailablePort` 是跨 tick 的 libuv I/O，BrowserWindow 同步构造时 `backendController.getPort()` 必为 null，导致 preload 拿到的 `additionalArguments=[]`、`apiBaseUrl=undefined`。改成先 `await prepare` 再 `ensureWindow`，同时 catch 分支把 `ensureWindow` 移到 `showErrorDialog` 之前，避免 prepare 阶段失败时弹无主对话框。`bootstrap-controller.test.ts` 的"启动流程会先完成准备步骤"用例之前是假阳性（mock prepare 没真 await），改写为真异步 I/O 跨 tick 验证，未来若 race 重新引入会立即失败。
@@ -22,7 +23,9 @@
 - 修复打包后 preload 永远加载失败（`Unable to load preload script: ... Error: module not found: ./preload-bridge.js`）：原本 `desktop/src/preload.cts` 编译成 CJS 后 `require('./preload-bridge.js')`，而后者是 ESM；更关键的是 `webPreferences.sandbox=true` 下 Electron 的 sandboxed preload runtime 只允许 require `electron` 自身，任何相对路径的本地 module 都会被拒绝。后果是 `__HBS_DESKTOP__` 从未被 `contextBridge.exposeInMainWorld` 暴露，frontend 的 `getDesktopBridge()` 永远返回 undefined，请求绕过 desktop bridge → 没带 `X-HBS-Token` → backend 401。之前 file:// 模式下被 CORS 黄色 banner 误报掩盖，同源化后真相暴露成红色 HTTP 401。把 `preload-bridge.ts` 中需要 sandboxed preload 运行时使用的逻辑直接内联进 `preload.cts`，让 `preload.cjs` 自包含、只 require `electron`；`preload-bridge.ts` 保留为 ESM 给单元测试 import。
 - Fix the packaged preload always failing to load (`Unable to load preload script: ... Error: module not found: ./preload-bridge.js`). `desktop/src/preload.cts` was compiled to CJS and `require('./preload-bridge.js')` (ESM); more importantly, with `webPreferences.sandbox=true` Electron's sandboxed preload runtime only allows `require('electron')` and rejects any relative path module. The result was that `__HBS_DESKTOP__` was never exposed via `contextBridge.exposeInMainWorld`; frontend's `getDesktopBridge()` always returned `undefined`, so requests bypassed the desktop bridge, never carried `X-HBS-Token`, and the backend returned 401. The yellow banner under `file://` was masking this — once the same-origin fix landed, the same root cause surfaced as red HTTP 401 errors. Inline the runtime logic from `preload-bridge.ts` directly into `preload.cts` so the compiled `preload.cjs` is self-contained and only requires `electron`. `preload-bridge.ts` is kept as the ESM source of truth for unit tests.
 
-## [0.3.1] - 2026-06-01
+## [0.3.1-pre] - 2026-06-01
+
+> 已被 `[0.3.1] - 2026-06-02` 覆盖。该版本曾发布到 GitHub release 但实质不可用：preload 在 Electron sandbox 下加载失败导致桌面 token 无法注入、首页 4 个 query 持续触发 CORS 预检失败。保留本段以记录历史。
 
 ### Added
 

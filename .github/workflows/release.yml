@@ -32,7 +32,12 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     env:
-      HBS_MACOS_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'developer-id' }}
+      # tag push 触发时仓库还没配 Apple 证书 secrets，默认就走 unsigned；如果未来要发
+      # signed 版本，用 workflow_dispatch 并把 release_mode 选成 developer-id 即可。
+      # 把默认从 developer-id 改成 unsigned 是因为 v0.3.1 重新 tag 触发时全套 secrets
+      # 仍为空，老默认值直接让 make:dmg 在 "缺少 macOS 发布签名配置" 处 exit 1，
+      # release 始终建不出来。
+      HBS_MACOS_RELEASE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.release_mode || 'unsigned' }}
       HBS_MACOS_CODESIGN_IDENTITY: ${{ secrets.HBS_MACOS_CODESIGN_IDENTITY }}
       HBS_MACOS_CODESIGN_KEYCHAIN: ${{ secrets.HBS_MACOS_CODESIGN_KEYCHAIN }}
       HBS_MACOS_NOTARY_APPLE_ID: ${{ secrets.HBS_MACOS_NOTARY_APPLE_ID }}

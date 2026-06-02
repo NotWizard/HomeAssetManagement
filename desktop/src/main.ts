@@ -51,6 +51,7 @@ let lastSleepWakeRestartAt = 0;
 
 let mainWindow: BrowserWindow | null = null;
 let windowPort: number | null = null;
+let resolvedAppUrl: string | null = null;
 // 主进程进程级 file logger：app.whenReady 之后才允许 app.getPath('logs')，
 // 因此 ready 之前为 null；console-message handler 在判空后写入。
 let fileLogger: FileLogger | null = null;
@@ -397,6 +398,16 @@ function ensureMainWindow(): BrowserWindow {
   window.once('ready-to-show', () => {
     window.show();
   });
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+    const isReload = (input.meta || input.control) && input.key.toLowerCase() === 'r';
+    if (isReload || input.key === 'F5') {
+      event.preventDefault();
+      if (resolvedAppUrl) {
+        window.webContents.loadURL(resolvedAppUrl);
+      }
+    }
+  });
   // 窗口关闭前把当前 bounds 持久化，下次启动还原；最小化 / 全屏状态下 getBounds
   // 仍能返回普通窗体的最近一次位置，符合用户期望。
   window.on('close', () => {
@@ -448,6 +459,7 @@ const bootstrapController = createBootstrapController({
         await window.loadURL(createPageUrl(createLoadingPage()));
       },
       showApp: async (url: string) => {
+        resolvedAppUrl = url;
         await window.loadURL(url);
       },
       showError: async (message: string) => {

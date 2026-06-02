@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Globe, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Globe, Info, Wallet } from 'lucide-react';
 
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -30,25 +30,47 @@ function formatDelta(value: number | null): string {
   return `${prefix}${value.toFixed(2)}%`;
 }
 
+function isNetworkError(error: unknown): boolean {
+  if (error instanceof TypeError && /fetch/i.test(error.message)) return true;
+  if (error instanceof Error && /network|ECONNREFUSED|Failed to fetch/i.test(error.message)) return true;
+  return false;
+}
+
+function friendlyError(error: unknown): string {
+  if (isNetworkError(error)) return '正在连接本地服务，请稍候…';
+  if (error instanceof Error) return error.message;
+  return '请求失败';
+}
+
+const OVERVIEW_QUERY_OPTIONS = { retry: 3, retryDelay: 1000 } as const;
+
 export function OverviewPage() {
-  const trendQuery = useQuery({ queryKey: queryKeys.trend.scope('overview'), queryFn: () => fetchTrend(90) });
-  // 与 EntryPage 共用 holdings.all() 缓存，避免页面切换时重复 fetch
+  const trendQuery = useQuery({ queryKey: queryKeys.trend.scope('overview'), queryFn: () => fetchTrend(90), ...OVERVIEW_QUERY_OPTIONS });
   const holdingsQuery = useQuery({
     queryKey: queryKeys.holdings.all(),
     queryFn: fetchHoldings,
     staleTime: 60_000,
+    ...OVERVIEW_QUERY_OPTIONS,
   });
-  const rebalanceQuery = useQuery({ queryKey: queryKeys.rebalance.scope('overview'), queryFn: () => fetchRebalance() });
-  const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings });
+  const rebalanceQuery = useQuery({ queryKey: queryKeys.rebalance.scope('overview'), queryFn: () => fetchRebalance(), ...OVERVIEW_QUERY_OPTIONS });
+  const settingsQuery = useQuery({ queryKey: queryKeys.settings.all(), queryFn: fetchSettings, ...OVERVIEW_QUERY_OPTIONS });
   const baseCurrency = settingsQuery.data?.base_currency ?? 'CNY';
+
+  const anyLoading = trendQuery.isLoading || holdingsQuery.isLoading || settingsQuery.isLoading || rebalanceQuery.isLoading;
+  const anyNetworkError = [trendQuery, holdingsQuery, settingsQuery, rebalanceQuery].some(
+    (q) => q.isError && isNetworkError(q.error)
+  );
+  const anyRealError = [trendQuery, holdingsQuery, settingsQuery, rebalanceQuery].some(
+    (q) => q.isError && !isNetworkError(q.error)
+  );
+
   const trendUnavailable = trendQuery.isError && !trendQuery.data;
   const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;
   const settingsUnavailable = settingsQuery.isError && !settingsQuery.data;
   const rebalanceUnavailable = rebalanceQuery.isError && !rebalanceQuery.data;
   const summaryUnavailable = trendUnavailable || settingsUnavailable;
-  const hasQueryWarning = trendQuery.isError || holdingsQuery.isError || settingsQuery.isError || rebalanceQuery.isError;
-  const baseCurrencyBadge = settingsQuery.data?.base_currency ?? (settingsUnavailable ? '读取失败' : '--');
-  const fxProviderBadge = settingsQuery.data?.fx_provider ?? (settingsUnavailable ? '读取失败' : '--');
+  const baseCurrencyBadge = settingsQuery.data?.base_currency ?? (settingsUnavailable ? '--' : '--');
+  const fxProviderBadge = settingsQuery.data?.fx_provider ?? (settingsUnavailable ? '--' : '--');
 
   const latest = useMemo(() => {
     if (!trendQuery.data || trendQuery.data.net_asset.length === 0) {
@@ -94,18 +116,6 @@ export function OverviewPage() {
   }, [holdingsQuery.data]);
 
   const summaryLoading = trendQuery.isLoading || settingsQuery.isLoading;
-  const trendErrorMessage = trendQuery.isError ? (trendQuery.error instanceof Error && trendQuery.error.message) || '请求失败' : null;
-  const holdingsErrorMessage = holdingsQuery.isError
-    ? (holdingsQuery.error instanceof Error && holdingsQuery.error.message) || '请求失败'
-    : null;
-  const settingsErrorMessage = settingsQuery.isError
-    ? (settingsQuery.error instanceof Error && settingsQuery.error.message) || '请求失败'
-    : null;
-  const rebalanceErrorMessage = rebalanceQuery.isError
-    ? (rebalanceQuery.error instanceof Error && rebalanceQuery.error.message) || '请求失败'
-    : null;
-  const pageWarningMessage = trendErrorMessage || holdingsErrorMessage || settingsErrorMessage || rebalanceErrorMessage || '请求失败';
-  const topAssetsError = holdingsUnavailable ? holdingsErrorMessage ?? '请求失败' : null;
 
   return (
     <div className="space-y-6">
@@ -121,25 +131,27 @@ export function OverviewPage() {
         }
       />
 
-      {hasQueryWarning ? (
+      {anyNetworkError && !anyLoading ? (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="flex items-start gap-2 p-4 text-sm text-amber-700">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>正在连接本地服务，请稍候…如持续无法连接，请尝试重启应用。</p>
+          </CardContent>
+        </Card>
+      ) : anyRealError ? (
         <Card className="border-rose-200 bg-rose-50/50">
           <CardContent className="flex items-start gap-2 p-4 text-sm text-rose-700">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <p className="font-medium">部分数据刷新失败</p>
-              <p className="mt-1 text-xs text-rose-700/90">
-                {summaryUnavailable || holdingsUnavailable || rebalanceUnavailable
-                  ? `当前展示最近一次成功结果；无缓存数据的模块暂时不可用。${pageWarningMessage}`
-                  : `当前展示最近一次成功结果。${pageWarningMessage}`}
-              </p>
-            </div>
+            <p className="font-medium">部分数据加载失败，请稍后刷新重试。</p>
           </CardContent>
         </Card>
       ) : null}
 
-      {summaryUnavailable ? (
-        <Card className="border-rose-200 bg-rose-50/50">
-          <CardContent className="p-4 text-sm text-rose-700">关键总览数据暂时不可用，请稍后刷新重试。</CardContent>
+      {summaryUnavailable && !anyLoading ? (
+        <Card className="border-border bg-muted/30">
+          <CardContent className="p-4 text-center text-sm text-muted-foreground">
+            暂无总览数据，录入资产负债后即可查看。
+          </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -184,12 +196,10 @@ export function OverviewPage() {
             <CardTitle className="text-sm">资产总览趋势</CardTitle>
           </CardHeader>
           <CardContent>
-            {trendQuery.isError ? (
+            {trendQuery.isError && !isNetworkError(trendQuery.error) ? (
               <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
-                <p className="font-medium">{trendUnavailable ? '趋势数据加载失败' : '趋势数据刷新失败'}</p>
-                <p className="mt-1 text-xs text-rose-700/90">
-                  {trendUnavailable ? trendErrorMessage : `当前展示最近一次成功结果：${trendErrorMessage}`}
-                </p>
+                <p className="font-medium">趋势数据加载失败</p>
+                <p className="mt-1 text-xs text-rose-700/90">{friendlyError(trendQuery.error)}</p>
               </div>
             ) : null}
             {trendUnavailable ? null : trendQuery.data ? (
@@ -210,12 +220,10 @@ export function OverviewPage() {
             <CardTitle className="text-sm">Top Assets</CardTitle>
           </CardHeader>
           <CardContent>
-            {holdingsQuery.isError ? (
+            {holdingsQuery.isError && !isNetworkError(holdingsQuery.error) ? (
               <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
-                <p className="font-medium">{holdingsUnavailable ? '资产数据加载失败' : '资产数据刷新失败'}</p>
-                <p className="mt-1 text-xs text-rose-700/90">
-                  {holdingsUnavailable ? holdingsErrorMessage : `当前展示最近一次成功结果：${holdingsErrorMessage}`}
-                </p>
+                <p className="font-medium">资产数据加载失败</p>
+                <p className="mt-1 text-xs text-rose-700/90">{friendlyError(holdingsQuery.error)}</p>
               </div>
             ) : null}
             <Table>
@@ -226,10 +234,10 @@ export function OverviewPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {topAssetsError ? (
+                {holdingsUnavailable ? (
                   <TableRow>
-                    <TableCell colSpan={2} className="text-center text-rose-600">
-                      资产数据加载失败：{topAssetsError}
+                    <TableCell colSpan={2} className="text-center text-muted-foreground">
+                      暂无数据
                     </TableCell>
                   </TableRow>
                 ) : topAssets.length > 0 ? (
@@ -260,12 +268,10 @@ export function OverviewPage() {
           <CardTitle className="text-sm">再平衡预警</CardTitle>
         </CardHeader>
         <CardContent>
-          {rebalanceQuery.isError ? (
+          {rebalanceQuery.isError && !isNetworkError(rebalanceQuery.error) ? (
             <div className="rounded-lg border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
-              <p className="font-medium">{rebalanceUnavailable ? '再平衡数据加载失败' : '再平衡数据刷新失败'}</p>
-              <p className="mt-1 text-xs text-rose-700/90">
-                {rebalanceUnavailable ? rebalanceErrorMessage : `当前展示最近一次成功结果：${rebalanceErrorMessage}`}
-              </p>
+              <p className="font-medium">再平衡数据加载失败</p>
+              <p className="mt-1 text-xs text-rose-700/90">{friendlyError(rebalanceQuery.error)}</p>
             </div>
           ) : null}
           {rebalanceUnavailable ? null : (

@@ -28,5 +28,8 @@
     "@types/node": "^22.13.10",
     "electron": "^35.0.0",
     "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "ds-store": "^0.1.6"
   }
 }

@@ -10,6 +10,7 @@ import {
   statSync,
   symlinkSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { resolve, join, basename, isAbsolute } from 'node:path';
@@ -87,17 +88,31 @@ export function runHdiutil(
   throw lastError ?? new Error(`hdiutil ${args[0]} 执行失败`);
 }
 
-function runOsascript(script) {
-  const result = spawnSync('osascript', ['-e', script], { encoding: 'utf8' });
+function writeDmgVisualLayout(mountPoint, dmgConfig, hasBackground) {
+  const require = createRequire(import.meta.url);
+  const DSStore = require('ds-store');
 
-  if (result.status !== 0) {
-    const stderr = result.stderr?.trim() ?? '';
-    // 不阻塞主流程：osascript 调整窗口外观失败时仅警告。CI / 无 GUI 环境就走最小 dmg。
-    process.stderr.write(`⚠️  osascript 调整 dmg 外观失败，已跳过：${stderr}\n`);
-    return false;
+  const { iconSize, windowSize, contents } = dmgConfig;
+  const ds = new DSStore();
+
+  ds.vSrn(1);
+  ds.setIconSize(iconSize);
+  ds.setWindowSize(windowSize.width, windowSize.height);
+  ds.setWindowPos(200, 120);
+
+  if (hasBackground) {
+    ds.setBackgroundPath(join(mountPoint, '.background', 'background.png'));
   }
 
-  return true;
+  ds.setIconPos('HouseholdBalanceSheet.app', contents.app.x, contents.app.y);
+  ds.setIconPos('Applications', contents.applications.x, contents.applications.y);
+
+  return new Promise((resolve, reject) => {
+    ds.write(join(mountPoint, '.DS_Store'), (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
 }
 
 function sleepSync(ms) {
@@ -118,36 +133,6 @@ function detachIfMounted(mountPoint) {
     return;
   }
   spawnSync('hdiutil', ['detach', mountPoint, '-force'], { stdio: 'ignore' });
-}
-
-export function buildAppleScriptForDmgWindow({ volumeName, dmgConfig, hasBackground }) {
-  const { iconSize, windowSize, contents } = dmgConfig;
-  const backgroundClause = hasBackground
-    ? `set background picture of vopt to file ".background:background.png"`
-    : '-- no background image, skip';
-  // 单引号外面是 Bash heredoc 常见格式；这里直接拼成 osascript 字符串。注意路径
-  // 出现的 ":" 是 HFS 风格分隔。
-  return [
-    `tell application "Finder"`,
-    `  tell disk "${volumeName}"`,
-    `    open`,
-    `    set current view of container window to icon view`,
-    `    set toolbar visible of container window to false`,
-    `    set statusbar visible of container window to false`,
-    `    set sidebar width of container window to 0`,
-    `    set the bounds of container window to {200, 120, ${200 + windowSize.width}, ${120 + windowSize.height}}`,
-    `    set vopt to the icon view options of container window`,
-    `    set arrangement of vopt to not arranged`,
-    `    set icon size of vopt to ${iconSize}`,
-    `    ${backgroundClause}`,
-    `    set position of item "HouseholdBalanceSheet.app" of container window to {${contents.app.x}, ${contents.app.y}}`,
-    `    set position of item "Applications" of container window to {${contents.applications.x}, ${contents.applications.y}}`,
-    `    update without registering applications`,
-    `    delay 1`,
-    `    close`,
-    `  end tell`,
-    `end tell`,
-  ].join('\n');
 }
 
 export function copyAppToStaging(appPath, stagingDir) {
@@ -269,7 +254,7 @@ function convertToCompressed({ rwImage, format, output }) {
   });
 }
 
-export function buildDmgArtifact({
+export async function buildDmgArtifact({
   appPath,
   arch,
   version,
@@ -302,12 +287,7 @@ export function buildDmgArtifact({
 
     mountPoint = attachImage(layout.rwImage);
 
-    const script = buildAppleScriptForDmgWindow({
-      volumeName: dmgConfig.title,
-      dmgConfig,
-      hasBackground,
-    });
-    runOsascript(script);
+    await writeDmgVisualLayout(mountPoint, dmgConfig, hasBackground);
 
     rmSync(join(mountPoint, '.fseventsd'), { force: true, recursive: true });
 
@@ -351,7 +331,7 @@ export async function runBuildDmgCli({ arch, productName = 'HouseholdBalanceShee
   const version = await readPackageVersion();
   const { makeRoot, releaseRoot } = resolveReleasePaths(desktopRoot);
   const appPath = resolveAppPath({ makeRoot, productName, arch: normalizedArch });
-  const finalDmg = buildDmgArtifact({
+  const finalDmg = await buildDmgArtifact({
     appPath,
     arch: normalizedArch,
     version,

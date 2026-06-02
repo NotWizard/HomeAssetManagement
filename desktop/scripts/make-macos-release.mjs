@@ -108,7 +108,7 @@ export async function makeMacOSRelease(targetArchOption = 'all', overrides = {})
       await signAndNotarizeAppOverride({ appPath, securityConfig });
       verifySignedAppOverride({ appPath, securityConfig });
     }
-    buildDmgArtifactOverride({
+    await buildDmgArtifactOverride({
       appPath,
       arch,
       version,

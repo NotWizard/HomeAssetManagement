@@ -455,7 +455,7 @@ export function EntryPage() {
 
       {!hasMembers ? (
         <Card className="border-amber-200 bg-amber-50/60">
-          <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <CardContent className="flex flex-col gap-3 p-5 md:p-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-amber-900">当前还没有可用成员，新增资产负债前请先创建成员。</div>
             <Button variant="secondary" onClick={() => navigate('/members')}>
               <UsersRound className="mr-2 h-4 w-4" />

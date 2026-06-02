@@ -86,6 +86,8 @@ These rules govern user-facing release notes (e.g. GitHub Release body), not the
 ## ⚠️ Heads-up           — behavior changed, or you need to do something (only when present, pinned to the top)
 ```
 
+When publishing to a GitHub Release, the first-line `# vX.Y.Z: ...` becomes the release **name** (`gh release create --title ...` or `gh release edit --title ...`); the release **body** should NOT repeat that H1, otherwise the page renders the title twice (once in the release header, once at the top of the body). Body starts directly with the optional one-line opener or the first `## ⚠️ Heads-up` / `## 🎉 New features` section.
+
 ### Writing rules
 
 1. **Write from the user's perspective, not the developer's.** Neutral phrasing ("Adds XX", "Now supports XX") or second-person ("You can now XX") are both fine — pick per product tone. AVOID "We + verb": it shifts the focus from what the user perceives to what the team did.

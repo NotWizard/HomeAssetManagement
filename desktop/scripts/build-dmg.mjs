@@ -134,6 +134,7 @@ export function buildAppleScriptForDmgWindow({ volumeName, dmgConfig, hasBackgro
     `    set current view of container window to icon view`,
     `    set toolbar visible of container window to false`,
     `    set statusbar visible of container window to false`,
+    `    set sidebar width of container window to 0`,
     `    set the bounds of container window to {200, 120, ${200 + windowSize.width}, ${120 + windowSize.height}}`,
     `    set vopt to the icon view options of container window`,
     `    set arrangement of vopt to not arranged`,
@@ -307,6 +308,8 @@ export function buildDmgArtifact({
       hasBackground,
     });
     runOsascript(script);
+
+    rmSync(join(mountPoint, '.fseventsd'), { force: true, recursive: true });
 
     detachImage(mountPoint);
     mountPoint = null;

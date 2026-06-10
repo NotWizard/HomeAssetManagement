@@ -21,6 +21,19 @@ export type HbsDesktopUpdateStatus =
   | 'installing'
   | 'error';
 
+/**
+ * 更新错误分类，与桌面壳 `UpdateErrorKind` 一一对应。
+ *
+ * - `network`：网络检查失败。按当前设计，网络错误会被桌面壳降级到上一次成功结论，
+ *   理论上不会渲染到 UI；保留该值是旧 state.json 兼容兜底。
+ * - `download` / `validation` / `install`：用户可操作的错误，会显示在左下角入口。
+ */
+export type HbsDesktopUpdateErrorKind =
+  | 'network'
+  | 'download'
+  | 'validation'
+  | 'install';
+
 export type HbsDesktopUpdateState = {
   status: HbsDesktopUpdateStatus;
   latestVersion?: string | null;
@@ -29,6 +42,7 @@ export type HbsDesktopUpdateState = {
   downloadedAt?: string | null;
   progress?: number | null;
   errorMessage?: string | null;
+  errorKind?: HbsDesktopUpdateErrorKind | null;
 };
 
 export type HbsDesktopBridge = {

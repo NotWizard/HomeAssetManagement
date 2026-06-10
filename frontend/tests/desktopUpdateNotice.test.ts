@@ -58,6 +58,48 @@ test('桌面更新入口只在用户需要操作的状态下展示，并给出�
   );
 });
 
+test('桌面更新入口的错误文案会按 errorKind 细分', () => {
+  // 兜底：无 errorKind 时显示通用"更新失败，重试"
+  assert.equal(
+    getDesktopUpdateButtonLabel({ status: 'error', progress: null }),
+    '更新失败，重试'
+  );
+  assert.equal(
+    getDesktopUpdateButtonLabel({
+      status: 'error',
+      progress: null,
+      errorKind: 'download',
+    }),
+    '下载失败，重试'
+  );
+  assert.equal(
+    getDesktopUpdateButtonLabel({
+      status: 'error',
+      progress: null,
+      errorKind: 'validation',
+    }),
+    '更新包校验失败，重试'
+  );
+  assert.equal(
+    getDesktopUpdateButtonLabel({
+      status: 'error',
+      progress: null,
+      errorKind: 'install',
+    }),
+    '安装失败，重试'
+  );
+  // 防御性分支：按当前设计网络错误不会进入 error status，但保留兜底文案
+  // 兼容升级过程中残留的旧 state.json
+  assert.equal(
+    getDesktopUpdateButtonLabel({
+      status: 'error',
+      progress: null,
+      errorKind: 'network',
+    }),
+    '检查更新暂时不可用'
+  );
+});
+
 test('桌面更新入口会根据状态推导点击动作与忙碌态', () => {
   // available / downloading 不显示入口、不应该被点击；返回 'none' 防御性兜底
   assert.equal(

@@ -78,7 +78,10 @@ export function isDesktopUpdateBusy(status: HbsDesktopUpdateStatus): boolean {
 }
 
 export function getDesktopUpdateButtonLabel(
-  state: Pick<HbsDesktopUpdateState, 'status' | 'progress'> | null | undefined
+  state: Pick<
+    HbsDesktopUpdateState,
+    'status' | 'progress' | 'errorKind'
+  > | null | undefined
 ): string {
   const status = state?.status ?? 'idle';
   if (status === 'available') {
@@ -97,6 +100,21 @@ export function getDesktopUpdateButtonLabel(
     return '安装进行中';
   }
   if (status === 'error') {
+    // 按 errorKind 细分文案，让用户一眼看懂失败发生在哪一步。
+    // 防御性处理：按当前设计网络错误不会进入 error status，但保留该分支
+    // 兼容升级过程中残留的旧 state.json 与未来可能的新错误来源。
+    if (state?.errorKind === 'download') {
+      return '下载失败，重试';
+    }
+    if (state?.errorKind === 'validation') {
+      return '更新包校验失败，重试';
+    }
+    if (state?.errorKind === 'install') {
+      return '安装失败，重试';
+    }
+    if (state?.errorKind === 'network') {
+      return '检查更新暂时不可用';
+    }
     return '更新失败，重试';
   }
   return '检查更新';

@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复桌面端左下角在 GitHub API 限速（HTTP 403）或网络抖动时误显"更新失败，重试"按钮。当前已是最新版本时，网络类检查失败会静默降级到上一次成功结论，不再把错误状态持久化到 `state.json` 反复打扰用户；下载 / 校验 / 安装阶段的真实失败仍保留显眼重试入口，并按失败类型细分文案（下载失败 / 校验失败 / 安装失败）。同时加入陈年 error 状态 1 小时 TTL 自动复位、连续失败 4h/24h 退避轮询、旧 state.json 字段向后兼容推断，避免重启后旧错误残留。
+- Fix the desktop update notice incorrectly showing "更新失败，重试" in the bottom-left when GitHub Releases API is rate-limited (HTTP 403) or the network is flaky. When the app is already on the latest version, network-class check failures now silently fall back to the last successful conclusion instead of persisting an error state in `state.json` and pestering the user across restarts. Real failures in the download / validation / install stages still surface a prominent retry entry with error-kind-specific labels (download / validation / install). Also added: 1-hour TTL auto-reset for stale error states, 4h/24h backoff polling on consecutive failures, and backward-compatible inference of new fields in old `state.json` files so stale errors don't linger after upgrade.
+
 ## [0.3.1] - 2026-06-02
 
 > 本版本重新打了 v0.3.1 tag，覆盖了 2026-06-01 首次发出的同名版本（见下方 `[0.3.1-pre]` 段）。原 v0.3.1 因桌面 preload 在 sandbox 下加载失败、首页持续触发 CORS 误报与 HTTP 401，实质不可用，故重发覆盖。

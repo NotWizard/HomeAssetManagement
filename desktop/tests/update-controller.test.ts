@@ -7,6 +7,10 @@ test('更新控制器启动后会立即检查并按 12 小时轮询', async () =
   const updateControllerModule = await import('../src/update-controller.ts');
   const calls: string[] = [];
   let scheduled: (() => Promise<void>) | null = null;
+  // 时间可变：第一次 check 成功后 nextAllowedCheckAt = now + 12h；
+  // 第二次 scheduled 触发时如果 still in backoff window 会被 noop 跳过，
+  // 因此必须把时间拨到 12h 之后才能观察到第二次 fetchReleases。
+  let currentTime = 1_700_000_000_000;
 
   const controller = updateControllerModule.createUpdateController({
     appVersion: '0.1.0',
@@ -24,7 +28,7 @@ test('更新控制器启动后会立即检查并按 12 小时轮询', async () =
     },
     loadPersistedState: () => null,
     persistState: () => undefined,
-    now: () => 1_700_000_000_000,
+    now: () => currentTime,
   });
 
   await controller.start();
@@ -34,6 +38,15 @@ test('更新控制器启动后会立即检查并按 12 小时轮询', async () =
   if (!scheduled) {
     throw new Error('轮询回调未注册');
   }
+  // 退避窗口内调用 noop：不应触发新 fetch
+  await scheduled();
+  assert.equal(
+    calls.filter((entry) => entry === 'fetchReleases').length,
+    1,
+    '退避窗口内轮询应 noop，不重复 fetch'
+  );
+  // 时间拨过 12h 后再次触发，fetch 才应该真正执行
+  currentTime += 12 * 60 * 60 * 1000 + 1;
   await scheduled();
   assert.equal(calls.filter((entry) => entry === 'fetchReleases').length >= 2, true);
 });
@@ -336,5 +349,389 @@ test('listener 抛出异常不会影响其他 listener 与状态广播', async (
     goodLog.length > 0,
     '即使前一个 listener 抛错，后续 listener 仍应收到状态广播'
   );
+});
+
+test('网络检查失败时不进 error 状态，而是保留 previousState 的稳定态（idle）', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const states: Array<{ status: string; errorKind?: string }> = [];
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-network-idle',
+    fetchJsonReleases: async () => {
+      throw new Error('检查更新失败: HTTP 403');
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: (state) => {
+      states.push({ status: state.status, errorKind: state.errorKind });
+    },
+    now: () => 1_700_000_000_000,
+  });
+
+  // 静默 stderr 的"网络检查失败"噪声
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    await controller.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  const finalState = controller.getState();
+  assert.equal(finalState.status, 'idle', '网络失败后应保持 idle 而非 error');
+  assert.equal(finalState.errorKind, undefined);
+  assert.equal(finalState.errorMessage, undefined, '不应残留 errorMessage');
+  assert.equal(
+    finalState.lastNetworkErrorAt,
+    1_700_000_000_000,
+    '应记录诊断时间戳'
+  );
+  assert.equal(finalState.consecutiveNetworkFailures, 1);
+  // 中间状态序列里绝不应出现 status === 'error'
+  assert.equal(
+    states.some((entry) => entry.status === 'error'),
+    false,
+    '整个生命周期不应出现 error 状态'
+  );
+});
+
+test('网络检查失败时若 previousState 为 downloaded 应保持 downloaded（等待用户安装）', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const downloadDir = '/tmp/hbs-userdata-network-keep-dl/updates';
+  const downloadedFilePath = `${downloadDir}/update.zip`;
+  mkdirSync(downloadDir, { recursive: true });
+  writeFileSync(downloadedFilePath, 'dummy');
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-network-keep-dl',
+    fetchJsonReleases: async () => {
+      throw new Error('HTTP 403');
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'downloaded',
+      currentVersion: '0.3.1',
+      latestVersion: '0.4.0',
+      assetName: 'HouseholdBalanceSheet-0.4.0-macos-arm64.zip',
+      downloadedFilePath,
+      lastCheckedAt: 1_699_999_000_000,
+    }),
+    persistState: () => undefined,
+    now: () => 1_700_000_000_000,
+  });
+
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    await controller.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  const finalState = controller.getState();
+  assert.equal(
+    finalState.status,
+    'downloaded',
+    '网络失败不应打扰已等待用户安装的 downloaded 状态'
+  );
+  assert.equal(finalState.downloadedFilePath, downloadedFilePath);
+  assert.equal(finalState.consecutiveNetworkFailures, 1);
+});
+
+test('成功检查更新后 lastSuccessfulCheckAt 与 lastKnownLatestVersion 会被写入', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-success-fields',
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: () => undefined,
+    now: () => 1_700_000_000_000,
+  });
+
+  await controller.start();
+  const state = controller.getState();
+  assert.equal(state.status, 'idle');
+  assert.equal(state.lastSuccessfulCheckAt, 1_700_000_000_000);
+  assert.equal(state.consecutiveNetworkFailures, 0);
+  assert.equal(state.lastNetworkErrorAt, undefined);
+  assert.equal(state.lastKnownLatestVersion, null, '无新版本时 lastKnownLatestVersion 应为 null');
+});
+
+test('网络失败累计 consecutiveNetworkFailures，成功后清零', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  let currentTime = 1_700_000_000_000;
+  let shouldFail = true;
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-failure-count',
+    fetchJsonReleases: async () => {
+      if (shouldFail) throw new Error('HTTP 500');
+      return [];
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: () => undefined,
+    now: () => currentTime,
+  });
+
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    // 用 manual=true 强制每次真实 fetch，让计数器按预期累加
+    await controller.start();
+    assert.equal(controller.getState().consecutiveNetworkFailures, 1);
+
+    await controller.checkForUpdates({ manual: true });
+    assert.equal(controller.getState().consecutiveNetworkFailures, 2);
+
+    // 拨到 12h 后让下一次 check 通过退避
+    currentTime += 12 * 60 * 60 * 1000 + 1;
+    shouldFail = false;
+    await controller.checkForUpdates({ manual: true });
+    assert.equal(
+      controller.getState().consecutiveNetworkFailures,
+      0,
+      '成功后 consecutiveNetworkFailures 应归零'
+    );
+    assert.equal(controller.getState().lastNetworkErrorAt, undefined);
+    assert.equal(
+      controller.getState().lastSuccessfulCheckAt,
+      currentTime
+    );
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+});
+
+test('sanitize 启动时会把超过 1 小时的 error 状态清洗为 idle', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const errorTimestamp = 1_700_000_000_000;
+  const nowTimestamp = errorTimestamp + 2 * 60 * 60 * 1000; // 2h 后
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-sanitize-ttl',
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'error',
+      currentVersion: '0.3.1',
+      errorMessage: '检查更新失败: HTTP 403',
+      error: '检查更新失败: HTTP 403',
+      lastCheckedAt: errorTimestamp,
+    }),
+    persistState: () => undefined,
+    now: () => nowTimestamp,
+  });
+
+  // 让 fetch 也失败，避免 sanitize 后的 idle 状态又被 checkForUpdates 重新打成 error
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    await controller.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  // 启动期 sanitize 后立刻 emitState 广播的是 idle（TTL 生效）；
+  // 但紧接着 checkForUpdates 又因 fetch 失败降级，最终状态仍应是 idle。
+  const state = controller.getState();
+  assert.equal(state.status, 'idle', '陈旧的 error 状态应被 sanitize 清洗');
+  assert.equal(state.errorMessage, undefined);
+  assert.equal(state.errorKind, undefined);
+});
+
+test('sanitize 启动时未到 TTL 的 error 状态保持原样，让用户能重试', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const errorTimestamp = 1_700_000_000_000;
+  const nowTimestamp = errorTimestamp + 30 * 60 * 1000; // 30min 后
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-sanitize-fresh',
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'error',
+      currentVersion: '0.3.1',
+      errorKind: 'download',
+      errorMessage: '下载中断',
+      lastCheckedAt: errorTimestamp,
+    }),
+    persistState: () => undefined,
+    now: () => nowTimestamp,
+  });
+
+  // start 后 sanitize 阶段会先广播 error，随后 checkForUpdates 成功会把状态切到 idle。
+  // 我们关心的是 sanitize 阶段：让 fetch 直接永不返回，仅观察 sanitize 后瞬间状态
+  // —— 通过让 fetch 抛错的 controller 实例对比观察 sanitize 后的初始状态。
+  const controller2 = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-sanitize-fresh-2',
+    fetchJsonReleases: async () => {
+      throw new Error('HTTP 500');
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'error',
+      currentVersion: '0.3.1',
+      errorKind: 'download',
+      errorMessage: '下载中断',
+      lastCheckedAt: errorTimestamp,
+    }),
+    persistState: () => undefined,
+    now: () => nowTimestamp,
+  });
+
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    await controller2.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  const state = controller2.getState();
+  // 未到 TTL：sanitize 不动；checkForUpdates 失败降级也维持 error
+  assert.equal(state.status, 'error');
+  assert.equal(state.errorKind, 'download', '原始 errorKind 应被保留');
+  assert.equal(state.errorMessage, '下载中断');
+});
+
+test('旧 state.json（无 lastSuccessfulCheckAt）在 sanitize 时会被推断', async () => {
+  // 模拟旧字段结构：无 lastSuccessfulCheckAt / consecutiveNetworkFailures / lastNetworkErrorAt
+  const legacyPersisted = {
+    status: 'idle' as const,
+    currentVersion: '0.3.0',
+    lastCheckedAt: 1_699_999_000_000,
+  };
+
+  const controllerModule = await import('../src/update-controller.ts');
+  // 用 subscribe 拿 sanitize 阶段 emitState 广播的"瞬间"状态，避免被后续 checkForUpdates 覆盖
+  let firstEmittedState: any = null;
+  const controller = controllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-legacy',
+    fetchJsonReleases: async () => [],
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => legacyPersisted,
+    persistState: () => undefined,
+    now: () => 1_700_000_000_000,
+  });
+  controller.subscribe((state) => {
+    if (firstEmittedState === null) firstEmittedState = state;
+  });
+
+  await controller.start();
+  // sanitize 阶段会 emitState → 第一个 subscribe 回调拿到的就是 sanitize 后瞬间的快照
+  assert.equal(
+    firstEmittedState.lastSuccessfulCheckAt,
+    1_699_999_000_000,
+    '旧 idle 状态的 lastCheckedAt 应被推断为 lastSuccessfulCheckAt'
+  );
+  // 但 start 完成后 checkForUpdates 还会再跑一次，把 lastSuccessfulCheckAt 推到 now
+  assert.equal(controller.getState().lastSuccessfulCheckAt, 1_700_000_000_000);
+});
+
+test('退避：连续网络失败 >=3 次后轮询 noop，manual=true 时无视退避', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  let currentTime = 1_700_000_000_000;
+  let fetchCount = 0;
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.3.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-backoff',
+    fetchJsonReleases: async () => {
+      fetchCount += 1;
+      throw new Error('HTTP 500');
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: () => undefined,
+    now: () => currentTime,
+  });
+
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    // start() 触发第 1 次 check（fetchCount=1，consecutiveNetworkFailures=1）
+    await controller.start();
+    assert.equal(fetchCount, 1);
+
+    // 退避窗口 12h 内普通调用 noop：fetch 不触发，计数器不变
+    currentTime += 1_000;
+    await controller.checkForUpdates();
+    assert.equal(fetchCount, 1, '退避窗口内普通调用应 noop，不触发 fetch');
+    assert.equal(
+      controller.getState().consecutiveNetworkFailures,
+      1,
+      'noop 不应修改 consecutiveNetworkFailures'
+    );
+
+    // manual=true 无视退避
+    await controller.checkForUpdates({ manual: true });
+    assert.equal(fetchCount, 2, 'manual=true 应无视退避立即 fetch');
+    assert.equal(controller.getState().consecutiveNetworkFailures, 2);
+
+    // 再来一次手动到 consecutive=3
+    await controller.checkForUpdates({ manual: true });
+    await controller.checkForUpdates({ manual: true });
+    assert.equal(controller.getState().consecutiveNetworkFailures, 4);
+
+    // 连续失败 >=3 后，退避窗口应拉长到 4h；4h 内普通调用 noop
+    fetchCount = 0;
+    currentTime += 3 * 60 * 60 * 1000; // +3h，仍 < 4h
+    await controller.checkForUpdates();
+    assert.equal(fetchCount, 0, '4h 退避窗口内应 noop');
+
+    // 4h 后再试应该放行
+    currentTime += 2 * 60 * 60 * 1000; // +2h = 累计 5h > 4h
+    await controller.checkForUpdates();
+    assert.equal(fetchCount, 1, '4h 退避窗口过后应重新 fetch');
+  } finally {
+    process.stderr.write = originalWrite;
+  }
 });
 

@@ -10,11 +10,16 @@ import {
   createDefaultUpdateState,
   parseSha256File,
   pickUpdateCandidate,
+  successfulCheckHealthFields,
   toAvailableState,
+  toDownloadErrorState,
   toDownloadedState,
   toErrorState,
+  toInstallErrorState,
   toInstallingState,
+  toNetworkDegradedState,
   toPreparingInstallState,
+  toValidationErrorState,
   verifySha256,
   type GithubRelease,
   type UpdateState,
@@ -22,11 +27,32 @@ import {
 } from './update-workflow.ts';
 
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+// 网络检查连续失败的退避阶梯：避免短时间反复撞 GitHub API 未认证限速（60 req/h）。
+const UPDATE_BACKOFF_POLL_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const UPDATE_LONG_BACKOFF_POLL_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_BACKOFF_THRESHOLD = 3;
+const UPDATE_LONG_BACKOFF_THRESHOLD = 10;
+// 启动时读到 error 状态：若 lastCheckedAt 距今已超过 TTL，视为过期，清洗回 idle。
+// 1h 阈值与 GitHub 限速窗口（1h）对齐，避免用户下次启动仍看到上一轮 403 残留。
+const UPDATE_ERROR_STATE_TTL_MS = 60 * 60 * 1000;
+// 重启后如果上次网络失败距今超过此阈值，清零 consecutiveNetworkFailures，
+// 让新一轮检查能从短退避起步，而不是继承几小时前的长退避。
+const UPDATE_NETWORK_FAILURE_MEMORY_MS = 24 * 60 * 60 * 1000;
 const UPDATE_SUBDIR = 'updates';
 const UPDATE_STATE_FILE = 'state.json';
 const RELEASES_API_URL =
   'https://api.github.com/repos/NotWizard/HouseholdBalanceSheet/releases';
 const CHANNEL_PREFIX = 'hbs:update';
+
+function computeBackoffPollIntervalMs(consecutiveNetworkFailures: number): number {
+  if (consecutiveNetworkFailures >= UPDATE_LONG_BACKOFF_THRESHOLD) {
+    return UPDATE_LONG_BACKOFF_POLL_INTERVAL_MS;
+  }
+  if (consecutiveNetworkFailures >= UPDATE_BACKOFF_THRESHOLD) {
+    return UPDATE_BACKOFF_POLL_INTERVAL_MS;
+  }
+  return UPDATE_CHECK_INTERVAL_MS;
+}
 
 export const UPDATE_IPC_CHANNELS = {
   getState: `${CHANNEL_PREFIX}:get-state`,
@@ -192,12 +218,16 @@ async function findAppBundleInDirectory(directory: string): Promise<string | nul
   return null;
 }
 
-function sanitizePersistedState(appVersion: string, persisted: UpdateState | null): UpdateState {
+function sanitizePersistedState(
+  appVersion: string,
+  persisted: UpdateState | null,
+  now: number
+): UpdateState {
   if (!persisted) {
     return createDefaultUpdateState(appVersion);
   }
 
-  const nextState: UpdateState = {
+  let nextState: UpdateState = {
     ...createDefaultUpdateState(appVersion),
     ...persisted,
     currentVersion: appVersion,
@@ -230,7 +260,51 @@ function sanitizePersistedState(appVersion: string, persisted: UpdateState | nul
       assetName: nextState.assetName,
       assetUrl: nextState.assetUrl,
       totalBytes: nextState.totalBytes,
+      // 保留"已知世界状态"让下次检查能降级到上次结论
+      lastSuccessfulCheckAt: nextState.lastSuccessfulCheckAt,
+      lastKnownLatestVersion: nextState.lastKnownLatestVersion,
     };
+  }
+
+  // === error 状态 TTL 清洗 ===
+  // 超过 1h 的陈旧 error（典型：上一轮 GitHub 403 后用户未重启的冷 state.json）
+  // 复位到 idle，避免每次启动都误显"更新失败"。保留 lastSuccessfulCheckAt 让
+  // 紧接着的 checkForUpdates 若再次失败仍能降级到"上次结论"。
+  if (
+    nextState.status === 'error' &&
+    typeof nextState.lastCheckedAt === 'number' &&
+    now - nextState.lastCheckedAt > UPDATE_ERROR_STATE_TTL_MS
+  ) {
+    nextState = {
+      ...createDefaultUpdateState(appVersion),
+      lastCheckedAt: nextState.lastCheckedAt,
+      lastSuccessfulCheckAt: nextState.lastSuccessfulCheckAt,
+      lastKnownLatestVersion: nextState.lastKnownLatestVersion,
+    };
+  }
+
+  // === 向后兼容：旧 state.json 没有 lastSuccessfulCheckAt 字段 ===
+  // 旧版本里 status=idle 且 lastCheckedAt 存在 = "上次成功检查后无新版本"。
+  // 谨慎起见只从 idle 推断；error 状态已在上面清洗时一并处理；
+  // downloaded/available 等有业务含义的状态不推断，避免误判"已确认无更新"。
+  if (
+    typeof nextState.lastSuccessfulCheckAt !== 'number' &&
+    typeof nextState.lastCheckedAt === 'number' &&
+    nextState.status === 'idle'
+  ) {
+    nextState.lastSuccessfulCheckAt = nextState.lastCheckedAt;
+  }
+
+  // === 网络失败计数器老化重置 ===
+  // 上一轮网络失败距今超过 24h，清零 consecutiveNetworkFailures，让新一轮
+  // 检查从短退避起步；避免几小时前的偶发故障继续拉长下一轮轮询间隔。
+  if (
+    typeof nextState.consecutiveNetworkFailures === 'number' &&
+    nextState.consecutiveNetworkFailures > 0 &&
+    typeof nextState.lastNetworkErrorAt === 'number' &&
+    now - nextState.lastNetworkErrorAt > UPDATE_NETWORK_FAILURE_MEMORY_MS
+  ) {
+    nextState.consecutiveNetworkFailures = 0;
   }
 
   return nextState;
@@ -325,6 +399,12 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
   let state = createDefaultUpdateState(options.appVersion);
   let pollingTimer: { dispose: () => void } | null = null;
+  // 下一次允许执行 checkForUpdates 的最早时间戳（毫秒）。
+  // - 初始 0：启动期立即跑一次 check，尽快拿到"是否最新版"的结论。
+  // - 网络成功：now + BASE_POLL_INTERVAL_MS（12h）。
+  // - 网络失败：now + backoff（4h/24h 按连续失败次数递增）。
+  // 用户手动触发（点"重试"按钮）无视此门槛。
+  let nextAllowedCheckAt = 0;
   const listeners = new Set<UpdateListener>();
 
   function emitState(): void {
@@ -354,8 +434,20 @@ export function createUpdateController(options: UpdateControllerOptions) {
     return state;
   }
 
-  async function checkForUpdates(): Promise<UpdateState> {
+  async function checkForUpdates(
+    checkOptions: { manual?: boolean } = {}
+  ): Promise<UpdateState> {
     if (!isPackaged) {
+      return state;
+    }
+
+    const nowTs = now();
+
+    // === 退避守卫 ===
+    // 非手动触发时，若仍处于网络失败后的 backoff 窗口，本次轮询直接 noop：
+    // 不调用 fetchJsonReleases（不撞限速）、不 persist、不广播。
+    // 用户手动点击"重试"按钮 → manual=true → 无视退避立即检查。
+    if (!checkOptions.manual && nowTs < nextAllowedCheckAt) {
       return state;
     }
 
@@ -364,97 +456,140 @@ export function createUpdateController(options: UpdateControllerOptions) {
       status: 'checking',
       errorMessage: undefined,
       error: undefined,
-      lastCheckedAt: now(),
+      errorKind: undefined,
+      lastCheckedAt: nowTs,
       currentVersion: options.appVersion,
     });
 
+    let releases: GithubRelease[];
     try {
-      const releases = (await fetchJsonReleases()) as GithubRelease[];
-      const candidate = pickUpdateCandidate({
-        currentVersion: options.appVersion,
-        arch,
-        releases,
-      });
+      releases = (await fetchJsonReleases()) as GithubRelease[];
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const failures = (previousState.consecutiveNetworkFailures ?? 0) + 1;
+      // 退避窗口按"连续失败次数"阶梯递增，避免短时间反复撞 GitHub 限速。
+      nextAllowedCheckAt = nowTs + computeBackoffPollIntervalMs(failures);
 
-      if (!candidate) {
-        const shouldKeepDownloaded =
-          previousState.status === 'downloaded' &&
-          typeof previousState.latestVersion === 'string' &&
-          compareVersions(previousState.latestVersion, options.appVersion) > 0 &&
-          !!previousState.downloadedFilePath &&
-          existsSync(previousState.downloadedFilePath);
-
-        if (shouldKeepDownloaded) {
-          return updateState({
-            status: 'downloaded',
-            downloadedFilePath: previousState.downloadedFilePath,
-            assetName: previousState.assetName,
-            assetUrl: previousState.assetUrl,
-            downloadedAt: previousState.downloadedAt,
-            downloadedBytes: previousState.downloadedBytes,
-            totalBytes: previousState.totalBytes,
-            progress: previousState.progress ?? 100,
-            lastCheckedAt: now(),
-            errorMessage: undefined,
-          });
-        }
-
-        return updateState({
-          status: 'idle',
-          latestVersion: undefined,
-          releaseTag: undefined,
-          releaseUrl: undefined,
-          assetName: undefined,
-          assetUrl: undefined,
-          downloadedFilePath: undefined,
-          downloadedAt: undefined,
-          downloadedBytes: undefined,
-          totalBytes: undefined,
-          progress: undefined,
-          errorMessage: undefined,
-        });
-      }
-
-      const shouldKeepDownloaded =
-        ['downloaded', 'preparing', 'installing'].includes(state.status) &&
-        state.assetName === candidate.asset.name &&
-        !!state.downloadedFilePath &&
-        existsSync(state.downloadedFilePath);
-
-      const nextState = updateState(
-        toAvailableState({
-          currentVersion: options.appVersion,
-          candidate,
-        })
+      // === 关键修复：网络失败不进 error，保留 previousState 的稳定状态 ===
+      // 把 checking 状态回退到 previousState.status（通常是 idle，也可能是
+      // downloaded 等待用户安装），仅在 state 上追加诊断字段。
+      // UI 看不到任何变化（status 没变 → broadcastUpdateState 推同样内容 → 不闪烁）。
+      process.stderr.write(
+        `[hbs-update] 网络检查失败（已降级到上次结论，连续第 ${failures} 次）: ${message}\n`
       );
+
+      return updateState({
+        ...previousState,
+        ...toNetworkDegradedState({ previousState, now: nowTs }),
+        // 防御性：万一 previousState.status 在并发下被改成 checking，兜底回 idle
+        status:
+          previousState.status === 'checking' ? 'idle' : previousState.status,
+        lastCheckedAt: nowTs,
+      });
+    }
+
+    // === 成功分支：重置健康跟踪 ===
+    nextAllowedCheckAt = nowTs + UPDATE_CHECK_INTERVAL_MS;
+    const healthFields = successfulCheckHealthFields({ now: nowTs, latestVersion: null });
+
+    const candidate = pickUpdateCandidate({
+      currentVersion: options.appVersion,
+      arch,
+      releases,
+    });
+
+    if (!candidate) {
+      // 没有新版本；latestVersion 等字段清空，但仍把"已知无新版本"记录到
+      // lastKnownLatestVersion=null，下次网络失败时能降级到这一结论。
+      const shouldKeepDownloaded =
+        previousState.status === 'downloaded' &&
+        typeof previousState.latestVersion === 'string' &&
+        compareVersions(previousState.latestVersion, options.appVersion) > 0 &&
+        !!previousState.downloadedFilePath &&
+        existsSync(previousState.downloadedFilePath);
 
       if (shouldKeepDownloaded) {
         return updateState({
-          ...nextState,
           status: 'downloaded',
-          downloadedFilePath: state.downloadedFilePath,
-          downloadedAt: state.downloadedAt,
-          downloadedBytes: state.downloadedBytes,
-          totalBytes: candidate.asset.size,
-          progress: 100,
+          downloadedFilePath: previousState.downloadedFilePath,
+          assetName: previousState.assetName,
+          assetUrl: previousState.assetUrl,
+          downloadedAt: previousState.downloadedAt,
+          downloadedBytes: previousState.downloadedBytes,
+          totalBytes: previousState.totalBytes,
+          progress: previousState.progress ?? 100,
+          lastCheckedAt: nowTs,
+          errorMessage: undefined,
+          ...healthFields,
+          lastKnownLatestVersion: previousState.latestVersion ?? null,
         });
       }
 
-      // 后台静默下载：检测到新候选包后立即触发下载，不等待用户操作。
-      // - 不 await，让 checkForUpdates 立刻返回，不阻塞 12h 轮询。
-      // - 错误吞掉，downloadUpdate 内部已经通过 toErrorState 写入 state。
-      // - 用 status === 'available' 守卫，避免 12h 轮询期间正在下载又被重复触发。
-      // 用户感知链路：idle → (静默 available/downloading) → downloaded（左下角才出现提醒）。
-      if (state.status === 'available') {
-        void downloadUpdate().catch(() => undefined);
-      }
-
-      return nextState;
-    } catch (error) {
-      return updateState(
-        toErrorState(error instanceof Error ? error.message : String(error))
-      );
+      return updateState({
+        status: 'idle',
+        latestVersion: undefined,
+        releaseTag: undefined,
+        releaseUrl: undefined,
+        assetName: undefined,
+        assetUrl: undefined,
+        sha256AssetUrl: undefined,
+        downloadedFilePath: undefined,
+        downloadedAt: undefined,
+        downloadedBytes: undefined,
+        totalBytes: undefined,
+        progress: undefined,
+        errorMessage: undefined,
+        error: undefined,
+        errorKind: undefined,
+        lastCheckedAt: nowTs,
+        ...healthFields,
+        lastKnownLatestVersion: null,
+      });
     }
+
+    // 有新版候选：记录 lastKnownLatestVersion = candidate.version
+    const candidateHealthFields = successfulCheckHealthFields({
+      now: nowTs,
+      latestVersion: candidate.version,
+    });
+
+    const shouldKeepDownloaded =
+      ['downloaded', 'preparing', 'installing'].includes(state.status) &&
+      state.assetName === candidate.asset.name &&
+      !!state.downloadedFilePath &&
+      existsSync(state.downloadedFilePath);
+
+    const nextState = updateState({
+      ...toAvailableState({
+        currentVersion: options.appVersion,
+        candidate,
+      }),
+      ...candidateHealthFields,
+      lastCheckedAt: nowTs,
+    });
+
+    if (shouldKeepDownloaded) {
+      return updateState({
+        ...nextState,
+        status: 'downloaded',
+        downloadedFilePath: state.downloadedFilePath,
+        downloadedAt: state.downloadedAt,
+        downloadedBytes: state.downloadedBytes,
+        totalBytes: candidate.asset.size,
+        progress: 100,
+      });
+    }
+
+    // 后台静默下载：检测到新候选包后立即触发下载，不等待用户操作。
+    // - 不 await，让 checkForUpdates 立刻返回，不阻塞 12h 轮询。
+    // - 错误吞掉，downloadUpdate 内部已经通过分类 error state 写入 state。
+    // - 用 status === 'available' 守卫，避免 12h 轮询期间正在下载又被重复触发。
+    // 用户感知链路：idle → (静默 available/downloading) → downloaded（左下角才出现提醒）。
+    if (state.status === 'available') {
+      void downloadUpdate().catch(() => undefined);
+    }
+
+    return nextState;
   }
 
   async function downloadUpdate(): Promise<UpdateState> {
@@ -462,7 +597,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
       return state;
     }
     if (!state.assetUrl || !state.assetName) {
-      return updateState(toErrorState('当前没有可下载的更新包'));
+      return updateState(toDownloadErrorState('当前没有可下载的更新包'));
     }
     if (state.status === 'downloaded' && state.downloadedFilePath) {
       return state;
@@ -471,7 +606,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
     // Hard gate：必须提供配套 .sha256 校验文件，否则拒绝下载（防 MITM/注入恶意更新包）。
     if (!state.sha256AssetUrl) {
       return updateState(
-        toErrorState(
+        toValidationErrorState(
           '更新包缺少完整性校验文件（.sha256），出于安全考虑已拒绝下载，请等待官方修复后再尝试'
         )
       );
@@ -588,8 +723,14 @@ export function createUpdateController(options: UpdateControllerOptions) {
       );
     } catch (error) {
       rmSync(partialPath, { force: true });
+      const message = error instanceof Error ? error.message : String(error);
+      // 按错误消息细分 download / validation：含 "SHA-256" 或 "校验" 关键字的走 validation，
+      // 其他（HTTP 下载失败、流中断、文件写入错误）走 download。
+      const isValidation = /SHA-256|校验/.test(message);
       return updateState(
-        toErrorState(error instanceof Error ? error.message : String(error))
+        isValidation
+          ? toValidationErrorState(message)
+          : toDownloadErrorState(message)
       );
     }
   }
@@ -599,10 +740,10 @@ export function createUpdateController(options: UpdateControllerOptions) {
       return state;
     }
     if (!state.downloadedFilePath || !existsSync(state.downloadedFilePath)) {
-      return updateState(toErrorState('更新包不存在，请重新下载'));
+      return updateState(toInstallErrorState('更新包不存在，请重新下载'));
     }
     if (platform !== 'darwin') {
-      return updateState(toErrorState('当前仅支持 macOS 自动安装'));
+      return updateState(toInstallErrorState('当前仅支持 macOS 自动安装'));
     }
 
     const validation = validateDownloadedUpdate({
@@ -612,7 +753,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
       downloadedFilePath: state.downloadedFilePath,
     });
     if (!validation.ok) {
-      return updateState(toErrorState(validation.message));
+      return updateState(toInstallErrorState(validation.message));
     }
 
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
@@ -629,13 +770,13 @@ export function createUpdateController(options: UpdateControllerOptions) {
     ]);
     if (unzipResult.status !== 0) {
       rmSync(stageDir, { force: true, recursive: true });
-      return updateState(toErrorState('解压更新包失败'));
+      return updateState(toInstallErrorState('解压更新包失败'));
     }
 
     const sourceAppPath = await findAppBundleInDirectory(stageDir);
     if (!sourceAppPath) {
       rmSync(stageDir, { force: true, recursive: true });
-      return updateState(toErrorState('更新包中未找到应用程序'));
+      return updateState(toInstallErrorState('更新包中未找到应用程序'));
     }
 
     const targetAppPath = resolveInstallTargetPath(processExecPath);
@@ -675,7 +816,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
       }
 
       const persisted = loadPersistedState();
-      state = sanitizePersistedState(options.appVersion, persisted);
+      state = sanitizePersistedState(options.appVersion, persisted, now());
       emitState();
 
       if (!isPackaged) {

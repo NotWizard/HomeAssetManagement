@@ -49,6 +49,20 @@ export type UpdateStatus =
   | 'installing'
   | 'error';
 
+/**
+ * 更新流程的错误分类。
+ *
+ * - `network`：fetch releases 失败 / HTTP 非 2xx（含 403 限速、429、5xx、断网）。
+ *   这类错误属于环境问题，不应该打扰用户；控制器会把状态降级到上一次成功结论，
+ *   **不会**进入 `status: 'error'`。
+ * - `download`：下载阶段失败（HTTP 下载错误、流中断）。
+ * - `validation`：下载完成但校验失败（sha256 不匹配、asset 缺失、包格式错）。
+ * - `install`：安装阶段失败（解压失败、未找到 .app、ditto 失败等）。
+ *
+ * 后三类属于用户可操作的错误，会进入 `status: 'error'` 并在左下角显示重试入口。
+ */
+export type UpdateErrorKind = 'network' | 'download' | 'validation' | 'install';
+
 export type UpdateState = {
   status: UpdateStatus;
   currentVersion: string;
@@ -69,6 +83,23 @@ export type UpdateState = {
   lastCheckedAt?: number;
   errorMessage?: string;
   error?: string;
+  /**
+   * 仅 `status === 'error'` 时有值，用于 UI 细分错误文案与点击动作。
+   * 网络类错误不会进入 error 状态，因此理论上不会出现 `'network'`。
+   * 保留该值作为旧 state.json 兼容兜底。
+   */
+  errorKind?: UpdateErrorKind;
+  /** 上一次成功 fetch releases 的时间戳（毫秒），用于网络失败时降级决策。 */
+  lastSuccessfulCheckAt?: number;
+  /**
+   * 上一次成功检查得到的最新版本号；`null` 表示"当时确认无新版本"。
+   * 与 `lastSuccessfulCheckAt` 一同作为"已知世界状态"，网络降级时不丢失。
+   */
+  lastKnownLatestVersion?: string | null;
+  /** 最近一次网络类检查失败的时间戳（毫秒），用于诊断与退避决策。 */
+  lastNetworkErrorAt?: number;
+  /** 连续网络类检查失败次数；成功一次归零；用于计算退避轮询间隔。 */
+  consecutiveNetworkFailures?: number;
 };
 
 function normalizeVersion(version: string): string {
@@ -303,6 +334,75 @@ export function toErrorState(message: string): Partial<UpdateState> {
     progress: undefined,
     errorMessage: message,
     error: message,
+  };
+}
+
+/**
+ * 网络类检查失败的降级状态片段。
+ *
+ * **关键设计**：返回的 Partial 仅包含"本次网络失败新增的诊断字段"，不覆盖 previousState
+ * 的任何既有业务字段（包括 status / errorKind / errorMessage）。
+ * 这样 previousState 若是"下载失败等待重试"（status=error, errorMessage='下载中断'），
+ * 网络降级后 UI 仍显示那个下载错误；若 previousState 是 idle，网络降级后仍 idle。
+ *
+ * 这是"网络失败永远不进 error 状态、也不清洗历史错误状态"的治本措施。
+ */
+export function toNetworkDegradedState(options: {
+  previousState: UpdateState;
+  now: number;
+}): Partial<UpdateState> {
+  return {
+    lastNetworkErrorAt: options.now,
+    consecutiveNetworkFailures:
+      (options.previousState.consecutiveNetworkFailures ?? 0) + 1,
+  };
+}
+
+export function toDownloadErrorState(message: string): Partial<UpdateState> {
+  return {
+    status: 'error',
+    errorKind: 'download',
+    progress: undefined,
+    errorMessage: message,
+    error: message,
+  };
+}
+
+export function toValidationErrorState(message: string): Partial<UpdateState> {
+  return {
+    status: 'error',
+    errorKind: 'validation',
+    progress: undefined,
+    errorMessage: message,
+    error: message,
+  };
+}
+
+export function toInstallErrorState(message: string): Partial<UpdateState> {
+  return {
+    status: 'error',
+    errorKind: 'install',
+    progress: undefined,
+    errorMessage: message,
+    error: message,
+  };
+}
+
+/**
+ * checkForUpdates 成功分支共用的"健康跟踪重置"字段。
+ *
+ * 把 lastSuccessfulCheckAt 推到当前时间、consecutiveNetworkFailures 清零、
+ * lastNetworkErrorAt 清掉，让下一轮轮询能从干净的基线出发。
+ */
+export function successfulCheckHealthFields(options: {
+  now: number;
+  latestVersion: string | null;
+}): Partial<UpdateState> {
+  return {
+    lastSuccessfulCheckAt: options.now,
+    consecutiveNetworkFailures: 0,
+    lastNetworkErrorAt: undefined,
+    lastKnownLatestVersion: options.latestVersion,
   };
 }
 

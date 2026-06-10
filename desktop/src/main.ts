@@ -565,7 +565,9 @@ ipcMain.handle('hbs:open-logs-dir', async () => {
 });
 ipcMain.handle('hbs:get-runtime-token', () => apiToken);
 ipcMain.handle(UPDATE_IPC_CHANNELS.getState, async () => updateController.getState());
-ipcMain.handle(UPDATE_IPC_CHANNELS.check, async () => updateController.checkForUpdates());
+ipcMain.handle(UPDATE_IPC_CHANNELS.check, async () =>
+  updateController.checkForUpdates({ manual: true })
+);
 ipcMain.handle(UPDATE_IPC_CHANNELS.download, async () => updateController.downloadUpdate());
 ipcMain.handle(UPDATE_IPC_CHANNELS.install, async () => updateController.installUpdate());
 

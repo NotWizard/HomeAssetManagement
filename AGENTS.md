@@ -1,65 +1,93 @@
-# Repository Guidelines
+# Commit guidelines
+1. Git commit信息。必须是简洁且规范，需要是中英双语。Commit内容包含为：本次修改的总结性概述，加上结构化有序标点描述。正文必须使用实际的换行符、空行及空格进行排版，严禁使用诸如 `\n` 或 `\t` 之类的转义字符来模拟格式效.
 
-## Project Structure & Module Organization
-This repository is a local-first monorepo with three app layers:
-- `backend/`: FastAPI service. Key modules are `app/api/v1` (routes), `app/services` (business logic), `app/analytics` (trend/volatility/correlation/rebalance), `app/jobs` (scheduled tasks), and `app/models` + `app/schemas` (data layer/contracts).
-- `frontend/`: React + Vite client (`Tailwind CSS + shadcn/ui`). Main UI is in `src/pages`, app layout in `src/components/layout`, reusable charts in `src/components/charts`, base UI components in `src/components/ui`, API wrappers in `src/services`, and shared types in `src/types`.
-- `desktop/`: Electron desktop shell. Key files are `src/main.ts` (main process), `src/preload.ts` (runtime bridge), `src/startup-page.ts` (desktop startup/error pages), `scripts/` (backend build and staging), and `tests/` (desktop behavior tests).
-- `backend/tests/`: pytest test suite.
-- `frontend/tests/`: lightweight node-based source verification tests.
-- `docs/plans/`: PRD, technical solution, and implementation planning docs.
+示例：
 
-## Build, Test, and Development Commands
-- Backend setup: `python3 -m venv .venv && source .venv/bin/activate && pip install -r backend/requirements.txt`
-- Run backend: `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 --app-dir backend`
-- Frontend setup: `npm --prefix frontend install`
-- Run frontend: `npm --prefix frontend run dev`
-- Desktop setup: `source .venv/bin/activate && pip install -r backend/requirements-desktop.txt && npm --prefix desktop install`
-- Backend tests: `source .venv/bin/activate && python -m pytest backend/tests -q`
-- Frontend build/typecheck: `npm --prefix frontend run build`
-- Frontend source tests: `cd frontend && node --test tests/*.test.ts`
-- Desktop typecheck/tests: `npm --prefix desktop run typecheck` and `node --test desktop/tests/*.test.ts`
-- Desktop package: `npm --prefix desktop run make`
+中文
+  概述：一句话总结本次修改。
+  变更：
+    1. 第一项关键改动。
+    2. 第二项关键改动。
+  验证：
+    1. 相关验证信息。
 
-## Coding Style & Naming Conventions
-- Python: 4-space indentation, type hints, `snake_case` for functions/variables, `PascalCase` for classes.
-- React/TypeScript: `PascalCase` component/page filenames (e.g., `AnalyticsPage.tsx`), `camelCase` for functions/hooks.
-- Keep API contracts aligned between `backend/app/schemas` and `frontend/src/types`.
-- Prefer small service functions over route-heavy business logic.
+English
+  Summary: One-line overview of the change.
+  Changes:
+    1. First key update.
+    2. Second key update.
+  Verification:
+    1. Relevant verification notes.
 
-## Current Product Decisions (Keep Consistent)
-- Analytics math stays in handwritten Python logic (do **not** migrate to pandas/numpy unless explicitly requested).
-- Settings `fx_provider` is fixed to `frankfurter`, and is read-only in UI and non-updatable in API payload.
-- Settings timezone is read-only in UI and defaults to local machine/browser timezone; backend business date/time uses settings timezone for scheduler and daily jobs.
-- Base currency field label is `基准币种`, shown as a dropdown with `CODE + 中文名称` options (e.g., `CNY 人民币`, `USD 美元`).
-- Correlation matrix `None` values must render as missing (`N/A/样本不足`), not coerced to `0`.
-- App error responses are code-based and map HTTP status by code (`4040->404`, `4090->409`, `5000->500`, others `400`).
-- Navigation order is fixed as `总览 -> 分析看板 -> 资产负债录入 -> 成员管理 -> CSV导入 -> 设置`.
-- Navigation includes an independent `成员管理` page; sidebar and top header should keep sticky behavior while scrolling.
-- Sidebar footer should not show `本地模式 / 无登录` style helper copy.
-- Analytics date-range filtering should use a full-card, desktop-friendly trigger; users should be able to click the whole time-range area instead of only a small icon.
-- Desktop delivery is macOS-first via `Electron + FastAPI sidecar + PyInstaller onedir`; packaged startup should show a friendly loading page while the local backend becomes ready.
+# Worktree guidelines
+1. 凡涉及新增功能、功能变更或代码修改的任务，必须询问用户是否使用 Git Worktree 来改动。 如果当前已经在某一个 Git Workstream 中，则无需询问。 
 
-## Testing Guidelines
-- Use `pytest` for backend behavior and API tests.
-- Test files follow `test_*.py` naming under `backend/tests/`.
-- Add or update tests for analytics, import upsert logic, and holdings CRUD side effects (snapshots).
-- For frontend changes, at minimum ensure `npm --prefix frontend run build` passes.
+# CHANGELOG guidelines
+1. 仓库根目录维护一份 `CHANGELOG.md`，作为全部代码变更的唯一记录入口。
+2. 所有变更（含功能新增、功能调整、Bug 修复、重构、依赖或配置变化）都必须同步更新 `CHANGELOG.md`，与本次代码改动一并提交，不允许后补或漏写。
+3. 未发布的变更先记录在 `## [Unreleased]` 段落下；正式发版时再迁移到对应版本号与日期的小节。
 
-## Commit & Pull Request Guidelines
-- Default branch is `main`; unless explicitly requested otherwise, branch from and merge back to `main`.
-- Follow concise conventional prefixes seen in history: `feat:`, `docs:` (and `fix:`, `chore:`, `test:` when appropriate).
-- Keep commit messages imperative and scoped to one logical change.
-- Git commit messages must be structured and clear, and both the subject line and body should be written bilingually in Chinese and English. The subject line should place Chinese first and English after it; the body should write the full Chinese section first and then the full English section below it, rather than alternating Chinese and English sentence by sentence. The body must use real line breaks, blank lines, and actual spaces for indentation, and must not use literal escape text such as `\n` or `\t` to simulate formatting. When needed, add a body that explains the background, key changes.
-- PRs should include: summary, changed areas (`backend`/`frontend`), verification commands run, and screenshots for UI changes.
+# Release note guidelines
+1. 遵照 Release_Notes_Guidelines.md 里的要求
 
-## Security & Configuration Tips
-- Run services on localhost (`127.0.0.1`) only.
-- Configure via `.env` using `HBS_` prefixes (see `backend/app/core/config.py`).
-- Do not commit local configuration files (`.env`, `.env.*`) or local artifacts (`.venv`, `node_modules`, SQLite DB files, import error CSVs, `frontend/tsconfig.tsbuildinfo`, `desktop/out`, `desktop/.stage`, `backend/dist-desktop`, `backend/build-desktop`, `backend/.pyinstaller`).
+# Behavioral guidelines
+## 1. Think Before Coding
 
-## Agent-Specific Instructions
-- All conversation, status updates, and final responses for this repository must be in Chinese.
-- Any feature change, bug fix, or code modification in this repository must be done in a newly created git worktree first; do not edit directly in the primary workspace.
-- Subagent model selection follows the harness/CLI default; do not pin a specific model name in this guidance file (the previous reference to a non-existent `gpt-5.4` was removed).
-- When a task can be safely parallelized or delegated, prefer using subagents as much as practical to improve execution efficiency.
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+

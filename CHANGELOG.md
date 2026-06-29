@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复首次创建 USD 等外币条目时报 `Unexpected token 'I', "Internal Server Error"... is not valid JSON`：原 Frankfurter 地址已重定向，而 `httpx` 默认不跟随重定向，备用 `exchangerate.host` 又已要求 API Key，导致空汇率缓存时所有数据源失效。现改为优先读取中国外汇交易中心公开中间价 JSON，并按 CNY 交叉计算应用支持的全部币种；备用源切换到 Frankfurter 官方直连地址 `api.frankfurter.dev/v1`。两个源均不可用时返回可解析的 JSON 业务错误，不再把后端纯文本 500 暴露为前端 JSON 解析异常。
+- Fix foreign-currency creation failing with `Unexpected token 'I', "Internal Server Error"... is not valid JSON` on an empty FX cache. The old Frankfurter host now redirects while `httpx` does not follow redirects by default, and the former `exchangerate.host` fallback now requires an API key, leaving no usable source. The app now reads China Foreign Exchange Trade System central parity JSON first and derives all supported cross rates through CNY, with Frankfurter's official `api.frankfurter.dev/v1` endpoint as fallback. If both sources fail, the API returns a structured JSON error instead of exposing a plain-text HTTP 500 as a frontend JSON parsing failure.
+- 修复家庭资产负债桑基图末级标签被图表边界截断，以及自动布局把同一父分类的子项拆散后产生交叉连线：图表左右固定预留 168px 标签空间；服务端按成员、父分类金额和子项金额生成确定性节点顺序，前端关闭 ECharts 迭代重排，使同一父分类的子项保持相邻。
+- Fix final-level labels being clipped at the Sankey chart boundary and automatic layout splitting siblings from the same parent into crossing flows. The chart now reserves 168px on both sides for labels; the backend emits a deterministic node order by member, parent amount, and child amount, while the frontend disables ECharts layout iterations so siblings remain adjacent.
+
 ## [0.3.2] - 2026-06-14
 
 ### Fixed

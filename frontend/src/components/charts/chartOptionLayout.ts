@@ -53,8 +53,8 @@ export const CURRENCY_BREAKDOWN_LABEL_LINE = {
 } as const;
 
 export const SANKEY_SERIES_FRAME = {
-  left: '4%',
-  right: '4%',
+  left: 168,
+  right: 168,
   top: '4%',
   bottom: '4%',
 } as const;

@@ -275,6 +275,59 @@ def test_build_sankey_places_liabilities_left_members_center_assets_right():
     assert link_map[('asset:l2:7:现金存款类/银行存款', 'asset:l3:7:现金存款类/银行存款/定期')] == 30.0
 
 
+def test_build_sankey_groups_children_by_parent_amount_order():
+    holdings = [
+        {
+            'type': 'asset',
+            'member_id': 7,
+            'amount_base': 300.0,
+            'category_l1': '固定收益类',
+            'category_l2': '固收基金',
+            'category_l3': '纯债基金',
+        },
+        {
+            'type': 'asset',
+            'member_id': 7,
+            'amount_base': 80.0,
+            'category_l1': '权益与另类',
+            'category_l2': '公募基金',
+            'category_l3': '主动权益',
+        },
+        {
+            'type': 'asset',
+            'member_id': 7,
+            'amount_base': 10.0,
+            'category_l1': '现金存款类',
+            'category_l2': '现金',
+            'category_l3': '人民币现金',
+        },
+        {
+            'type': 'asset',
+            'member_id': 7,
+            'amount_base': 550.0,
+            'category_l1': '权益与另类',
+            'category_l2': '公募基金',
+            'category_l3': '指数/ETF',
+        },
+        {
+            'type': 'asset',
+            'member_id': 7,
+            'amount_base': 140.0,
+            'category_l1': '现金存款类',
+            'category_l2': '公积金',
+            'category_l3': '住房公积金',
+        },
+    ]
+
+    result = build_sankey(holdings, {7: 'Alice'})
+
+    assert [
+        node['name'] for node in result['nodes'] if node['depth'] == 3
+    ] == ['公募基金', '固收基金', '公积金', '现金']
+    assert [
+        node['name'] for node in result['nodes'] if node['depth'] == 4
+    ] == ['指数/ETF', '主动权益', '纯债基金', '住房公积金', '人民币现金']
+
 
 def test_build_daily_series_generated_at_uses_utc_z_suffix():
     init_database()

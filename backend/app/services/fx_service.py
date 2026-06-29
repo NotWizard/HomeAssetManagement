@@ -1,4 +1,5 @@
 from datetime import date
+from datetime import timedelta
 from decimal import Decimal
 from threading import Thread
 from typing import Any
@@ -12,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal
+from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.core.timezone import business_today
 from app.models.fx_rate_daily import FxRateDaily
@@ -136,7 +138,10 @@ class FXService:
             if exact:
                 return Decimal(exact.rate), exact.is_estimated
 
-        raise ValueError(f"无法获取汇率: {base}->{quote} ({as_of_date})")
+        raise AppError(
+            5000,
+            f"无法获取 {base}→{quote} 汇率，请检查网络后重试",
+        )
 
     @staticmethod
     def list_rates(session: Session, on_date: date | None = None) -> list[FxRateDaily]:
@@ -199,8 +204,8 @@ def _fetch_provider_rates(
     base_currency: str,
 ) -> tuple[str, dict[str, Decimal]] | None:
     providers = [
+        ("chinamoney", _fetch_chinamoney),
         ("frankfurter", _fetch_frankfurter),
-        ("exchangerate_host", _fetch_exchangerate_host),
     ]
 
     for name, fn in providers:
@@ -297,21 +302,63 @@ def _fetch_with_retry(url: str, params: dict[str, str]) -> dict[str, Any]:
     raise last_exc
 
 
-def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:
+def _fetch_chinamoney(rate_date: date, base: str) -> dict[str, Decimal]:
     settings = get_settings()
-    url = f"{settings.fx_primary_url}/{rate_date.isoformat()}"
-    data = _fetch_with_retry(url, {"from": base})
-    rates = data.get("rates", {})
-    if not isinstance(rates, dict) or not rates:
-        raise ValueError("frankfurter rates is empty")
-    return {k.upper(): Decimal(str(v)) for k, v in rates.items()}
+    data = _fetch_with_retry(
+        settings.fx_primary_url,
+        {
+            "startDate": (rate_date - timedelta(days=14)).isoformat(),
+            "endDate": rate_date.isoformat(),
+            "pageNum": "1",
+            "pageSize": "1",
+        },
+    )
+    metadata = data.get("data", {})
+    pairs = metadata.get("head", []) if isinstance(metadata, dict) else []
+    records = data.get("records", [])
+    if (
+        data.get("head", {}).get("rep_code") != "200"
+        or not isinstance(pairs, list)
+        or not isinstance(records, list)
+        or not records
+        or not isinstance(records[0], dict)
+    ):
+        raise ValueError("chinamoney rates is empty")
+
+    values = records[0].get("values", [])
+    if not isinstance(values, list) or len(values) != len(pairs):
+        raise ValueError("chinamoney rates is invalid")
+
+    # 官方中间价多数是“外币/CNY”，日元按 100 单位报价；先统一成 1 CNY 可兑换量，
+    # 再通过 CNY 交叉计算任意受支持基准币种。
+    cny_rates = {"CNY": Decimal("1")}
+    for pair, raw_value in zip(pairs, values, strict=True):
+        price = Decimal(str(raw_value))
+        if price <= 0 or not isinstance(pair, str):
+            raise ValueError("chinamoney rate is invalid")
+        if pair.endswith("/CNY"):
+            source = pair.removesuffix("/CNY")
+            units = Decimal("100") if source.startswith("100") else Decimal("1")
+            currency = source.removeprefix("100")
+            cny_rates[currency] = units / price
+        elif pair.startswith("CNY/"):
+            cny_rates[pair.removeprefix("CNY/")] = price
+
+    base_rate = cny_rates.get(base.upper())
+    if base_rate is None:
+        raise ValueError(f"chinamoney does not support base currency: {base}")
+    return {
+        currency: rate / base_rate
+        for currency, rate in cny_rates.items()
+        if currency != base.upper()
+    }
 
 
-def _fetch_exchangerate_host(rate_date: date, base: str) -> dict[str, Decimal]:
+def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:
     settings = get_settings()
     url = f"{settings.fx_fallback_url}/{rate_date.isoformat()}"
     data = _fetch_with_retry(url, {"base": base})
     rates = data.get("rates", {})
     if not isinstance(rates, dict) or not rates:
-        raise ValueError("exchangerate.host rates is empty")
+        raise ValueError("frankfurter rates is empty")
     return {k.upper(): Decimal(str(v)) for k, v in rates.items()}

@@ -643,7 +643,7 @@ export function buildSankeyChartOption(data: SankeyData) {
         type: 'sankey',
         ...SANKEY_SERIES_FRAME,
         nodeAlign: 'justify',
-        layoutIterations: 64,
+        layoutIterations: 0,
         draggable: false,
         data: echartsNodes,
         links: data.links,

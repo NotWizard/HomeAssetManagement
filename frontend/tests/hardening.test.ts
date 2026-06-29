@@ -84,6 +84,12 @@ test('分析页时间区间筛选需要作用于桑基图与再平衡请求', ()
   assert.match(analyticsSource, /queryKey:\s*queryKeys\.rebalance\.range\(analyticsDateRange\)/);
 });
 
+test('桑基图应保留服务端层级顺序，避免自动布局拆散同一父分类的子项', () => {
+  const source = readFrontendFile('src/components/charts/chartOptions.ts');
+
+  assert.match(source, /layoutIterations:\s*0/);
+});
+
 test('分析页应提供时间边界查询能力，并在 store 中以空区间作为初始状态', () => {
   const analyticsServiceSource = readFrontendFile('src/services/analytics.ts');
   const uiStoreSource = readFrontendFile('src/store/uiStore.ts');

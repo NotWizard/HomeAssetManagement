@@ -39,8 +39,8 @@ test('热力图和桑基图不会继续默认截断左侧文本', () => {
     margin: 14,
   });
   assert.deepEqual(SANKEY_SERIES_FRAME, {
-    left: '4%',
-    right: '4%',
+    left: 168,
+    right: 168,
     top: '4%',
     bottom: '4%',
   });

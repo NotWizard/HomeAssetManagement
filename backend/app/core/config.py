@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     enable_scheduler: bool = True
     enable_bootstrap_snapshot: bool = True
 
-    fx_primary_url: str = "https://api.frankfurter.app"
-    fx_fallback_url: str = "https://api.exchangerate.host"
+    fx_primary_url: str = (
+        "https://www.chinamoney.com.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew"
+    )
+    fx_fallback_url: str = "https://api.frankfurter.dev/v1"
 
     storage_dir: str = "backend/data"
     frontend_dist_dir: str | None = None

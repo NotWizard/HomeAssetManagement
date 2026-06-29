@@ -132,8 +132,46 @@ def build_sankey(holdings: list[dict], member_names: dict[int, str]) -> dict:
         total = member_side_totals.get((node["member_id"], node["holding_type"]), 0.0)
         node["share_pct"] = round(node["amount"] / total * 100, 2) if total > 0 else 0.0
 
+    member_nodes = sorted(
+        (node for node in nodes.values() if node["node_type"] == "member"),
+        key=lambda node: (-node["amount"], node["name"], node["id"]),
+    )
+    member_rank = {node["member_id"]: index for index, node in enumerate(member_nodes)}
+    category_nodes = sorted(
+        (node for node in nodes.values() if node["node_type"] == "category"),
+        key=lambda node: (
+            node["holding_type"],
+            member_rank.get(node["member_id"], 0),
+            -node["amount"],
+            node["category_path"] or "",
+            node["id"],
+        ),
+    )
+    category_rank = {
+        (node["holding_type"], node["member_id"], node["category_path"]): index
+        for index, node in enumerate(category_nodes)
+    }
+
+    def node_sort_key(node: dict) -> tuple:
+        member_position = member_rank.get(node["member_id"], 0)
+        category_path = node["category_path"] or ""
+        if node["node_type"] == "holding":
+            category_path = category_path.rsplit(" / ", 1)[0]
+        parent_position = category_rank.get(
+            (node["holding_type"], node["member_id"], category_path),
+            0,
+        )
+        sibling_amount = -node["amount"] if node["node_type"] == "holding" else 0.0
+        return (
+            node["depth"],
+            member_position,
+            parent_position,
+            sibling_amount,
+            node["id"],
+        )
+
     return {
-        "nodes": list(nodes.values()),
+        "nodes": sorted(nodes.values(), key=node_sort_key),
         "links": [
             {"source": source, "target": target, "value": value}
             for (source, target), value in links.items()

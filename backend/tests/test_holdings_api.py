@@ -119,6 +119,70 @@ def test_create_holding_uses_correct_fx_direction_for_foreign_currency():
     assert round(create_resp.json()["data"]["amount_base"], 2) == 714.29
 
 
+def test_create_foreign_currency_holding_fetches_rate_on_empty_cache(monkeypatch):
+    _reset_runtime_data()
+    import app.services.fx_service as fx_module
+
+    monkeypatch.setattr(
+        fx_module,
+        "_fetch_provider_rates",
+        lambda *_args: ("chinamoney", {"USD": Decimal("0.14")}),
+    )
+
+    with TestClient(app) as client:
+        member_id = client.post("/api/v1/members", json={"name": "Bob"}).json()["data"]["id"]
+        tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
+        l1, l2, l3 = _find_category_path(tree, ("现金存款类", "现金", "外币现金"))
+
+        response = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "美元现金",
+                "category_l1_id": l1["id"],
+                "category_l2_id": l2["id"],
+                "category_l3_id": l3["id"],
+                "currency": "USD",
+                "amount_original": "105",
+                "target_ratio": "5",
+            },
+        )
+
+    assert response.status_code == 200
+    assert round(response.json()["data"]["amount_base"], 2) == 750
+
+
+def test_create_foreign_currency_holding_returns_json_when_all_fx_sources_fail(monkeypatch):
+    _reset_runtime_data()
+    import app.services.fx_service as fx_module
+
+    monkeypatch.setattr(fx_module, "_fetch_provider_rates", lambda *_args: None)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        member_id = client.post("/api/v1/members", json={"name": "Bob"}).json()["data"]["id"]
+        tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
+        l1, l2, l3 = _find_category_path(tree, ("现金存款类", "现金", "外币现金"))
+
+        response = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "美元现金",
+                "category_l1_id": l1["id"],
+                "category_l2_id": l2["id"],
+                "category_l3_id": l3["id"],
+                "currency": "USD",
+                "amount_original": "105",
+                "target_ratio": "5",
+            },
+        )
+
+    assert response.status_code == 500
+    assert response.json()["message"] == "无法获取 CNY→USD 汇率，请检查网络后重试"
+
+
 def test_update_settings_revalues_existing_holdings_and_daily_snapshot():
     _reset_runtime_data()
     with SessionLocal() as session:

@@ -51,6 +51,64 @@ test('更新控制器启动后会立即检查并按 12 小时轮询', async () =
   assert.equal(calls.filter((entry) => entry === 'fetchReleases').length >= 2, true);
 });
 
+test('GitHub API 限流时会从 releases/latest 重定向兜底发现最新版本', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const originalFetch = global.fetch;
+  const calls: string[] = [];
+
+  global.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input && typeof input === 'object' && 'url' in input
+          ? String((input as { url: unknown }).url)
+          : '';
+    calls.push(`${init?.method ?? 'GET'} ${url}`);
+
+    if (url === 'https://api.github.com/repos/NotWizard/HouseholdBalanceSheet/releases') {
+      return new Response(JSON.stringify({ message: 'rate limit exceeded' }), {
+        status: 403,
+      });
+    }
+
+    if (url === 'https://github.com/NotWizard/HouseholdBalanceSheet/releases/latest') {
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: '/NotWizard/HouseholdBalanceSheet/releases/tag/v0.3.3',
+        },
+      });
+    }
+
+    if (url.includes('HouseholdBalanceSheet-0.3.3-macos-arm64.zip')) {
+      return new Response(null, {
+        status: 200,
+        headers: { 'content-length': '149037741' },
+      });
+    }
+
+    return new Response(null, { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const releases = await updateControllerModule.fetchLatestReleases();
+
+    assert.equal(releases[0]?.tag_name, 'v0.3.3');
+    assert.deepEqual(
+      releases[0]?.assets.map((asset) => asset.name),
+      [
+        'HouseholdBalanceSheet-0.3.3-macos-arm64.zip',
+        'HouseholdBalanceSheet-0.3.3-macos-arm64.zip.sha256',
+      ]
+    );
+    assert.ok(
+      calls.includes('HEAD https://github.com/NotWizard/HouseholdBalanceSheet/releases/latest')
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('更新控制器会从持久化状态恢复已下载更新', async () => {
   const updateControllerModule = await import('../src/update-controller.ts');
   const downloadDir = '/tmp/hbs-userdata/updates';
@@ -734,4 +792,3 @@ test('退避：连续网络失败 >=3 次后轮询 noop，manual=true 时无视�
     process.stderr.write = originalWrite;
   }
 });
-

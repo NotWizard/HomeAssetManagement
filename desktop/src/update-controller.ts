@@ -6,6 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 
 import {
   applyUpdateStateTransition,
+  buildExpectedAssetName,
   compareVersions,
   createDefaultUpdateState,
   parseSha256File,
@@ -22,6 +23,7 @@ import {
   toValidationErrorState,
   verifySha256,
   type GithubRelease,
+  type GithubReleaseAsset,
   type UpdateState,
   validateDownloadedUpdate,
 } from './update-workflow.ts';
@@ -42,6 +44,12 @@ const UPDATE_SUBDIR = 'updates';
 const UPDATE_STATE_FILE = 'state.json';
 const RELEASES_API_URL =
   'https://api.github.com/repos/NotWizard/HouseholdBalanceSheet/releases';
+const RELEASES_LATEST_URL =
+  'https://github.com/NotWizard/HouseholdBalanceSheet/releases/latest';
+const RELEASE_TAG_BASE_URL =
+  'https://github.com/NotWizard/HouseholdBalanceSheet/releases/tag';
+const RELEASE_DOWNLOAD_BASE_URL =
+  'https://github.com/NotWizard/HouseholdBalanceSheet/releases/download';
 const CHANNEL_PREFIX = 'hbs:update';
 
 function computeBackoffPollIntervalMs(consecutiveNetworkFailures: number): number {
@@ -354,18 +362,115 @@ function createStatePersistence(userDataDir: string) {
   };
 }
 
-async function fetchLatestReleases(): Promise<GithubRelease[]> {
-  const response = await fetch(RELEASES_API_URL, {
+function parseVersionTagFromLocation(location: string | null): string | null {
+  if (!location) {
+    return null;
+  }
+
+  const url = new URL(location, RELEASES_LATEST_URL);
+  const matched = url.pathname.match(/\/releases\/tag\/([^/]+)$/);
+  return matched ? decodeURIComponent(matched[1]) : null;
+}
+
+function parseVersionFromTag(tagName: string): string | null {
+  const matched = tagName.match(/(\d+)\.(\d+)\.(\d+)/);
+  return matched ? `${matched[1]}.${matched[2]}.${matched[3]}` : null;
+}
+
+async function headReleaseAsset(
+  tagName: string,
+  assetName: string
+): Promise<GithubReleaseAsset | null> {
+  const url = `${RELEASE_DOWNLOAD_BASE_URL}/${encodeURIComponent(tagName)}/${encodeURIComponent(assetName)}`;
+  const response = await fetch(url, {
+    method: 'HEAD',
     headers: {
-      Accept: 'application/vnd.github+json',
       'User-Agent': 'HouseholdBalanceSheet-Updater',
     },
   });
+
   if (!response.ok) {
-    throw new Error(`检查更新失败: HTTP ${response.status}`);
+    return null;
   }
 
-  return (await response.json()) as GithubRelease[];
+  const size = Number(response.headers.get('content-length'));
+  return {
+    name: assetName,
+    browser_download_url: url,
+    size: Number.isFinite(size) ? size : undefined,
+  };
+}
+
+async function fetchLatestReleaseByRedirect(): Promise<GithubRelease[]> {
+  const response = await fetch(RELEASES_LATEST_URL, {
+    method: 'HEAD',
+    redirect: 'manual',
+    headers: {
+      'User-Agent': 'HouseholdBalanceSheet-Updater',
+    },
+  });
+  const tagName = parseVersionTagFromLocation(response.headers.get('location'));
+  const version = tagName ? parseVersionFromTag(tagName) : null;
+  if (!tagName || !version) {
+    throw new Error('无法从 GitHub releases/latest 解析最新版本');
+  }
+
+  const assets: GithubReleaseAsset[] = [];
+  for (const arch of ['arm64', 'x64'] as const) {
+    const zipName = buildExpectedAssetName(version, arch);
+    const zipAsset = await headReleaseAsset(tagName, zipName);
+    if (!zipAsset) {
+      continue;
+    }
+    assets.push(zipAsset);
+
+    const sha256Asset = await headReleaseAsset(tagName, `${zipName}.sha256`);
+    if (sha256Asset) {
+      assets.push(sha256Asset);
+    }
+  }
+
+  if (assets.length === 0) {
+    throw new Error(`GitHub release ${tagName} 中未找到可用更新包`);
+  }
+
+  return [
+    {
+      tag_name: tagName,
+      name: tagName,
+      html_url: `${RELEASE_TAG_BASE_URL}/${encodeURIComponent(tagName)}`,
+      draft: false,
+      prerelease: false,
+      assets,
+    },
+  ];
+}
+
+export async function fetchLatestReleases(): Promise<GithubRelease[]> {
+  let apiError: unknown = null;
+  try {
+    const response = await fetch(RELEASES_API_URL, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'HouseholdBalanceSheet-Updater',
+      },
+    });
+    if (response.ok) {
+      return (await response.json()) as GithubRelease[];
+    }
+    apiError = new Error(`检查更新失败: HTTP ${response.status}`);
+  } catch (error) {
+    apiError = error;
+  }
+
+  try {
+    return await fetchLatestReleaseByRedirect();
+  } catch {
+    if (apiError instanceof Error) {
+      throw apiError;
+    }
+    throw new Error('检查更新失败');
+  }
 }
 
 function createInterval(

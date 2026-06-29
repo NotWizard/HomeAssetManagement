@@ -61,6 +61,7 @@ export function OverviewPage() {
   const anySuccess = queries.some((q) => q.isSuccess);
   const allNetworkError = queries.every((q) => q.isError && isNetworkError(q.error));
   const anyRealError = queries.some((q) => q.isError && !isNetworkError(q.error));
+  const anyCachedError = queries.some((q) => q.isError && q.data !== undefined);
 
   const trendUnavailable = trendQuery.isError && !trendQuery.data;
   const holdingsUnavailable = holdingsQuery.isError && !holdingsQuery.data;
@@ -141,6 +142,13 @@ export function OverviewPage() {
           <CardContent className="flex items-start gap-2 p-4 text-sm text-rose-700">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p className="font-medium">部分数据加载失败，请稍后刷新重试。</p>
+          </CardContent>
+        </Card>
+      ) : anyCachedError ? (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="flex items-start gap-2 p-4 text-sm text-amber-700">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>部分数据刷新失败，当前展示最近一次成功结果。</p>
           </CardContent>
         </Card>
       ) : null}

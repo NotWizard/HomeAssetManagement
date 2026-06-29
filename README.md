@@ -69,7 +69,7 @@
 
 观察资产变化趋势、风险暴露与结构分布，分为三个 tab：
 
-- **整体概览**：净资产趋势线、各成员分布
+- **整体概览**：净资产趋势线、各成员分布、家庭资产负债桑基图（完整显示末级分类，并让同一父分类的子项保持相邻）
 - **风险与配置**：资产波动率柱图、相关性矩阵热力图、再平衡提醒
 - **币种总览**：各币种资产负债对比、跨币种结构（统一按基准币折算）
 
@@ -84,7 +84,7 @@
   - 沿面包屑「一级 → 二级 → 三级」逐步缩范围（每屏只面对 ≤10 项）
   - 也可直接在搜索框输入名字（如 `BTC`、`活期`、`信用卡`），匹配 L1 / L2 / L3 任一段命中
   - 二级若只含 1 个三级会自动穿透到三级，少一击
-- 支持多币种原币金额录入
+- 支持多币种原币金额录入；汇率优先从中国外汇交易中心获取，Frankfurter 自动作为备用源
 - 资产可设置目标占比；超出 / 不足时录入列表会有徽章提示
 - 按成员分组渲染，每组组首显示该成员 target_ratio 合计与达标状态
 - 支持「一键归一化」把当前比例等比例缩放到合计 100%
@@ -254,13 +254,13 @@ npm --prefix desktop run make:dmg
 打 `v*` tag 即自动触发 GitHub Actions 构建并发布 release：
 
 ```bash
-git tag -a v0.3.1 -m "release notes"
-git push origin v0.3.1
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
-`.github/workflows/release.yml` 会在 `macos-latest` runner 上跑 `make:dmg:arm64`，先对 `.app` 进行 Developer ID 签名与 notarization，再重新生成 DMG / ZIP / `.sha256` 并上传到 release，release notes 自动从 `CHANGELOG.md` 抠取对应版本段落。
+`.github/workflows/release.yml` 会在 `macos-latest` runner 上运行 `make:dmg:arm64`，生成 DMG / ZIP / `.sha256` 并上传到 release。Tag 推送默认使用 `unsigned` 模式；如果 release 尚不存在，release notes 会从 `CHANGELOG.md` 的对应版本段生成。
 
-发布 workflow 需要配置 macOS 签名证书与公证凭据：
+如需发布 Developer ID 签名并完成 notarization 的版本，请手动触发 Release workflow，选择 `developer-id`，并配置 macOS 签名证书与公证凭据：
 
 - `HBS_MACOS_CERTIFICATE_P12`：Developer ID Application `.p12` 的 base64 内容
 - `HBS_MACOS_CERTIFICATE_PASSWORD`：导出 `.p12` 时设置的密码
@@ -270,7 +270,7 @@ git push origin v0.3.1
 - 或 `HBS_MACOS_NOTARY_API_KEY` + `HBS_MACOS_NOTARY_API_KEY_ID` + `HBS_MACOS_NOTARY_API_ISSUER`
 - 或 `HBS_MACOS_NOTARY_APPLE_ID` + `HBS_MACOS_NOTARY_APPLE_ID_PASSWORD` + `HBS_MACOS_NOTARY_TEAM_ID`
 
-如果暂时没有 Apple Developer 账号，可以在手动触发 Release workflow 时把 `release_mode` 选为 `unsigned`。该模式会对 `.app` 做 ad-hoc 签名并运行 `codesign --verify --deep --strict`，用于避免产物因签名结构损坏而显示“已损坏，无法打开”。它不会进行 notarization，首次安装仍需要用户在 macOS 隐私与安全设置中手动放行。
+`unsigned` 模式会对 `.app` 做 ad-hoc 签名并运行 `codesign` 验证，但不会进行 notarization。首次安装仍需要用户在 macOS 隐私与安全设置中手动放行。
 
 x64 暂未在 workflow 中构建。如有 Intel Mac 用户反馈，可按上一节说明本地构建后用 `gh release upload v0.3.x ...` 追加上传。
 

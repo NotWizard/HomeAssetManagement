@@ -121,3 +121,40 @@ test('折算金额展示应按真实基准币，而不是默认 CNY', () => {
   assert.match(overviewSource, /formatCurrency\(latest\.totalAsset,\s*baseCurrency/);
   assert.match(overviewSource, /formatCurrency\(latest\.totalLiability,\s*baseCurrency/);
 });
+
+test('再平衡结果应提供金额、参与池摘要和可修正的无效配置状态', () => {
+  const analyticsServiceSource = readFrontendFile('src/services/analytics.ts');
+  const overviewSource = readFrontendFile('src/pages/OverviewPage.tsx');
+  const analyticsPageSource = readFrontendFile('src/pages/AnalyticsPage.tsx');
+  const riskSource = readFrontendFile('src/components/analytics/RiskAnalyticsSection.tsx');
+  const entryFormSource = readFrontendFile('src/components/entry/EntryHoldingFormDialog.tsx');
+
+  const itemBlock = findTypeBlock(analyticsServiceSource, 'RebalanceItem');
+  assert.match(itemBlock, /current_amount:\s*number/);
+  assert.match(itemBlock, /target_amount:\s*number/);
+  assert.match(itemBlock, /adjustment_amount:\s*number/);
+  assert.match(itemBlock, /member_name:\s*string/);
+
+  const dataBlock = findTypeBlock(analyticsServiceSource, 'RebalanceData');
+  assert.match(dataBlock, /valid:\s*boolean/);
+  assert.match(dataBlock, /participating_amount:\s*number/);
+  assert.match(dataBlock, /excluded_amount:\s*number/);
+  assert.match(dataBlock, /allocations:\s*RebalanceAllocation\[\]/);
+  assert.match(dataBlock, /items:\s*RebalanceItem\[\]/);
+
+  assert.match(overviewSource, /参与再平衡资产/);
+  assert.match(overviewSource, /建议增持/);
+  assert.match(overviewSource, /建议减持/);
+  assert.match(overviewSource, /当前金额/);
+  assert.match(overviewSource, /目标金额/);
+  assert.match(overviewSource, /去资产负债录入修正/);
+  assert.match(overviewSource, /navigate\('\/entry'\)/);
+
+  assert.match(analyticsPageSource, /baseCurrency=\{settingsQuery\.data\?\.base_currency \?\? 'CNY'\}/);
+  assert.match(riskSource, /调整建议/);
+  assert.match(riskSource, /当前金额/);
+  assert.match(riskSource, /目标金额/);
+  assert.match(riskSource, /目标占比/);
+  assert.match(riskSource, /当前占比/);
+  assert.match(entryFormSource, /填写 0% 或留空表示该资产不参与再平衡计算/);
+});

@@ -242,7 +242,7 @@ test('buildNormalizationPlan 会按当前比例缩放至合计 100%', () => {
   assert.equal(plan.reason, undefined);
 });
 
-test('buildNormalizationPlan 在所有当前占比为 0 时按等分平分 100%', () => {
+test('buildNormalizationPlan 在没有正目标占比时不把排除项重新纳入', () => {
   const zeroHoldings: Holding[] = [
     {
       ...sampleHoldings[0],
@@ -261,11 +261,36 @@ test('buildNormalizationPlan 在所有当前占比为 0 时按等分平分 100%'
     },
   ];
   const plan = buildNormalizationPlan(zeroHoldings);
-  assert.equal(plan.reason, 'all_zero');
-  const total = plan.items.reduce((sum, item) => sum + item.proposed, 0);
-  assert.ok(Math.abs(total - 100) < 0.0001);
-  // 100 / 3 = 33.33 + 33.33 + 33.34
-  assert.equal(plan.items[0].proposed, 33.33);
-  assert.equal(plan.items[1].proposed, 33.33);
-  assert.equal(plan.items[2].proposed, 33.34);
+  assert.equal(plan.reason, 'no_participating_assets');
+  assert.deepEqual(plan.items, []);
+});
+
+test('buildNormalizationPlan 只归一化正目标占比资产', () => {
+  const holdings: Holding[] = [
+    {
+      ...sampleHoldings[0],
+      id: 200,
+      target_ratio: 60,
+    },
+    {
+      ...sampleHoldings[0],
+      id: 201,
+      target_ratio: 30,
+    },
+    {
+      ...sampleHoldings[0],
+      id: 202,
+      target_ratio: 0,
+    },
+    {
+      ...sampleHoldings[0],
+      id: 203,
+      target_ratio: null,
+    },
+  ];
+  const plan = buildNormalizationPlan(holdings);
+
+  assert.deepEqual(plan.items.map((item) => item.id), [200, 201]);
+  assert.deepEqual(plan.items.map((item) => item.proposed), [66.67, 33.33]);
+  assert.equal(plan.afterTotal, 100);
 });

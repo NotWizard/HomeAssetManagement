@@ -534,11 +534,20 @@ def test_rebalance_api_uses_latest_snapshot_within_selected_range():
         'holdings': [
             {
                 'id': 1,
-                'name': '区间资产',
+                'member_id': 1,
+                'name': '区间资产 A',
                 'type': 'asset',
-                'amount_base': 100.0,
-                'target_ratio': 10.0,
-            }
+                'amount_base': 80.0,
+                'target_ratio': 50.0,
+            },
+            {
+                'id': 2,
+                'member_id': 1,
+                'name': '区间资产 B',
+                'type': 'asset',
+                'amount_base': 20.0,
+                'target_ratio': 50.0,
+            },
         ],
     }
     out_of_range_payload = {
@@ -549,12 +558,21 @@ def test_rebalance_api_uses_latest_snapshot_within_selected_range():
         },
         'holdings': [
             {
-                'id': 2,
-                'name': '最新资产',
+                'id': 3,
+                'member_id': 1,
+                'name': '最新资产 A',
                 'type': 'asset',
-                'amount_base': 100.0,
-                'target_ratio': 90.0,
-            }
+                'amount_base': 50.0,
+                'target_ratio': 50.0,
+            },
+            {
+                'id': 4,
+                'member_id': 1,
+                'name': '最新资产 B',
+                'type': 'asset',
+                'amount_base': 50.0,
+                'target_ratio': 50.0,
+            },
         ],
     }
 
@@ -586,16 +604,85 @@ def test_rebalance_api_uses_latest_snapshot_within_selected_range():
         )
 
     assert response.status_code == 200
-    assert response.json()['data'] == [
+    data = response.json()['data']
+    assert data['valid'] is True
+    assert data['participating_amount'] == 100.0
+    assert data['excluded_amount'] == 0.0
+    assert [
         {
-            'id': 1,
-            'name': '区间资产',
-            'target_ratio': 10.0,
-            'current_ratio': 100.0,
-            'deviation': 90.0,
-            'status': '超配',
+            'name': item['name'],
+            'current_amount': item['current_amount'],
+            'target_amount': item['target_amount'],
+            'adjustment_amount': item['adjustment_amount'],
+            'status': item['status'],
         }
+        for item in data['items']
+    ] == [
+        {
+            'name': '区间资产 A',
+            'current_amount': 80.0,
+            'target_amount': 50.0,
+            'adjustment_amount': -30.0,
+            'status': '超配',
+        },
+        {
+            'name': '区间资产 B',
+            'current_amount': 20.0,
+            'target_amount': 50.0,
+            'adjustment_amount': 30.0,
+            'status': '低配',
+        },
     ]
+
+
+def test_rebalance_api_blocks_invalid_target_total_without_normalizing():
+    _reset_daily_snapshots()
+    payload = {
+        'totals': {
+            'total_asset': 100.0,
+            'total_liability': 0.0,
+            'net_asset': 100.0,
+        },
+        'holdings': [
+            {
+                'id': 1,
+                'member_id': 1,
+                'name': '资产 A',
+                'type': 'asset',
+                'amount_base': 60.0,
+                'target_ratio': 60.0,
+            },
+            {
+                'id': 2,
+                'member_id': 1,
+                'name': '资产 B',
+                'type': 'asset',
+                'amount_base': 40.0,
+                'target_ratio': 30.0,
+            },
+        ],
+    }
+    with SessionLocal() as session:
+        family = get_default_family(session)
+        session.add(
+            SnapshotDaily(
+                family_id=family.id,
+                snapshot_date=date(2026, 3, 2),
+                payload_json=json.dumps(payload, ensure_ascii=False),
+            )
+        )
+        session.commit()
+
+    with TestClient(app) as client:
+        response = client.get('/api/v1/analytics/rebalance')
+
+    assert response.status_code == 200
+    data = response.json()['data']
+    assert data['valid'] is False
+    assert data['reason'] == 'invalid_target_total'
+    assert data['allocations'][0]['target_ratio_total'] == 90.0
+    assert data['allocations'][0]['target_ratio_gap'] == 10.0
+    assert data['items'] == []
 
 
 def test_trend_and_sankey_ignore_other_family_snapshots_and_members():

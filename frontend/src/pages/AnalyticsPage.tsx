@@ -275,6 +275,7 @@ export function AnalyticsPage() {
           rebalanceData={rebalanceQuery.data}
           rebalanceError={rebalanceQuery.error}
           rebalanceIsError={rebalanceQuery.isError}
+          baseCurrency={settingsQuery.data?.base_currency ?? 'CNY'}
         />
       ) : null}
 

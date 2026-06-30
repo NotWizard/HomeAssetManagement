@@ -235,7 +235,7 @@ export type NormalizationPlan = {
   items: NormalizationItem[];
   beforeTotal: number;
   afterTotal: number;
-  reason?: 'all_zero';
+  reason?: 'no_participating_assets';
 };
 
 export const NORMALIZATION_FRACTION_DIGITS = 2;
@@ -246,11 +246,18 @@ function roundRatio(value: number, digits = NORMALIZATION_FRACTION_DIGITS): numb
 }
 
 export function buildNormalizationPlan(memberAssets: Holding[]): NormalizationPlan {
-  const eligible = memberAssets.filter((row) => row.type === 'asset');
+  const eligible = memberAssets.filter(
+    (row) => row.type === 'asset' && Number(row.target_ratio ?? 0) > 0
+  );
   const beforeTotal = sumAssetTargetRatio(eligible);
 
   if (eligible.length === 0) {
-    return { items: [], beforeTotal: 0, afterTotal: 0 };
+    return {
+      items: [],
+      beforeTotal: 0,
+      afterTotal: 0,
+      reason: 'no_participating_assets',
+    };
   }
 
   const totalForScaling = eligible.reduce(
@@ -259,26 +266,11 @@ export function buildNormalizationPlan(memberAssets: Holding[]): NormalizationPl
   );
 
   if (totalForScaling <= TARGET_RATIO_EPSILON) {
-    const evenShare = roundRatio(100 / eligible.length);
-    let remaining = 100;
-    const items: NormalizationItem[] = eligible.map((row, index) => {
-      const isLast = index === eligible.length - 1;
-      const proposed = isLast ? roundRatio(remaining) : evenShare;
-      remaining -= proposed;
-      const current = row.target_ratio == null ? null : Number(row.target_ratio);
-      return {
-        id: row.id,
-        name: row.name,
-        current,
-        proposed,
-        delta: proposed - (current ?? 0),
-      };
-    });
     return {
-      items,
-      beforeTotal,
-      afterTotal: items.reduce((sum, item) => sum + item.proposed, 0),
-      reason: 'all_zero',
+      items: [],
+      beforeTotal: 0,
+      afterTotal: 0,
+      reason: 'no_participating_assets',
     };
   }
 

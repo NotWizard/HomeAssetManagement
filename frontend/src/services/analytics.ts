@@ -49,11 +49,35 @@ export type SankeyData = {
 
 export type RebalanceItem = {
   id: number;
+  member_id: number | null;
+  member_name: string;
   name: string;
   target_ratio: number;
   current_ratio: number;
   deviation: number;
+  current_amount: number;
+  target_amount: number;
+  adjustment_amount: number;
   status: string;
+};
+
+export type RebalanceAllocation = {
+  member_id: number | null;
+  member_name: string;
+  participating_amount: number;
+  target_ratio_total: number;
+  target_ratio_gap: number;
+  valid: boolean;
+};
+
+export type RebalanceData = {
+  valid: boolean;
+  reason: 'ok' | 'no_participating_assets' | 'invalid_target_total' | 'zero_participating_amount';
+  participating_amount: number;
+  excluded_amount: number;
+  excluded_count: number;
+  allocations: RebalanceAllocation[];
+  items: RebalanceItem[];
 };
 
 export type CurrencySummary = {
@@ -137,7 +161,7 @@ export function fetchSankey(filters?: AnalyticsDateRange) {
 
 export function fetchRebalance(filters?: AnalyticsDateRange) {
   const query = buildDateRangeQuery(filters);
-  return getJSON<RebalanceItem[]>(query ? `/analytics/rebalance?${query}` : '/analytics/rebalance');
+  return getJSON<RebalanceData>(query ? `/analytics/rebalance?${query}` : '/analytics/rebalance');
 }
 
 export function fetchCurrencyOverview() {

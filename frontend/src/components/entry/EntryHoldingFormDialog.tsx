@@ -165,7 +165,7 @@ function EntryHoldingFormDialogBase({
                 期望占比(%)
               </label>
               <Tooltip
-                content="仅对资产生效，表示该资产希望占家庭净资产的目标比例；请输入 0 到 100 之间的百分比。"
+                content="仅对资产生效，表示该资产占所属成员参与再平衡资产池的目标比例；填写 0% 或留空表示不参与计算。"
                 label="期望占比说明"
               />
             </div>
@@ -181,6 +181,9 @@ function EntryHoldingFormDialogBase({
                 }))
               }
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              填写 0% 或留空表示该资产不参与再平衡计算。
+            </p>
           </div>
         ) : null}
       </div>

@@ -5,8 +5,8 @@ import { Badge } from '../ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Skeleton } from '../ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import type { CorrelationData, RebalanceItem, VolatilityItem } from '../../services/analytics';
-import { formatPercent } from '../../utils/format';
+import type { CorrelationData, RebalanceData, VolatilityItem } from '../../services/analytics';
+import { formatCurrency, formatPercent } from '../../utils/format';
 
 const VolatilityChart = lazy(() => import('../charts/VolatilityChart').then((module) => ({ default: module.VolatilityChart })));
 const CorrelationHeatmap = lazy(() =>
@@ -20,9 +20,10 @@ type RiskAnalyticsSectionProps = {
   correlationData?: CorrelationData;
   correlationError: unknown;
   correlationIsError: boolean;
-  rebalanceData?: RebalanceItem[];
+  rebalanceData?: RebalanceData;
   rebalanceError: unknown;
   rebalanceIsError: boolean;
+  baseCurrency: string;
 };
 
 export function RiskAnalyticsSection({
@@ -35,6 +36,7 @@ export function RiskAnalyticsSection({
   rebalanceData,
   rebalanceError,
   rebalanceIsError,
+  baseCurrency,
 }: RiskAnalyticsSectionProps) {
   return (
     <div className="space-y-4">
@@ -82,30 +84,66 @@ export function RiskAnalyticsSection({
       <Card>
         <CardHeader className="pb-1">
           <CardTitle className="text-sm">再平衡提醒</CardTitle>
-          <CardDescription>查看哪些资产当前偏离了设定的目标占比。</CardDescription>
+          <CardDescription>
+            参与再平衡资产 {formatCurrency(rebalanceData?.participating_amount ?? 0, baseCurrency)}
+            {' · '}
+            已排除 {rebalanceData?.excluded_count ?? 0} 项 {formatCurrency(rebalanceData?.excluded_amount ?? 0, baseCurrency)}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {rebalanceIsError ? (
             <ErrorState text={`再平衡提醒加载失败：${formatError(rebalanceError)}`} />
-          ) : (rebalanceData ?? []).length === 0 ? (
+          ) : !rebalanceData?.valid ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-6 text-sm text-amber-900">
+              <p className="font-medium">
+                {rebalanceData?.reason === 'invalid_target_total'
+                  ? '目标占比尚未配平'
+                  : rebalanceData?.reason === 'zero_participating_amount'
+                    ? '参与再平衡的资产金额为零'
+                    : '尚未配置参与再平衡的资产'}
+              </p>
+              {rebalanceData?.reason === 'invalid_target_total' ? (
+                <div className="mt-2 space-y-1 text-xs text-amber-800">
+                  {rebalanceData.allocations.filter((allocation) => !allocation.valid).map((allocation) => (
+                    <p key={allocation.member_id ?? 'family'}>
+                      {allocation.member_name}：目标占比合计 {formatPercent(allocation.target_ratio_total)}，
+                      {allocation.target_ratio_gap > 0 ? '尚缺' : '超出'} {formatPercent(Math.abs(allocation.target_ratio_gap))}。
+                    </p>
+                  ))}
+                  <p>请前往资产负债录入页修正为 100% 后查看调仓建议。</p>
+                </div>
+              ) : null}
+            </div>
+          ) : rebalanceData.items.length === 0 ? (
             <EmptyState icon={<Sparkles className="h-5 w-5 text-primary" />} text="当前配置在阈值范围内。" />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>资产</TableHead>
-                  <TableHead>目标占比</TableHead>
+                  <TableHead>成员</TableHead>
+                  <TableHead>调整建议</TableHead>
+                  <TableHead>当前金额</TableHead>
+                  <TableHead>目标金额</TableHead>
                   <TableHead>当前占比</TableHead>
+                  <TableHead>目标占比</TableHead>
                   <TableHead>偏离</TableHead>
                   <TableHead>状态</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(rebalanceData ?? []).map((row) => (
+                {rebalanceData.items.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.name}</TableCell>
-                    <TableCell>{formatPercent(row.target_ratio)}</TableCell>
+                    <TableCell>{row.member_name}</TableCell>
+                    <TableCell className={row.adjustment_amount >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                      {row.adjustment_amount >= 0 ? '增持 ' : '减持 '}
+                      {formatCurrency(Math.abs(row.adjustment_amount), baseCurrency)}
+                    </TableCell>
+                    <TableCell>{formatCurrency(row.current_amount, baseCurrency)}</TableCell>
+                    <TableCell>{formatCurrency(row.target_amount, baseCurrency)}</TableCell>
                     <TableCell>{formatPercent(row.current_ratio)}</TableCell>
+                    <TableCell>{formatPercent(row.target_ratio)}</TableCell>
                     <TableCell>{formatPercent(row.deviation)}</TableCell>
                     <TableCell>
                       <Badge variant={row.status === '超配' ? 'danger' : 'success'}>{row.status}</Badge>

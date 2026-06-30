@@ -1,8 +1,10 @@
 import { type ReactNode, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Globe, Info, Wallet } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -45,6 +47,7 @@ function friendlyError(error: unknown): string {
 const OVERVIEW_QUERY_OPTIONS = { retry: 3, retryDelay: 1000 } as const;
 
 export function OverviewPage() {
+  const navigate = useNavigate();
   const trendQuery = useQuery({ queryKey: queryKeys.trend.scope('overview'), queryFn: () => fetchTrend(90), ...OVERVIEW_QUERY_OPTIONS });
   const holdingsQuery = useQuery({
     queryKey: queryKeys.holdings.all(),
@@ -272,6 +275,13 @@ export function OverviewPage() {
       <Card>
         <CardHeader className="pb-1">
           <CardTitle className="text-sm">再平衡预警</CardTitle>
+          {rebalanceQuery.data ? (
+            <p className="text-xs text-muted-foreground">
+              参与再平衡资产 {formatCurrency(rebalanceQuery.data.participating_amount, baseCurrency)}
+              {' · '}
+              已排除 {rebalanceQuery.data.excluded_count} 项 {formatCurrency(rebalanceQuery.data.excluded_amount, baseCurrency)}
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent>
           {rebalanceQuery.isError && !isNetworkError(rebalanceQuery.error) ? (
@@ -280,9 +290,37 @@ export function OverviewPage() {
               <p className="mt-1 text-xs text-rose-700/90">{friendlyError(rebalanceQuery.error)}</p>
             </div>
           ) : null}
-          {rebalanceUnavailable ? null : (
+          {rebalanceUnavailable ? null : !rebalanceQuery.data?.valid ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+              <p className="font-medium">
+                {rebalanceQuery.data?.reason === 'invalid_target_total'
+                  ? '目标占比尚未配平'
+                  : rebalanceQuery.data?.reason === 'zero_participating_amount'
+                    ? '参与再平衡的资产金额为零'
+                    : '尚未配置参与再平衡的资产'}
+              </p>
+              {rebalanceQuery.data?.reason === 'invalid_target_total' ? (
+                <div className="mt-1 space-y-1 text-xs text-amber-800">
+                  {rebalanceQuery.data.allocations.filter((allocation) => !allocation.valid).map((allocation) => (
+                    <p key={allocation.member_id ?? 'family'}>
+                      {allocation.member_name}：目标占比合计 {formatPercent(allocation.target_ratio_total)}，
+                      {allocation.target_ratio_gap > 0 ? '尚缺' : '超出'} {formatPercent(Math.abs(allocation.target_ratio_gap))}。
+                    </p>
+                  ))}
+                  <p>请修正为 100% 后查看调仓建议。</p>
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-amber-800">
+                  请为需要参与计算的资产设置大于 0% 的目标占比。
+                </p>
+              )}
+              <Button className="mt-3" size="sm" variant="outline" onClick={() => navigate('/entry')}>
+                去资产负债录入修正
+              </Button>
+            </div>
+          ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {(rebalanceQuery.data ?? []).slice(0, 6).map((item) => (
+              {rebalanceQuery.data.items.slice(0, 6).map((item) => (
                 <div
                   key={item.id}
                   className="group rounded-2xl border border-border/60 bg-surface-subtle p-4 transition-all hover:bg-card hover:shadow-card"
@@ -293,19 +331,37 @@ export function OverviewPage() {
                       {item.status}
                     </Badge>
                   </div>
-                  <div className="flex items-center justify-between text-[12px] text-muted-foreground">
-                    <span>目标 {formatPercent(item.target_ratio)}</span>
+                  <p className="text-xs text-muted-foreground">
+                    {item.adjustment_amount >= 0 ? '建议增持' : '建议减持'}
+                  </p>
+                  <p className={cn(
+                    'mt-1 text-xl font-semibold tabular-nums',
+                    item.adjustment_amount >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  )}>
+                    {formatCurrency(Math.abs(item.adjustment_amount), baseCurrency)}
+                  </p>
+                  <div className="mt-3 flex items-center justify-between gap-2 text-[12px] text-muted-foreground">
                     <span>当前 {formatPercent(item.current_ratio)}</span>
+                    <span>目标 {formatPercent(item.target_ratio)}</span>
+                    <span>偏离 {formatPercent(item.deviation)}</span>
                   </div>
-                  <div className="mt-3 flex items-baseline gap-1.5">
-                    <span className="text-xs text-muted-foreground">偏离</span>
-                    <span className="text-base font-semibold tabular-nums text-foreground">
-                      {formatPercent(item.deviation)}
-                    </span>
+                  <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
+                    <div className="rounded-lg bg-background/70 p-2">
+                      <p className="text-muted-foreground">当前金额</p>
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatCurrency(item.current_amount, baseCurrency)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-background/70 p-2">
+                      <p className="text-muted-foreground">目标金额</p>
+                      <p className="mt-1 font-medium tabular-nums">
+                        {formatCurrency(item.target_amount, baseCurrency)}
+                      </p>
+                    </div>
                   </div>
                 </div>
               ))}
-              {(rebalanceQuery.data ?? []).length === 0 ? (
+              {rebalanceQuery.data.items.length === 0 ? (
                 <p className="text-sm text-muted-foreground">当前没有超过阈值的资产项。</p>
               ) : null}
             </div>

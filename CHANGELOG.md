@@ -8,8 +8,8 @@
 
 ### Added
 
-- 新增再平衡金额展示设计文档，明确以目标占比大于 `0%` 的资产构成参与池、目标合计必须为 `100%`、不做静默归一化，并定义当前金额、目标金额、调整金额及异常状态的接口与界面方案。
-- Add the rebalance amount display design, defining the participating pool as assets with target ratios above `0%`, requiring targets to total `100%` without silent normalization, and specifying the API and UI for current, target, adjustment amounts, and invalid states.
+- 再平衡预警新增当前金额、目标金额和建议增持/减持金额：仅目标占比大于 `0%` 的资产进入所属成员的计算分母，`0%` 或未设置资产不影响其他项目；每位成员目标合计不是 `100%` 时明确提示差额并停止给出调仓建议，不做静默归一化。总览页采用行动优先卡片，分析看板同步增加金额列，显式“一键归一化”也只调整正目标占比项目。
+- Add current, target, and suggested buy/sell amounts to rebalance warnings. Only assets with targets above `0%` enter their member's calculation pool, while zero or unset targets no longer affect other assets. If any member's targets do not total `100%`, the UI reports the gap and suppresses adjustment advice without silent normalization. Overview now uses action-first cards, Analytics adds amount columns, and explicit one-click normalization only adjusts positive-target assets.
 
 ### Fixed
 

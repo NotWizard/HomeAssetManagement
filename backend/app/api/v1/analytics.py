@@ -125,16 +125,35 @@ def get_rebalance(
 ):
     latest = _load_latest_snapshot(db, start_date, end_date)
     if latest is None:
-        return ok([])
+        return ok(compute_rebalance_items([], threshold_pct=0))
     payload = parse_snapshot_payload(latest.payload_json)
-    totals = payload.get("totals", {})
-    net_asset = float(totals.get("net_asset", 0.0) or 0.0)
     settings = SettingsService.get_settings(db)
     data = compute_rebalance_items(
         payload.get("holdings", []),
-        net_asset=net_asset,
         threshold_pct=settings.rebalance_threshold_pct,
     )
+    member_ids = {
+        row.get("member_id")
+        for row in [*data["allocations"], *data["items"]]
+        if row.get("member_id") is not None
+    }
+    member_name_by_id: dict[int, str] = {}
+    if member_ids:
+        family = get_default_family(db)
+        members = db.scalars(
+            select(Member).where(
+                Member.id.in_(member_ids),
+                Member.family_id == family.id,
+            )
+        )
+        member_name_by_id = {member.id: member.name for member in members}
+    for row in [*data["allocations"], *data["items"]]:
+        member_id = row.get("member_id")
+        row["member_name"] = (
+            member_name_by_id.get(member_id, f"成员 {member_id}")
+            if member_id is not None
+            else "家庭"
+        )
     return ok(data)
 
 

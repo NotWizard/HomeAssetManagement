@@ -35,10 +35,7 @@ export function EntryNormalizeDialog({
   const noChanges =
     plan.items.length > 0 &&
     plan.items.every((item) => Math.abs(item.delta) <= TARGET_RATIO_EPSILON);
-  const reasonHint =
-    plan.reason === 'all_zero'
-      ? '当前所有期望占比均为 0，将按等比例 1/N 平均分配。'
-      : '将以现有比例为权重，等比例缩放至合计 100%。';
+  const reasonHint = '将以现有正目标占比为权重，等比例缩放至合计 100%；0% 或未设置资产保持排除。';
 
   return (
     <Dialog
@@ -69,7 +66,7 @@ export function EntryNormalizeDialog({
       ) : null}
       {empty ? (
         <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 p-4 text-sm text-muted-foreground">
-          请先为该成员录入至少一项资产，再使用归一化工具。
+          请先为该成员至少一项参与再平衡的资产设置大于 0% 的目标占比。
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border/70">

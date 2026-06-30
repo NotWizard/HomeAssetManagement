@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- 修复资产与负债录入弹窗中的说明 Tooltip 被滚动正文裁剪：共享 Tooltip 现在通过 Portal 渲染到页面顶层，并根据视口空间自动上下翻转、横向收口，分类、金额与期望占比提示在弹窗边缘及窄窗口下均可完整显示。
+- Fix explanatory tooltips in the asset and liability entry dialog being clipped by the scrollable body. The shared Tooltip now renders through a portal and automatically flips vertically and clamps horizontally to the viewport, keeping category, amount, and target-ratio guidance fully visible near dialog edges and in narrow windows.
 - 修复导入数据迁移包后，资产明细与 Top Assets 已恢复但总览净资产、总资产、总负债仍为 0，且资产总览趋势无金额的问题：迁移恢复现在会与 `snapshot_daily` 同步清理并重建 `daily_totals` 汇总副本，避免总览继续读取导入前的陈旧汇总。
 - Fix Overview net assets, total assets, total liabilities, and trend values remaining at zero after importing a migration package even though holdings and Top Assets were restored. Migration restore now clears and rebuilds the `daily_totals` summary copy alongside `snapshot_daily`, preventing Overview from reading stale pre-import totals.
 

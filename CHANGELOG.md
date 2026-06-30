@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复导入数据迁移包后，资产明细与 Top Assets 已恢复但总览净资产、总资产、总负债仍为 0，且资产总览趋势无金额的问题：迁移恢复现在会与 `snapshot_daily` 同步清理并重建 `daily_totals` 汇总副本，避免总览继续读取导入前的陈旧汇总。
+- Fix Overview net assets, total assets, total liabilities, and trend values remaining at zero after importing a migration package even though holdings and Top Assets were restored. Migration restore now clears and rebuilds the `daily_totals` summary copy alongside `snapshot_daily`, preventing Overview from reading stale pre-import totals.
+
 ## [0.3.3] - 2026-06-29
 
 ### Changed

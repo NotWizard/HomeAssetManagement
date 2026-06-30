@@ -25,6 +25,7 @@ from app.utils.serialization import loads as _json_loads
 
 logger = logging.getLogger(__name__)
 from app.models.category import Category
+from app.models.daily_total import DailyTotal
 from app.models.holding_item import HoldingItem
 from app.models.member import Member
 from app.models.settings import SettingsModel
@@ -510,6 +511,7 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
     family.updated_at = _parse_datetime(family_payload.get("updated_at")) or family.updated_at
     session.flush()
 
+    session.execute(delete(DailyTotal).where(DailyTotal.family_id == family.id))
     session.execute(delete(SnapshotDaily).where(SnapshotDaily.family_id == family.id))
     session.execute(delete(HoldingItem).where(HoldingItem.family_id == family.id))
     session.execute(delete(Member).where(Member.family_id == family.id))
@@ -578,12 +580,24 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
 
     snapshots_count = 0
     for snapshot_payload in _iter_ndjson_records(archive_path, "daily_snapshots.ndjson"):
+        snapshot_date = _parse_date(snapshot_payload["snapshot_date"])
+        payload = snapshot_payload["payload"]
+        totals = payload["totals"]
         session.add(
             SnapshotDaily(
                 family_id=family.id,
-                snapshot_date=_parse_date(snapshot_payload["snapshot_date"]),
-                payload_json=_json_dumps(snapshot_payload["payload"]),
+                snapshot_date=snapshot_date,
+                payload_json=_json_dumps(payload),
                 created_at=_parse_datetime(snapshot_payload.get("created_at")) or utc_now_naive(),
+            )
+        )
+        session.add(
+            DailyTotal(
+                family_id=family.id,
+                snapshot_date=snapshot_date,
+                total_asset=Decimal(str(totals["total_asset"])),
+                total_liability=Decimal(str(totals["total_liability"])),
+                net_asset=Decimal(str(totals["net_asset"])),
             )
         )
         snapshots_count += 1

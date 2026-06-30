@@ -10,6 +10,7 @@ from sqlalchemy.orm import undefer
 
 from app.core.database import SessionLocal
 from app.main import app
+from app.models.daily_total import DailyTotal
 from app.models.family import Family
 from app.models.holding_item import HoldingItem
 from app.models.member import Member
@@ -33,6 +34,7 @@ def _seed_exportable_data(client: TestClient) -> dict:
     with SessionLocal() as session:
         family = session.scalar(select(Family).limit(1))
         assert family is not None
+        session.execute(delete(DailyTotal).where(DailyTotal.family_id == family.id))
         session.execute(delete(SnapshotDaily).where(SnapshotDaily.family_id == family.id))
         session.execute(delete(HoldingItem).where(HoldingItem.family_id == family.id))
         session.execute(delete(Member).where(Member.family_id == family.id))
@@ -228,6 +230,15 @@ def test_import_migration_replaces_existing_data():
         assert export_response.status_code == 200
         _, manifest, snapshots, _ = _read_zip_entries(export_response.content)
 
+        with SessionLocal() as session:
+            daily_totals = list(session.scalars(select(DailyTotal)))
+            assert daily_totals
+            for row in daily_totals:
+                row.total_asset = 0
+                row.total_liability = 0
+                row.net_asset = 0
+            session.commit()
+
         client.put(
             '/api/v1/settings',
             json={
@@ -257,6 +268,15 @@ def test_import_migration_replaces_existing_data():
     assert state['member_names'] == seed['member_names']
     assert state['holding_names'] == seed['holding_names']
     assert state['snapshot_payloads'][-1] == snapshots[-1]['payload']
+
+    with SessionLocal() as session:
+        daily_totals = list(
+            session.scalars(select(DailyTotal).order_by(DailyTotal.snapshot_date.asc()))
+        )
+    assert len(daily_totals) == len(snapshots)
+    assert float(daily_totals[-1].total_asset) == snapshots[-1]['payload']['totals']['total_asset']
+    assert float(daily_totals[-1].total_liability) == snapshots[-1]['payload']['totals']['total_liability']
+    assert float(daily_totals[-1].net_asset) == snapshots[-1]['payload']['totals']['net_asset']
 
 
 def test_create_sqlite_backup_before_import_writes_file_to_storage_dir(tmp_path, monkeypatch):

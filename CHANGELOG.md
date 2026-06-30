@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增再平衡金额展示设计文档，明确以目标占比大于 `0%` 的资产构成参与池、目标合计必须为 `100%`、不做静默归一化，并定义当前金额、目标金额、调整金额及异常状态的接口与界面方案。
+- Add the rebalance amount display design, defining the participating pool as assets with target ratios above `0%`, requiring targets to total `100%` without silent normalization, and specifying the API and UI for current, target, adjustment amounts, and invalid states.
+
 ### Fixed
 
 - 修复导入数据迁移包后，资产明细与 Top Assets 已恢复但总览净资产、总资产、总负债仍为 0，且资产总览趋势无金额的问题：迁移恢复现在会与 `snapshot_daily` 同步清理并重建 `daily_totals` 汇总副本，避免总览继续读取导入前的陈旧汇总。

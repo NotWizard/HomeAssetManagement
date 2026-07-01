@@ -7,6 +7,14 @@ const workflowSource = readFileSync(
   resolve(process.cwd(), '.github/workflows/release.yml'),
   'utf8'
 );
+const desktopPackage = JSON.parse(
+  readFileSync(resolve(process.cwd(), 'desktop/package.json'), 'utf8')
+);
+
+test('macOS 专用 DMG 依赖不会阻断 Linux CI 安装', () => {
+  assert.equal(desktopPackage.dependencies?.['ds-store'], undefined);
+  assert.equal(desktopPackage.optionalDependencies?.['ds-store'], '^0.1.6');
+});
 
 test('release workflow 支持手动选择 unsigned 发布模式', () => {
   assert.match(workflowSource, /release_mode:/);

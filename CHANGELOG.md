@@ -6,13 +6,22 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-01
+
 ### Added
 
 - 再平衡预警新增当前金额、目标金额和建议增持/减持金额：仅目标占比大于 `0%` 的资产进入所属成员的计算分母，`0%` 或未设置资产不影响其他项目；每位成员目标合计不是 `100%` 时明确提示差额并停止给出调仓建议，不做静默归一化。总览页采用行动优先卡片，分析看板同步增加金额列，显式“一键归一化”也只调整正目标占比项目。
 - Add current, target, and suggested buy/sell amounts to rebalance warnings. Only assets with targets above `0%` enter their member's calculation pool, while zero or unset targets no longer affect other assets. If any member's targets do not total `100%`, the UI reports the gap and suppresses adjustment advice without silent normalization. Overview now uses action-first cards, Analytics adds amount columns, and explicit one-click normalization only adjusts positive-target assets.
 
+### Changed
+
+- 同步桌面端、前端与后端版本号为 `0.4.0`，归档本次新增功能与修复记录用于发布。
+- Align desktop, frontend, and backend versions to `0.4.0` and archive this release's feature and fix records.
+
 ### Fixed
 
+- 修复 Linux GitHub Actions 无法安装桌面端依赖的问题：仅在 macOS DMG 构建中使用的 `ds-store` 改为可选依赖，Linux CI 会跳过其 macOS 专用子依赖，macOS 发布构建仍正常安装；日志写入测试改为等待异步写流实际完成，避免并发测试下偶发误报。
+- Fix Linux GitHub Actions failing to install desktop dependencies. The `ds-store` package used only for macOS DMG creation is now optional, so Linux CI skips its macOS-only transitive dependency while macOS release builds continue to install it. The logger test now waits for the asynchronous stream write to complete instead of intermittently failing under concurrent test load.
 - 修复资产与负债录入弹窗中的说明 Tooltip 被滚动正文裁剪：共享 Tooltip 现在通过 Portal 渲染到页面顶层，并根据视口空间自动上下翻转、横向收口，分类、金额与期望占比提示在弹窗边缘及窄窗口下均可完整显示。
 - Fix explanatory tooltips in the asset and liability entry dialog being clipped by the scrollable body. The shared Tooltip now renders through a portal and automatically flips vertically and clamps horizontally to the viewport, keeping category, amount, and target-ratio guidance fully visible near dialog edges and in narrow windows.
 - 修复导入数据迁移包后，资产明细与 Top Assets 已恢复但总览净资产、总资产、总负债仍为 0，且资产总览趋势无金额的问题：迁移恢复现在会与 `snapshot_daily` 同步清理并重建 `daily_totals` 汇总副本，避免总览继续读取导入前的陈旧汇总。

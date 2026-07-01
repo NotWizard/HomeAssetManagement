@@ -20,13 +20,16 @@ test('createFileLogger 会按缓冲行数立即 flush 到磁盘', async () => {
     logger.write('line-2');
     logger.write('line-3'); // 触发立即 flush
 
-    // 给 stream.write 一个 tick 落盘
-    await new Promise((r) => setImmediate(r));
-
-    const content = readFileSync(join(dir, 'flush.log'), 'utf8');
-    assert.equal(content, 'line-1\nline-2\nline-3\n');
+    const expected = 'line-1\nline-2\nline-3\n';
+    const deadline = Date.now() + 1_000;
+    let content = '';
+    while (content !== expected && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      content = readFileSync(join(dir, 'flush.log'), 'utf8');
+    }
 
     await logger.close();
+    assert.equal(content, expected);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

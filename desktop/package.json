@@ -1,6 +1,6 @@
 {
   "name": "household-balance-sheet-desktop",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "private": true,
   "productName": "HouseholdBalanceSheet",
   "type": "module",
@@ -30,7 +30,7 @@
     "electron": "^35.0.0",
     "typescript": "^5.8.2"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "ds-store": "^0.1.6"
   }
 }

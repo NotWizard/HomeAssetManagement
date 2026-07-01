@@ -42,9 +42,25 @@ test('构建非宿主架构但缺少专用 Python 时会给出清晰错误', asy
 test('macOS 下会按目标架构显式选择 Python slice', async () => {
   const buildBackendScript = await import('../scripts/build-backend.mjs');
 
-  const launchSpec = buildBackendScript.buildPythonLaunchSpec('/repo/.venv-x64/bin/python', 'x64');
+  const launchSpec = buildBackendScript.buildPythonLaunchSpec(
+    '/repo/.venv-x64/bin/python',
+    'x64',
+    'darwin'
+  );
 
   assert.equal(launchSpec.command, 'arch');
   assert.equal(launchSpec.args[0], '-x86_64');
   assert.equal(launchSpec.args[1], '/repo/.venv-x64/bin/python');
+});
+
+test('非 macOS 平台直接调用目标 Python 解释器', async () => {
+  const buildBackendScript = await import('../scripts/build-backend.mjs');
+
+  const launchSpec = buildBackendScript.buildPythonLaunchSpec(
+    '/repo/.venv-x64/bin/python',
+    'x64',
+    'linux'
+  );
+
+  assert.equal(launchSpec.command, '/repo/.venv-x64/bin/python');
 });

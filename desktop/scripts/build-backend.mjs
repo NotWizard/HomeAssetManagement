@@ -32,11 +32,15 @@ function resolveSharedWorkspaceRoot() {
   return resolve(result.stdout.trim(), '..');
 }
 
-export function buildPythonLaunchSpec(pythonExecutable, targetArch) {
+export function buildPythonLaunchSpec(
+  pythonExecutable,
+  targetArch,
+  platform = process.platform
+) {
   const normalizedArch = normalizeDesktopArch(targetArch);
   const scriptArgs = [buildScriptPath, `--arch=${normalizedArch}`];
 
-  if (process.platform !== 'darwin') {
+  if (platform !== 'darwin') {
     return {
       args: scriptArgs,
       command: pythonExecutable,

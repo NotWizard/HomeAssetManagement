@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-02
+
+### Changed
+
+- 同步桌面端、前端与后端版本号为 `0.4.1`，准备发布补丁版本。
+- Bump desktop, frontend, and backend versions to `0.4.1` for patch release.
+
 ### Fixed
 
 - 修复分析看板币种总览中资产与负债构成圆环图的小扇区标签和引导线重叠：共享图表布局现在会先纵向避让标签，空间仍不足时隐藏冲突标签，完整数据仍可通过图例和 Tooltip 查看。
@@ -508,7 +515,8 @@
 - 用 Tailwind + shadcn 风格重构前端 UI/UX。
 - Rebuild frontend UI/UX in Tailwind + shadcn style.
 
-[Unreleased]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.4.0...v0.4.1
 [0.1.3]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.1.0...v0.1.1

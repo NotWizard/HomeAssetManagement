@@ -52,6 +52,11 @@ export const CURRENCY_BREAKDOWN_LABEL_LINE = {
   maxSurfaceAngle: 80,
 } as const;
 
+export const CURRENCY_BREAKDOWN_LABEL_LAYOUT = {
+  moveOverlap: 'shiftY',
+  hideOverlap: true,
+} as const;
+
 export const SANKEY_SERIES_FRAME = {
   left: 168,
   right: 168,

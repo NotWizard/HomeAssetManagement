@@ -9,6 +9,7 @@ import { formatCurrency, formatPercent } from '../../utils/format';
 import {
   CORRELATION_HEATMAP_Y_AXIS_LABEL,
   CURRENCY_BREAKDOWN_LABEL,
+  CURRENCY_BREAKDOWN_LABEL_LAYOUT,
   CURRENCY_BREAKDOWN_LABEL_LINE,
   CURRENCY_EXPOSURE_CHART_GRID,
   SANKEY_MEMBER_NODE_COLOR,
@@ -532,9 +533,7 @@ export function buildCurrencyBreakdownChartOption(
           ...CURRENCY_BREAKDOWN_LABEL,
           formatter: ({ name, percent }: { name: string; percent: number }) => `${name}\n${percent.toFixed(1)}%`,
         },
-        labelLayout: {
-          hideOverlap: false,
-        },
+        labelLayout: CURRENCY_BREAKDOWN_LABEL_LAYOUT,
         labelLine: CURRENCY_BREAKDOWN_LABEL_LINE,
         data: items.map((item) => ({ ...item, value: item.amount_original, name: item.name })),
       },

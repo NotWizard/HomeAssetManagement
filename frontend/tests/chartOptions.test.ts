@@ -92,3 +92,12 @@ test('波动率图和币种拆分图为长标签保留可读布局', () => {
     maxSurfaceAngle: 80,
   });
 });
+
+test('币种拆分圆环图会纵向避让标签，并隐藏仍然重叠的标签', async () => {
+  const layout = await import('../src/components/charts/chartOptionLayout.ts');
+
+  assert.deepEqual(layout.CURRENCY_BREAKDOWN_LABEL_LAYOUT, {
+    moveOverlap: 'shiftY',
+    hideOverlap: true,
+  });
+});

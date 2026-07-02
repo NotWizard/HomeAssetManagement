@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复分析看板币种总览中资产与负债构成圆环图的小扇区标签和引导线重叠：共享图表布局现在会先纵向避让标签，空间仍不足时隐藏冲突标签，完整数据仍可通过图例和 Tooltip 查看。
+- Fix overlapping small-slice labels and guide lines in the Analytics currency overview asset and liability donut charts. The shared chart layout now shifts labels vertically first and hides remaining conflicts when space is insufficient, while the legend and tooltip continue to expose the complete data.
+
 ## [0.4.0] - 2026-07-01
 
 ### Added

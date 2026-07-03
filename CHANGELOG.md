@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 记录设置页手动更新功能设计：保留现有自动检查与静默下载兜底，同时允许桌面端用户主动检查、分步下载并确认安装；自动与手动入口共用同一更新状态和任务。
+- Document the Settings manual-update design: keep the existing automatic check and silent-download fallback while allowing desktop users to check, download, and confirm installation step by step through one shared update state and task.
+
 ## [0.4.1] - 2026-07-02
 
 ### Changed

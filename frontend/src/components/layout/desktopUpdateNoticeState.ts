@@ -6,6 +6,7 @@ import type {
 export type DesktopUpdateClickAction =
   | 'open-install-dialog'
   | 'check-for-updates'
+  | 'download-update'
   | 'none';
 
 export function normalizeUpdateState(
@@ -120,17 +121,108 @@ export function getDesktopUpdateButtonLabel(
   return '检查更新';
 }
 
+export function getDesktopUpdateSettingsButtonLabel(
+  state: Pick<
+    HbsDesktopUpdateState,
+    'status' | 'progress' | 'errorKind'
+  > | null | undefined
+): string {
+  const status = state?.status ?? 'idle';
+  if (status === 'checking') {
+    return '检查中';
+  }
+  if (status === 'available') {
+    return '下载更新';
+  }
+  if (status === 'downloading') {
+    return formatUpdateDownloadProgress(state?.progress);
+  }
+  if (status === 'downloaded') {
+    return '安装并重启';
+  }
+  if (status === 'preparing') {
+    return '准备安装中';
+  }
+  if (status === 'installing') {
+    return '安装进行中';
+  }
+  if (status === 'error') {
+    if (state?.errorKind === 'download') {
+      return '重新下载';
+    }
+    if (state?.errorKind === 'install') {
+      return '重试安装';
+    }
+    return '重新检查';
+  }
+  return '检查更新';
+}
+
 export function resolveDesktopUpdateClickAction(
-  state: Pick<HbsDesktopUpdateState, 'status' | 'downloadedFilePath'> | null | undefined
+  state: Pick<
+    HbsDesktopUpdateState,
+    'status' | 'downloadedFilePath' | 'errorKind'
+  > | null | undefined
 ): DesktopUpdateClickAction {
   const status = state?.status ?? 'idle';
   if (status === 'downloaded') {
     return 'open-install-dialog';
   }
   if (status === 'error') {
+    if (state?.errorKind === 'download') {
+      return 'download-update';
+    }
+    if (state?.errorKind === 'validation') {
+      return 'check-for-updates';
+    }
+    if (state?.errorKind === 'install') {
+      return state.downloadedFilePath
+        ? 'open-install-dialog'
+        : 'check-for-updates';
+    }
     return state?.downloadedFilePath
       ? 'open-install-dialog'
       : 'check-for-updates';
   }
   return 'none';
+}
+
+export function resolveDesktopUpdateSettingsAction(
+  state: Pick<
+    HbsDesktopUpdateState,
+    'status' | 'downloadedFilePath' | 'errorKind'
+  > | null | undefined
+): DesktopUpdateClickAction {
+  const status = state?.status ?? 'idle';
+  if (status === 'idle') {
+    return 'check-for-updates';
+  }
+  if (status === 'available') {
+    return 'download-update';
+  }
+  return resolveDesktopUpdateClickAction(state);
+}
+
+export function shouldReuseRecentUpdateCheck(
+  state: Pick<HbsDesktopUpdateState, 'lastCheckedAt'> | null | undefined,
+  now: number
+): boolean {
+  return (
+    typeof state?.lastCheckedAt === 'number' &&
+    now - state.lastCheckedAt >= 0 &&
+    now - state.lastCheckedAt < 60_000
+  );
+}
+
+export function didLatestUpdateCheckFail(
+  state: Pick<
+    HbsDesktopUpdateState,
+    'lastCheckedAt' | 'lastSuccessfulCheckAt' | 'lastNetworkErrorAt'
+  > | null | undefined
+): boolean {
+  return (
+    typeof state?.lastCheckedAt === 'number' &&
+    state.lastNetworkErrorAt === state.lastCheckedAt &&
+    (state.lastSuccessfulCheckAt ?? 0) < state.lastCheckedAt
+  );
 }

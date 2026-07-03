@@ -320,7 +320,7 @@ export function OverviewPage() {
             </div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {rebalanceQuery.data.items.slice(0, 6).map((item) => (
+              {rebalanceQuery.data.items.map((item) => (
                 <div
                   key={item.id}
                   className="group rounded-2xl border border-border/60 bg-surface-subtle p-4 transition-all hover:bg-card hover:shadow-card"

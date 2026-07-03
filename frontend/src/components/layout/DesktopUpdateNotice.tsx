@@ -1,5 +1,5 @@
 import { Download, RefreshCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import {
   getDesktopBridge,
@@ -8,50 +8,17 @@ import {
 import {
   getDesktopUpdateButtonLabel,
   isDesktopUpdateBusy,
-  normalizeUpdateState,
   resolveDesktopUpdateClickAction,
   shouldShowDesktopUpdateEntry,
 } from './desktopUpdateNoticeState';
+import { useDesktopUpdateState } from './useDesktopUpdateState';
 import { Button } from '../ui/button';
 import { Dialog } from '../ui/dialog';
-import type { HbsDesktopUpdateState } from '../../config/runtime';
 
 export function DesktopUpdateNotice() {
-  const [updateState, setUpdateState] = useState<HbsDesktopUpdateState | null>(
-    null
-  );
+  const updateState = useDesktopUpdateState();
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
   const [actionPending, setActionPending] = useState(false);
-
-  useEffect(() => {
-    if (!isDesktopRuntime()) {
-      return;
-    }
-
-    const desktopBridge = getDesktopBridge();
-    if (!desktopBridge) {
-      return;
-    }
-
-    let disposed = false;
-
-    void desktopBridge.updates.getState().then((state) => {
-      if (!disposed) {
-        setUpdateState(normalizeUpdateState(state));
-      }
-    });
-
-    const unsubscribe = desktopBridge.updates.onUpdateStateChanged((state) => {
-      if (!disposed) {
-        setUpdateState(normalizeUpdateState(state));
-      }
-    });
-
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  }, []);
 
   if (!isDesktopRuntime()) {
     return null;
@@ -98,6 +65,10 @@ export function DesktopUpdateNotice() {
           }
           if (action === 'check-for-updates') {
             void desktopBridge.updates.checkForUpdates();
+            return;
+          }
+          if (action === 'download-update') {
+            void desktopBridge.updates.downloadUpdate();
           }
         }}
       >

@@ -6,10 +6,24 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-03
+
 ### Added
 
-- 记录设置页手动更新功能设计：保留现有自动检查与静默下载兜底，同时允许桌面端用户主动检查、分步下载并确认安装；自动与手动入口共用同一更新状态和任务。
-- Document the Settings manual-update design: keep the existing automatic check and silent-download fallback while allowing desktop users to check, download, and confirm installation step by step through one shared update state and task.
+- 设置页新增桌面端手动更新入口：用户可主动检查正式版更新，查看版本摘要和官方发布说明，并按“检查、下载、安装并重启”分步操作；自动更新仍会静默下载兜底，两种入口共用同一进度和安装状态。
+- Add a desktop manual-update entry to Settings. Users can check for stable releases, review version details and official release notes, then proceed through check, download, and install-and-restart steps. Automatic silent downloads remain available as a fallback, and both entry points share the same progress and installation state.
+
+### Changed
+
+- 同步桌面端、前端与后端版本号为 `0.5.0`，归档本次手动更新功能与修复用于发布。
+- Align desktop, frontend, and backend versions to `0.5.0` and archive the manual-update feature and fixes for release.
+
+### Fixed
+
+- 修复 macOS 自动更新在清理包含 `app.asar` 的旧 staging 目录时被 Electron 虚拟文件系统误判为目录、点击“立即升级并重启”无响应的问题；安装流程改用系统 `/bin/rm` 清理 staging，并在清理失败时进入可见的安装错误状态。
+- Fix macOS auto-update appearing unresponsive after clicking “Install and restart” when Electron's virtual filesystem treats `app.asar` inside a stale staging directory as a folder. Installation now clears staging through system `/bin/rm` and surfaces a visible install error if cleanup fails.
+- 保留 5% 再平衡偏离阈值，同时移除总览页最多展示六项的截断，所有超过阈值的提醒现在都会完整显示。
+- Keep the 5% rebalance deviation threshold while removing the six-item Overview cap so every alert above the threshold is displayed.
 
 ## [0.4.1] - 2026-07-02
 
@@ -520,7 +534,8 @@
 - 用 Tailwind + shadcn 风格重构前端 UI/UX。
 - Rebuild frontend UI/UX in Tailwind + shadcn style.
 
-[Unreleased]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.4.0...v0.4.1
 [0.1.3]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/NotWizard/HouseholdBalanceSheet/compare/v0.1.1...v0.1.2

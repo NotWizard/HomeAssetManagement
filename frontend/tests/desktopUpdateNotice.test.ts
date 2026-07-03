@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  didLatestUpdateCheckFail,
+  getDesktopUpdateSettingsButtonLabel,
   getDesktopUpdateButtonLabel,
   isDesktopUpdateBusy,
   normalizeUpdateState,
   resolveDesktopUpdateClickAction,
+  resolveDesktopUpdateSettingsAction,
+  shouldReuseRecentUpdateCheck,
   shouldShowDesktopUpdateEntry,
 } from '../src/components/layout/desktopUpdateNoticeState.ts';
 
@@ -149,4 +153,103 @@ test('桌面更新入口会根据状态推导点击动作与忙碌态', () => {
   assert.equal(isDesktopUpdateBusy('preparing'), true);
   assert.equal(isDesktopUpdateBusy('installing'), true);
   assert.equal(isDesktopUpdateBusy('downloaded'), false);
+});
+
+test('设置页更新卡片会按状态推导分步操作与按钮文案', () => {
+  assert.equal(
+    resolveDesktopUpdateSettingsAction({ status: 'idle' }),
+    'check-for-updates'
+  );
+  assert.equal(
+    resolveDesktopUpdateSettingsAction({ status: 'available' }),
+    'download-update'
+  );
+  assert.equal(
+    resolveDesktopUpdateSettingsAction({ status: 'downloaded' }),
+    'open-install-dialog'
+  );
+  assert.equal(
+    resolveDesktopUpdateSettingsAction({ status: 'downloading' }),
+    'none'
+  );
+
+  assert.equal(
+    getDesktopUpdateSettingsButtonLabel({ status: 'idle' }),
+    '检查更新'
+  );
+  assert.equal(
+    getDesktopUpdateSettingsButtonLabel({ status: 'checking' }),
+    '检查中'
+  );
+  assert.equal(
+    getDesktopUpdateSettingsButtonLabel({ status: 'available' }),
+    '下载更新'
+  );
+  assert.equal(
+    getDesktopUpdateSettingsButtonLabel({
+      status: 'downloading',
+      progress: 68,
+    }),
+    '下载中 68%'
+  );
+  assert.equal(
+    getDesktopUpdateSettingsButtonLabel({ status: 'downloaded' }),
+    '安装并重启'
+  );
+});
+
+test('更新重试动作会区分下载、校验与安装错误', () => {
+  assert.equal(
+    resolveDesktopUpdateClickAction({
+      status: 'error',
+      errorKind: 'download',
+      downloadedFilePath: '/tmp/incomplete.zip',
+    }),
+    'download-update'
+  );
+  assert.equal(
+    resolveDesktopUpdateClickAction({
+      status: 'error',
+      errorKind: 'validation',
+      downloadedFilePath: '/tmp/invalid.zip',
+    }),
+    'check-for-updates'
+  );
+  assert.equal(
+    resolveDesktopUpdateClickAction({
+      status: 'error',
+      errorKind: 'install',
+      downloadedFilePath: '/tmp/verified.zip',
+    }),
+    'open-install-dialog'
+  );
+});
+
+test('手动检查会在 60 秒内复用结果并识别本次网络失败', () => {
+  const now = 1_700_000_000_000;
+
+  assert.equal(
+    shouldReuseRecentUpdateCheck({ lastCheckedAt: now - 30_000 }, now),
+    true
+  );
+  assert.equal(
+    shouldReuseRecentUpdateCheck({ lastCheckedAt: now - 60_000 }, now),
+    false
+  );
+  assert.equal(
+    didLatestUpdateCheckFail({
+      lastCheckedAt: now,
+      lastNetworkErrorAt: now,
+      lastSuccessfulCheckAt: now - 1,
+    }),
+    true
+  );
+  assert.equal(
+    didLatestUpdateCheckFail({
+      lastCheckedAt: now,
+      lastNetworkErrorAt: now - 1,
+      lastSuccessfulCheckAt: now,
+    }),
+    false
+  );
 });

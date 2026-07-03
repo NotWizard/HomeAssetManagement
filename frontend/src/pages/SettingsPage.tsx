@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Select } from '../components/ui/select';
 import { PageHeader } from '../components/layout/PageHeader';
+import { DesktopUpdateSettingsCard } from '../components/settings/DesktopUpdateSettingsCard';
 import {
   invalidateLightSettingsQueries,
   invalidateMemberQueries,
@@ -213,6 +214,8 @@ export function SettingsPage() {
           </Button>
         </CardContent>
       </Card>
+
+      <DesktopUpdateSettingsCard />
 
       <Card>
         <CardHeader className="pb-2">

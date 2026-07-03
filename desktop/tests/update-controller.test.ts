@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
@@ -243,6 +244,65 @@ test('安装前会校验下载包是否与目标版本和架构匹配', async ()
   assert.equal(state.errorMessage, '更新包与当前设备架构或目标版本不匹配');
 });
 
+test('安装前会通过系统命令清理包含 app.asar 的 staging 目录', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-update-stage-'));
+  const updatesDir = join(userDataDir, 'updates');
+  const stageDir = join(updatesDir, 'staged');
+  const downloadedFilePath = join(
+    updatesDir,
+    'HouseholdBalanceSheet-0.2.0-macos-arm64.zip'
+  );
+  const commands: Array<{ command: string; args: string[] }> = [];
+
+  mkdirSync(join(stageDir, 'HouseholdBalanceSheet.app', 'Contents', 'Resources'), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(stageDir, 'HouseholdBalanceSheet.app', 'Contents', 'Resources', 'app.asar'),
+    'stale'
+  );
+  writeFileSync(downloadedFilePath, 'dummy');
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.1.0',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => ({
+        status: 'downloaded',
+        currentVersion: '0.1.0',
+        latestVersion: '0.2.0',
+        assetName: 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip',
+        downloadedFilePath,
+        lastCheckedAt: 1_700_000_000_000,
+      }),
+      persistState: () => undefined,
+      now: () => 1_700_000_000_100,
+      platform: 'darwin',
+      runCommand(command, args) {
+        commands.push({ command, args });
+        return { status: command === '/bin/rm' ? 0 : 1 };
+      },
+    });
+
+    await controller.start();
+    await controller.installUpdate();
+
+    assert.deepEqual(commands[0], {
+      command: '/bin/rm',
+      args: ['-rf', stageDir],
+    });
+  } finally {
+    rmSync(userDataDir, { force: true, recursive: true });
+  }
+});
+
 test('检测到新候选包后会自动后台触发下载，状态不停留在 available', async () => {
   const updateControllerModule = await import('../src/update-controller.ts');
 
@@ -306,10 +366,11 @@ test('检测到新候选包后会自动后台触发下载，状态不停留在 a
     const unsubscribe = controller.subscribe((s) => stateLog.push(s.status));
 
     await controller.checkForUpdates();
-    // fire-and-forget downloadUpdate 在 microtask 队列里，等到状态离开 'available'
+    // fire-and-forget downloadUpdate 在 microtask 队列里，等到它实际请求校验文件；
+    // downloading 状态会在首次 await 前广播，不能只以状态变化判断网络请求已发生。
     const deadline = Date.now() + 500;
     while (
-      ['checking', 'available'].includes(controller.getState().status) &&
+      !fetchCalls.some((url) => url.endsWith('.sha256')) &&
       Date.now() < deadline
     ) {
       await new Promise((r) => setTimeout(r, 5));
@@ -333,6 +394,168 @@ test('检测到新候选包后会自动后台触发下载，状态不停留在 a
     );
   } finally {
     global.fetch = originalFetch;
+  }
+});
+
+test('手动检查发现新版后停在 available 且不会下载', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-manual-update-'));
+  const originalFetch = global.fetch;
+  let assetFetchCount = 0;
+
+  global.fetch = (async () => {
+    assetFetchCount += 1;
+    return new Response(null, { status: 503 });
+  }) as typeof fetch;
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.4.1',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [
+        {
+          tag_name: 'v0.5.0',
+          name: 'v0.5.0 手动更新',
+          html_url: 'https://example.test/releases/v0.5.0',
+          published_at: '2026-07-03T00:00:00Z',
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              name: 'HouseholdBalanceSheet-0.5.0-macos-arm64.zip',
+              browser_download_url: 'https://example.test/update.zip',
+              size: 1024,
+            },
+            {
+              name: 'HouseholdBalanceSheet-0.5.0-macos-arm64.zip.sha256',
+              browser_download_url: 'https://example.test/update.zip.sha256',
+            },
+          ],
+        },
+      ],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => null,
+      persistState: () => undefined,
+    });
+
+    const state = await controller.checkForUpdates({ manual: true });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(state.status, 'available');
+    assert.equal(state.releaseTitle, 'v0.5.0 手动更新');
+    assert.equal(state.publishedAt, '2026-07-03T00:00:00Z');
+    assert.equal(assetFetchCount, 0, '手动检查不应自动请求更新包');
+  } finally {
+    global.fetch = originalFetch;
+    rmSync(userDataDir, { force: true, recursive: true });
+  }
+});
+
+test('并发检查只会发起一次 Release 请求', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  let releaseFetchCount = 0;
+  let resolveReleases: ((value: never[]) => void) | null = null;
+  const pendingReleases = new Promise<never[]>((resolve) => {
+    resolveReleases = resolve;
+  });
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.4.1',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-update-concurrent-check',
+    fetchJsonReleases: async () => {
+      releaseFetchCount += 1;
+      return pendingReleases;
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => null,
+    persistState: () => undefined,
+  });
+
+  const firstCheck = controller.checkForUpdates({ manual: true });
+  const secondCheck = controller.checkForUpdates({ manual: true });
+  resolveReleases?.([]);
+  await Promise.all([firstCheck, secondCheck]);
+
+  assert.equal(releaseFetchCount, 1);
+});
+
+test('成功检查命中同一候选时会保留已下载文件且不重复下载', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-downloaded-refresh-'));
+  const updatesDir = join(userDataDir, 'updates');
+  const assetName = 'HouseholdBalanceSheet-0.5.0-macos-arm64.zip';
+  const downloadedFilePath = join(updatesDir, assetName);
+  const originalFetch = global.fetch;
+  let assetFetchCount = 0;
+
+  mkdirSync(updatesDir, { recursive: true });
+  writeFileSync(downloadedFilePath, 'verified-update');
+  global.fetch = (async () => {
+    assetFetchCount += 1;
+    return new Response(null, { status: 503 });
+  }) as typeof fetch;
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.4.1',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [
+        {
+          tag_name: 'v0.5.0',
+          name: 'v0.5.0 手动更新',
+          html_url: 'https://example.test/releases/v0.5.0',
+          published_at: '2026-07-03T00:00:00Z',
+          draft: false,
+          prerelease: false,
+          assets: [
+            {
+              name: assetName,
+              browser_download_url: 'https://example.test/update.zip',
+              size: 1024,
+            },
+            {
+              name: `${assetName}.sha256`,
+              browser_download_url: 'https://example.test/update.zip.sha256',
+            },
+          ],
+        },
+      ],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => ({
+        status: 'downloaded',
+        currentVersion: '0.4.1',
+        latestVersion: '0.5.0',
+        assetName,
+        assetUrl: 'https://example.test/update.zip',
+        sha256AssetUrl: 'https://example.test/update.zip.sha256',
+        downloadedFilePath,
+        downloadedAt: '2026-07-03T00:00:00.000Z',
+        progress: 100,
+      }),
+      persistState: () => undefined,
+    });
+
+    await controller.start();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(controller.getState().status, 'downloaded');
+    assert.equal(controller.getState().downloadedFilePath, downloadedFilePath);
+    assert.equal(assetFetchCount, 0);
+  } finally {
+    global.fetch = originalFetch;
+    rmSync(userDataDir, { force: true, recursive: true });
   }
 });
 

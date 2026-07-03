@@ -94,6 +94,9 @@ test('更新工作流会为下载和安装阶段提供显式状态迁移', async
       candidate: {
         version: '0.2.0',
         tagName: 'v0.2.0',
+        title: 'v0.2.0 手动更新',
+        releaseUrl: 'https://example.com/releases/v0.2.0',
+        publishedAt: '2026-07-03T00:00:00Z',
         asset: {
           name: 'HouseholdBalanceSheet-0.2.0-macos-arm64.zip',
           url: 'https://example.com/download/arm64.zip',
@@ -103,6 +106,8 @@ test('更新工作流会为下载和安装阶段提供显式状态迁移', async
   );
 
   assert.equal(availableState.status, 'available');
+  assert.equal(availableState.releaseTitle, 'v0.2.0 手动更新');
+  assert.equal(availableState.publishedAt, '2026-07-03T00:00:00Z');
 
   const downloadedState = workflow.applyUpdateStateTransition(
     availableState,

@@ -158,3 +158,35 @@ test('再平衡结果应提供金额、参与池摘要和可修正的无效配�
   assert.match(riskSource, /当前占比/);
   assert.match(entryFormSource, /填写 0% 或留空表示该资产不参与再平衡计算/);
 });
+
+test('总览页会全量展示所有超过阈值的再平衡提醒', () => {
+  const overviewSource = readFrontendFile('src/pages/OverviewPage.tsx');
+
+  assert.doesNotMatch(overviewSource, /rebalanceQuery\.data\.items\.slice/);
+  assert.match(overviewSource, /rebalanceQuery\.data\.items\.map/);
+});
+
+test('设置页会在全局设置之后、数据迁移之前展示桌面更新卡片', () => {
+  const settingsSource = readFrontendFile('src/pages/SettingsPage.tsx');
+  const updateCardSource = readFrontendFile(
+    'src/components/settings/DesktopUpdateSettingsCard.tsx'
+  );
+  const updateCardIndex = settingsSource.indexOf('<DesktopUpdateSettingsCard />');
+  const migrationCardIndex = settingsSource.indexOf('数据迁移 / 备份');
+
+  assert.match(
+    settingsSource,
+    /import \{ DesktopUpdateSettingsCard \} from '\.\.\/components\/settings\/DesktopUpdateSettingsCard'/
+  );
+  assert.ok(updateCardIndex >= 0, '设置页应渲染桌面更新卡片');
+  assert.ok(
+    updateCardIndex < migrationCardIndex,
+    '桌面更新卡片应位于数据迁移卡片之前'
+  );
+  assert.match(
+    updateCardSource,
+    /if\s*\(\s*!isDesktopRuntime\(\)\s*\)\s*\{\s*return null;/
+  );
+  assert.match(updateCardSource, /shouldReuseRecentUpdateCheck/);
+  assert.match(updateCardSource, /target="_blank"/);
+});

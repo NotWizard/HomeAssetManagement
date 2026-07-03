@@ -68,7 +68,9 @@ export type UpdateState = {
   currentVersion: string;
   latestVersion?: string;
   releaseTag?: string;
+  releaseTitle?: string;
   releaseUrl?: string;
+  publishedAt?: string;
   assetName?: string;
   assetUrl?: string;
   /** 与 assetUrl 同一 release 中 `<assetName>.sha256` 配套校验文件的下载 URL。 */
@@ -281,7 +283,9 @@ export function toAvailableState(options: {
     currentVersion: options.currentVersion,
     latestVersion: options.candidate.version,
     releaseTag: options.candidate.tagName,
+    releaseTitle: options.candidate.title,
     releaseUrl: options.candidate.releaseUrl,
+    publishedAt: options.candidate.publishedAt,
     assetName: options.candidate.asset.name,
     assetUrl: options.candidate.asset.url,
     sha256AssetUrl: options.candidate.sha256AssetUrl,

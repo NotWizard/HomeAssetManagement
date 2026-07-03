@@ -38,11 +38,18 @@ export type HbsDesktopUpdateState = {
   status: HbsDesktopUpdateStatus;
   latestVersion?: string | null;
   currentVersion?: string | null;
+  releaseTitle?: string | null;
+  releaseUrl?: string | null;
+  publishedAt?: string | null;
   downloadedFilePath?: string | null;
   downloadedAt?: string | null;
   progress?: number | null;
   errorMessage?: string | null;
   errorKind?: HbsDesktopUpdateErrorKind | null;
+  lastCheckedAt?: number | null;
+  lastSuccessfulCheckAt?: number | null;
+  lastKnownLatestVersion?: string | null;
+  lastNetworkErrorAt?: number | null;
 };
 
 export type HbsDesktopBridge = {

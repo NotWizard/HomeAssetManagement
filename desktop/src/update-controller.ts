@@ -264,7 +264,9 @@ function sanitizePersistedState(
       lastCheckedAt: nextState.lastCheckedAt,
       latestVersion: nextState.latestVersion,
       releaseTag: nextState.releaseTag,
+      releaseTitle: nextState.releaseTitle,
       releaseUrl: nextState.releaseUrl,
+      publishedAt: nextState.publishedAt,
       assetName: nextState.assetName,
       assetUrl: nextState.assetUrl,
       totalBytes: nextState.totalBytes,
@@ -545,6 +547,13 @@ export function createUpdateController(options: UpdateControllerOptions) {
     if (!isPackaged) {
       return state;
     }
+    if (
+      ['checking', 'downloading', 'preparing', 'installing'].includes(
+        state.status
+      )
+    ) {
+      return state;
+    }
 
     const nowTs = now();
 
@@ -634,7 +643,9 @@ export function createUpdateController(options: UpdateControllerOptions) {
         status: 'idle',
         latestVersion: undefined,
         releaseTag: undefined,
+        releaseTitle: undefined,
         releaseUrl: undefined,
+        publishedAt: undefined,
         assetName: undefined,
         assetUrl: undefined,
         sha256AssetUrl: undefined,
@@ -659,10 +670,12 @@ export function createUpdateController(options: UpdateControllerOptions) {
     });
 
     const shouldKeepDownloaded =
-      ['downloaded', 'preparing', 'installing'].includes(state.status) &&
-      state.assetName === candidate.asset.name &&
-      !!state.downloadedFilePath &&
-      existsSync(state.downloadedFilePath);
+      ['downloaded', 'preparing', 'installing'].includes(
+        previousState.status
+      ) &&
+      previousState.assetName === candidate.asset.name &&
+      !!previousState.downloadedFilePath &&
+      existsSync(previousState.downloadedFilePath);
 
     const nextState = updateState({
       ...toAvailableState({
@@ -677,9 +690,9 @@ export function createUpdateController(options: UpdateControllerOptions) {
       return updateState({
         ...nextState,
         status: 'downloaded',
-        downloadedFilePath: state.downloadedFilePath,
-        downloadedAt: state.downloadedAt,
-        downloadedBytes: state.downloadedBytes,
+        downloadedFilePath: previousState.downloadedFilePath,
+        downloadedAt: previousState.downloadedAt,
+        downloadedBytes: previousState.downloadedBytes,
         totalBytes: candidate.asset.size,
         progress: 100,
       });
@@ -690,7 +703,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
     // - 错误吞掉，downloadUpdate 内部已经通过分类 error state 写入 state。
     // - 用 status === 'available' 守卫，避免 12h 轮询期间正在下载又被重复触发。
     // 用户感知链路：idle → (静默 available/downloading) → downloaded（左下角才出现提醒）。
-    if (state.status === 'available') {
+    if (!checkOptions.manual && state.status === 'available') {
       void downloadUpdate().catch(() => undefined);
     }
 
@@ -699,6 +712,11 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
   async function downloadUpdate(): Promise<UpdateState> {
     if (!isPackaged) {
+      return state;
+    }
+    if (
+      ['downloading', 'preparing', 'installing'].includes(state.status)
+    ) {
       return state;
     }
     if (!state.assetUrl || !state.assetName) {
@@ -718,7 +736,6 @@ export function createUpdateController(options: UpdateControllerOptions) {
     }
 
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
-    await mkdir(updatesDir, { recursive: true });
     const archivePath = join(updatesDir, state.assetName);
     // 下载先落到 .partial，校验通过后 atomic rename 到最终路径；
     // 中途崩溃 / 断电只会留下 .partial（启动时清理），不会污染最终 archivePath。
@@ -734,6 +751,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
     });
 
     try {
+      await mkdir(updatesDir, { recursive: true });
       // 1) 先取期望摘要（短文本，独立请求，失败即拒绝下载）
       const shaResponse = await fetch(state.sha256AssetUrl, {
         headers: { 'User-Agent': 'HouseholdBalanceSheet-Updater' },
@@ -844,6 +862,9 @@ export function createUpdateController(options: UpdateControllerOptions) {
     if (!isPackaged) {
       return state;
     }
+    if (['preparing', 'installing'].includes(state.status)) {
+      return state;
+    }
     if (!state.downloadedFilePath || !existsSync(state.downloadedFilePath)) {
       return updateState(toInstallErrorState('更新包不存在，请重新下载'));
     }
@@ -863,7 +884,11 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
     const stageDir = join(updatesDir, 'staged');
-    rmSync(stageDir, { force: true, recursive: true });
+    const clearStageDir = () => runCommand('/bin/rm', ['-rf', stageDir]);
+    const clearStageResult = clearStageDir();
+    if (clearStageResult.status !== 0) {
+      return updateState(toInstallErrorState('清理旧更新文件失败'));
+    }
     mkdirSync(stageDir, { recursive: true });
     updateState(toPreparingInstallState());
 
@@ -874,13 +899,13 @@ export function createUpdateController(options: UpdateControllerOptions) {
       stageDir,
     ]);
     if (unzipResult.status !== 0) {
-      rmSync(stageDir, { force: true, recursive: true });
+      clearStageDir();
       return updateState(toInstallErrorState('解压更新包失败'));
     }
 
     const sourceAppPath = await findAppBundleInDirectory(stageDir);
     if (!sourceAppPath) {
-      rmSync(stageDir, { force: true, recursive: true });
+      clearStageDir();
       return updateState(toInstallErrorState('更新包中未找到应用程序'));
     }
 

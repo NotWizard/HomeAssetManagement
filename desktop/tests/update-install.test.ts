@@ -71,3 +71,61 @@ test('安装脚本会移除新 app 的 macOS 隔离标记，避免升级后用�
   assert.ok(adminFallbackBlock, '未找到 admin fallback 分支');
   assert.match(adminFallbackBlock![0], /remove_quarantine "\$TARGET_APP"/);
 });
+
+test('安装阶段的清理与解压走异步命令通道（runCommandAsync）', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const { mkdtempSync, mkdirSync, rmSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-install-async-'));
+  const updatesDir = join(userDataDir, 'updates');
+  mkdirSync(updatesDir, { recursive: true });
+  const assetName = 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip';
+  const downloadedFilePath = join(updatesDir, assetName);
+  writeFileSync(downloadedFilePath, 'zip-bytes');
+
+  const calls: string[] = [];
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.5.0',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => ({
+        status: 'downloaded',
+        currentVersion: '0.5.0',
+        latestVersion: '0.6.0',
+        assetName,
+        downloadedFilePath,
+        lastCheckedAt: 1_700_000_000_000,
+      }),
+      persistState: () => undefined,
+      now: () => 1_700_000_000_100,
+      platform: 'darwin',
+      // 只注入异步通道：若实现仍走同步 runCommand，本测试会因 ditto 未执行而失败
+      runCommandAsync: async (command, args) => {
+        calls.push(`${command} ${args.join(' ')}`);
+        // ditto 解压返回非零，验证失败后还会再清理一次 staged
+        return { status: command === 'ditto' ? 1 : 0 };
+      },
+    });
+
+    await controller.start();
+    const state = await controller.installUpdate();
+
+    assert.equal(state.status, 'error');
+    assert.equal(state.errorKind, 'install');
+    assert.deepEqual(calls, [
+      `/bin/rm -rf ${join(updatesDir, 'staged')}`,
+      `ditto -x -k ${downloadedFilePath} ${join(updatesDir, 'staged')}`,
+      `/bin/rm -rf ${join(updatesDir, 'staged')}`,
+    ]);
+  } finally {
+    rmSync(userDataDir, { recursive: true, force: true });
+  }
+});

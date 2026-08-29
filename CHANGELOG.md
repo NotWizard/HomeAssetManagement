@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复安装更新时主进程被同步解压冻结数秒：`ditto` 解压与 staged 目录清理从同步 `spawnSync` 改为异步 `spawn`，解压期间窗口与 IPC 保持响应。（整改清单 v2 · V2-21）
+- Fix the main process freezing for seconds during update installation. `ditto` extraction and staged-directory cleanup now use async `spawn` instead of synchronous `spawnSync`, keeping the window and IPC responsive while extracting. (Remediation v2 · V2-21)
+
 - 收紧桌面端导航守卫：原先 `127.0.0.1` 任意端口都视为内部地址，渲染窗口一旦被诱导导航到恶意本地服务页面，该页面即获得带 token 的完整本地 API 能力；现在只放行与当前后端端口精确同源的地址。（整改清单 v2 · V2-20）
 - Tighten desktop navigation guards. Previously any `127.0.0.1` port counted as internal, so a renderer window lured onto a malicious local service page would gain full token-authenticated local API access. Only URLs exactly matching the current backend port now count as internal. (Remediation v2 · V2-20)
 

@@ -2,7 +2,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSyn
 import { chmod, mkdir, readdir, rename, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 
 import {
   applyUpdateStateTransition,
@@ -95,6 +95,14 @@ export type UpdateControllerOptions = {
     command: string,
     args: string[]
   ) => { status: number | null; error?: Error };
+  /**
+   * 异步命令通道：安装阶段（rm / ditto 解压上百 MB 包）默认走 spawn 不阻塞主进程；
+   * 未提供时回退包装同步 runCommand（测试注入），两者都没有则用 spawn 实现。
+   */
+  runCommandAsync?: (
+    command: string,
+    args: string[]
+  ) => Promise<{ status: number | null; error?: Error }>;
 };
 
 type UpdateListener = (state: UpdateState) => void;
@@ -553,9 +561,18 @@ export function createUpdateController(options: UpdateControllerOptions) {
   const processExecPath = options.processExecPath ?? process.execPath;
   const processPid = options.processPid ?? process.pid;
   const onRequestQuit = options.onRequestQuit ?? (() => undefined);
-  const runCommand =
-    options.runCommand ??
-    ((command: string, args: string[]) => spawnSync(command, args, { stdio: 'ignore' }));
+  const runCommandAsync =
+    options.runCommandAsync ??
+    (options.runCommand
+      ? async (command: string, args: string[]) => options.runCommand!(command, args)
+      : (command: string, args: string[]) =>
+          // 默认异步 spawn：同步 spawnSync 会让主进程在解压/清理期间完全冻结
+          // （窗口、菜单、IPC 全部无响应）。
+          new Promise((resolveRun) => {
+            const child = spawn(command, args, { stdio: 'ignore' });
+            child.on('error', (error) => resolveRun({ status: null, error }));
+            child.on('close', (code) => resolveRun({ status: code }));
+          }));
 
   let state = createDefaultUpdateState(options.appVersion);
   let pollingTimer: { dispose: () => void } | null = null;
@@ -1003,28 +1020,28 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
     const updatesDir = join(options.userDataDir, UPDATE_SUBDIR);
     const stageDir = join(updatesDir, 'staged');
-    const clearStageDir = () => runCommand('/bin/rm', ['-rf', stageDir]);
-    const clearStageResult = clearStageDir();
+    const clearStageDir = () => runCommandAsync('/bin/rm', ['-rf', stageDir]);
+    const clearStageResult = await clearStageDir();
     if (clearStageResult.status !== 0) {
       return updateState(toInstallErrorState('清理旧更新文件失败'));
     }
     mkdirSync(stageDir, { recursive: true });
     updateState(toPreparingInstallState());
 
-    const unzipResult = runCommand('ditto', [
+    const unzipResult = await runCommandAsync('ditto', [
       '-x',
       '-k',
       state.downloadedFilePath,
       stageDir,
     ]);
     if (unzipResult.status !== 0) {
-      clearStageDir();
+      await clearStageDir();
       return updateState(toInstallErrorState('解压更新包失败'));
     }
 
     const sourceAppPath = await findAppBundleInDirectory(stageDir);
     if (!sourceAppPath) {
-      clearStageDir();
+      await clearStageDir();
       return updateState(toInstallErrorState('更新包中未找到应用程序'));
     }
 

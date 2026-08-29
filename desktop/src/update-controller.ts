@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, type WriteStream } from 'node:fs';
 import { chmod, mkdir, readdir, rename, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -362,6 +362,26 @@ function calculateProgress(
     0,
     Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
   );
+}
+
+/** 等 WriteStream  drain 或 error：出错时 reject，避免背压等待在已坏的流上永远挂起。 */
+function waitForDrain(stream: WriteStream): Promise<void> {
+  return new Promise((resolveWait, rejectWait) => {
+    const cleanup = () => {
+      stream.off('drain', onDrain);
+      stream.off('error', onError);
+    };
+    const onDrain = () => {
+      cleanup();
+      resolveWait();
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      rejectWait(error);
+    };
+    stream.once('drain', onDrain);
+    stream.once('error', onError);
+  });
 }
 
 function createStatePersistence(userDataDir: string) {
@@ -776,6 +796,10 @@ export function createUpdateController(options: UpdateControllerOptions) {
       error: undefined,
     });
 
+    // 声明在 try 外：catch 分支需要 destroy 写流 / 取消 reader，避免句柄与连接泄漏。
+    let fileStream: WriteStream | null = null;
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
     try {
       await mkdir(updatesDir, { recursive: true });
       // 1) 先取期望摘要（短文本，独立请求，失败即拒绝下载）
@@ -800,8 +824,16 @@ export function createUpdateController(options: UpdateControllerOptions) {
 
       const totalBytesHeader = response.headers.get('content-length');
       const totalBytes = totalBytesHeader ? Number(totalBytesHeader) : undefined;
-      const fileStream = createWriteStream(partialPath);
-      const reader = response.body.getReader();
+      fileStream = createWriteStream(partialPath);
+      const activeStream = fileStream;
+      // 建流即挂 error 监听：写盘失败（磁盘满 / IO 错误）在下载循环内就会触发，
+      // 没有监听的 WriteStream error 会成为 uncaught exception 直接打崩主进程。
+      let streamError: Error | null = null;
+      activeStream.on('error', (error) => {
+        streamError = streamError ?? error;
+      });
+      reader = response.body.getReader();
+      const activeReader = reader;
       const hasher = createHash('sha256');
       let downloadedBytes = 0;
       // 下载进度节流：原来每个 chunk 都触发 updateState → persistState（fsync state.json）
@@ -828,14 +860,21 @@ export function createUpdateController(options: UpdateControllerOptions) {
       };
 
       while (true) {
-        const chunk = await reader.read();
+        const chunk = await activeReader.read();
         if (chunk.done) {
           break;
+        }
+        if (streamError) {
+          throw streamError;
         }
         const buf = Buffer.from(chunk.value);
         hasher.update(buf);
         downloadedBytes += chunk.value.byteLength;
-        fileStream.write(buf);
+        // 背压：write 返回 false 说明内核缓冲已满，等 drain 再继续拉流，
+        // 避免慢盘时整个更新包在内存里堆积；若流已出错则立即抛出而非空等。
+        if (!activeStream.write(buf)) {
+          await waitForDrain(activeStream);
+        }
         pendingProgress = { downloadedBytes, totalBytes };
         if (Date.now() - lastProgressEmitAt >= PROGRESS_THROTTLE_MS) {
           flushProgressNow();
@@ -844,9 +883,20 @@ export function createUpdateController(options: UpdateControllerOptions) {
       // 循环结束 flush 一次，保证 100% / 最终 downloadedBytes 落到 state.json + listeners
       flushProgressNow();
 
+      if (streamError) {
+        throw streamError;
+      }
       await new Promise<void>((resolveWrite, rejectWrite) => {
-        fileStream.on('error', rejectWrite);
-        fileStream.end(() => resolveWrite());
+        // end 冲刷阶段仍可能异步报写盘错误；正常完成走回调，出错走 reject
+        const onError = (error: Error) => {
+          activeStream.off('error', onError);
+          rejectWrite(error);
+        };
+        activeStream.once('error', onError);
+        activeStream.end(() => {
+          activeStream.off('error', onError);
+          resolveWrite();
+        });
       });
 
       // 3) 校验：实际 vs 期望，不一致立刻丢弃下载
@@ -871,7 +921,17 @@ export function createUpdateController(options: UpdateControllerOptions) {
         })
       );
     } catch (error) {
-      rmSync(partialPath, { force: true });
+      // 先关流、取消 reader，再删 .partial：避免残留缓冲继续写已删除 inode，
+      // 也防止 fetch 底层连接悬挂。
+      fileStream?.destroy();
+      if (reader) {
+        await reader.cancel().catch(() => undefined);
+      }
+      try {
+        rmSync(partialPath, { force: true });
+      } catch {
+        // 清理失败（如 .partial 被外部占用/是目录）不遮盖原始下载错误
+      }
       const message = error instanceof Error ? error.message : String(error);
       // 按错误消息细分 download / validation：含 "SHA-256" 或 "校验" 关键字的走 validation，
       // 其他（HTTP 下载失败、流中断、文件写入错误）走 download。

@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复桌面更新下载写盘失败可能直接打崩主进程：写流创建即挂 error 监听（原先下载循环结束后才挂），下载循环接入 drain 背压避免慢盘时内存堆积，异常路径先关流再清理 .partial，且清理失败不再遮盖原始错误。（整改清单 v2 · V2-6）
+- Fix desktop update downloads potentially crashing the main process on write failures. The write stream now gets an error listener immediately upon creation (previously only after the download loop), the loop respects drain backpressure so slow disks no longer pile the package up in memory, failure paths destroy the stream before removing the partial file, and cleanup failures no longer mask the original error. (Remediation v2 · V2-6)
+
 - 修复桌面更新器在下载/检查中途退出后永久卡死：`checking`/`downloading` 瞬态之前会被持久化到 `state.json` 但启动清洗不覆盖，重启后所有更新入口静默失效；现在启动时 `checking` 复位为 idle、未完成的 `downloading` 回退为 available（已完成 rename 的恢复为 downloaded）。（整改清单 v2 · V2-5）
 - Fix the desktop updater deadlocking permanently after quitting mid-check or mid-download. The transient `checking`/`downloading` states were persisted to `state.json` but never sanitized on startup, silently disabling every update entry point. Startup now resets `checking` to idle and rolls unfinished `downloading` back to available (or downloaded when the verified archive is already in place). (Remediation v2 · V2-5)
 

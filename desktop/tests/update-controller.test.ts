@@ -1151,3 +1151,123 @@ test('sanitize 启动时把已完成 rename 的 downloading 恢复为 downloaded
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('下载完整链路：写入 + sha256 校验 + rename 到最终路径', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const { createHash } = await import('node:crypto');
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-download-ok-'));
+  const assetName = 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip';
+  const content = new Uint8Array(100_000).map((_, index) => index % 251);
+  const expectedSha256 = createHash('sha256').update(content).digest('hex');
+
+  const originalFetch = global.fetch;
+  global.fetch = (async (input: unknown) => {
+    const url = String(input);
+    if (url.endsWith('.sha256')) {
+      return new Response(`${expectedSha256}  ${assetName}\n`, { status: 200 });
+    }
+    return new Response(content, {
+      status: 200,
+      headers: { 'content-length': String(content.byteLength) },
+    });
+  }) as typeof fetch;
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.5.0',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [
+        {
+          tag_name: 'v0.6.0',
+          name: 'v0.6.0',
+          html_url: 'https://example.test/releases/v0.6.0',
+          draft: false,
+          prerelease: false,
+          assets: [
+            { name: assetName, browser_download_url: 'https://example.test/a.zip', size: content.byteLength },
+            { name: `${assetName}.sha256`, browser_download_url: 'https://example.test/a.zip.sha256' },
+          ],
+        } as never,
+      ],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => null,
+      persistState: () => undefined,
+      now: () => 1_700_000_000_000,
+    });
+
+    await controller.checkForUpdates({ manual: true });
+    assert.equal(controller.getState().status, 'available');
+
+    const state = await controller.downloadUpdate();
+    assert.equal(state.status, 'downloaded');
+    assert.equal(state.progress, 100);
+    assert.equal(state.verifiedSha256, expectedSha256);
+
+    const archivePath = join(userDataDir, 'updates', assetName);
+    assert.equal(existsSync(archivePath), true, '最终包应已 rename 到位');
+    assert.equal(existsSync(`${archivePath}.partial`), false, '.partial 不应残留');
+  } finally {
+    global.fetch = originalFetch;
+    rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('下载写盘失败进入 download 错误态而不是打崩主进程', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-download-fail-'));
+  const assetName = 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip';
+  const updatesDir = join(userDataDir, 'updates');
+  mkdirSync(updatesDir, { recursive: true });
+  // 预置一个同名目录占位：createWriteStream 打开必失败（EISDIR），
+  // 模拟磁盘满 / IO 错误类写盘失败，且跨平台确定性触发。
+  mkdirSync(join(updatesDir, `${assetName}.partial`));
+
+  const originalFetch = global.fetch;
+  global.fetch = (async (input: unknown) => {
+    const url = String(input);
+    if (url.endsWith('.sha256')) {
+      return new Response(`${'a'.repeat(64)}  ${assetName}\n`, { status: 200 });
+    }
+    return new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.5.0',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [
+        {
+          tag_name: 'v0.6.0',
+          name: 'v0.6.0',
+          draft: false,
+          prerelease: false,
+          assets: [
+            { name: assetName, browser_download_url: 'https://example.test/a.zip' },
+            { name: `${assetName}.sha256`, browser_download_url: 'https://example.test/a.zip.sha256' },
+          ],
+        } as never,
+      ],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => null,
+      persistState: () => undefined,
+      now: () => 1_700_000_000_000,
+    });
+
+    await controller.checkForUpdates({ manual: true });
+    const state = await controller.downloadUpdate();
+
+    assert.equal(state.status, 'error');
+    assert.equal(state.errorKind, 'download');
+  } finally {
+    global.fetch = originalFetch;
+    rmSync(userDataDir, { recursive: true, force: true });
+  }
+});

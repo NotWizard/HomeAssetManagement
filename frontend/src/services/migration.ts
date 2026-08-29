@@ -5,6 +5,7 @@ import {
   type HbsDesktopBinaryResponse,
 } from '../config/runtime';
 import { postForm } from './apiClient';
+import { fetchWithTimeout } from './apiTransport';
 
 function resolveFilename(response: Response) {
   const disposition = response.headers.get('content-disposition') ?? '';
@@ -78,9 +79,12 @@ export async function exportMigrationPackage() {
     return filename;
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/migration/export`, {
-    method: 'POST',
-  });
+  // 走 fetchWithTimeout：裸 fetch 无超时，本地服务挂起时导出会永不返回
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/migration/export`,
+    { method: 'POST' },
+    {}
+  );
 
   if (!response.ok) {
     throw new Error(await parseApiError(response));

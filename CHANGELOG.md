@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复 web 模式下导入错误明细下载与迁移包导出使用裸 `fetch` 无超时：本地服务挂起时这两个请求会永不返回，现在统一走带 30s 超时的 `fetchWithTimeout`。（整改清单 v2 · V2-35）
+- Fix bare `fetch` without timeout for the import-error download and migration export on the web path: both requests could hang forever if the local service stalled. They now go through `fetchWithTimeout` with a 30s timeout. (Remediation v2 · V2-35)
+
 - 修复开发模式开启 `HBS_REQUIRE_AUTH=true` 时浏览器跨域预检必失败：CORS `allow_headers` 补上 `X-HBS-Token`（桌面同源场景不受影响）。（整改清单 v2 · V2-29）
 - Fix browser CORS preflight always failing in dev mode with `HBS_REQUIRE_AUTH=true`: `X-HBS-Token` is now in the CORS `allow_headers` list (the same-origin desktop scenario is unaffected). (Remediation v2 · V2-29)
 

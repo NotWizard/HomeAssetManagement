@@ -41,3 +41,14 @@ test('迁移包与错误报告下载在桌面模式下会通过 bridge.api.binar
   assert.match(importsSource, /desktopBridge\.api\.binary\.get\(/);
   assert.doesNotMatch(importsSource, /desktopBridge\.api\.requestBinary\(/);
 });
+
+test('web 路径的下载/导出请求必须经过带超时的 fetchWithTimeout', () => {
+  const importsSource = readFrontendFile('src/services/imports.ts');
+  const migrationSource = readFrontendFile('src/services/migration.ts');
+
+  // 裸 fetch( 不允许再出现在这两个 service 里（桌面桥之外的 web 路径）
+  assert.doesNotMatch(importsSource, /await fetch\(/);
+  assert.doesNotMatch(migrationSource, /await fetch\(/);
+  assert.match(importsSource, /await fetchWithTimeout\(/);
+  assert.match(migrationSource, /await fetchWithTimeout\(/);
+});

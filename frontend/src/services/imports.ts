@@ -1,4 +1,5 @@
 import { getJSON, postForm } from './apiClient';
+import { fetchWithTimeout } from './apiTransport';
 import {
   getApiBaseUrl,
   getDesktopBridge,
@@ -121,7 +122,12 @@ export async function downloadImportErrors(importId: number) {
     return filename;
   }
 
-  const response = await fetch(`${getApiBaseUrl()}/imports/${importId}/errors`, { method: 'GET' });
+  // 走 fetchWithTimeout：裸 fetch 无超时，本地服务挂起时下载会永不返回
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/imports/${importId}/errors`,
+    { method: 'GET' },
+    {}
+  );
   if (!response.ok) {
     throw new Error(await parseDownloadError(response));
   }

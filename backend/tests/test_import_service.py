@@ -275,3 +275,21 @@ def test_decode_csv_bytes_raises_app_error_on_completely_garbled_bytes():
     garbled = bytes([0xFE, 0xFE, 0xFE, 0xFE])
     decoded = _decode_csv_bytes(garbled)
     assert isinstance(decoded, str)
+
+
+def test_import_and_migration_handlers_offload_blocking_work_to_threadpool():
+    """大文件解析/恢复是 CPU+DB 密集操作，必须经 run_in_threadpool 卸载，
+    否则 async handler 会阻塞事件循环（期间连 /health 都不响应）。"""
+    import inspect
+
+    import app.api.v1.imports as imports_api
+    import app.api.v1.migration as migration_api
+
+    imports_source = inspect.getsource(imports_api)
+    assert "run_in_threadpool" in imports_source
+    assert inspect.iscoroutinefunction(imports_api.preview_import)
+    assert inspect.iscoroutinefunction(imports_api.commit_import)
+
+    migration_source = inspect.getsource(migration_api)
+    assert "run_in_threadpool" in migration_source
+    assert inspect.iscoroutinefunction(migration_api.import_migration)

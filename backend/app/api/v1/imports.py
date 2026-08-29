@@ -6,6 +6,7 @@ from fastapi import Query
 from fastapi import UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.core.exceptions import AppError
@@ -33,16 +34,10 @@ async def _read_upload_within_limit(file: UploadFile, limit: int) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/preview")
-async def preview_import(file: UploadFile, db: Session = Depends(get_db)):
-    content = await _read_upload_within_limit(file, MAX_CSV_UPLOAD_BYTES)
-    return ok(ImportService.preview_csv(db, content))
-
-
-@router.post("/commit")
-async def commit_import(file: UploadFile, db: Session = Depends(get_db)):
-    content = await _read_upload_within_limit(file, MAX_CSV_UPLOAD_BYTES)
-    data, parsed = ImportService.commit_csv(db, content, file.filename or "import.csv")
+def _commit_csv_work(db: Session, content: bytes, filename: str) -> dict:
+    """commit 全链路（解析 + 逐行写库 + 提交 + 错误报告）打包成一个同步单元，
+    供 run_in_threadpool 调用：事务边界完整落在同一 worker 线程。"""
+    data, parsed = ImportService.commit_csv(db, content, filename)
     db.commit()
 
     if data["failed_rows"] > 0:
@@ -50,6 +45,23 @@ async def commit_import(file: UploadFile, db: Session = Depends(get_db)):
         db.commit()
         data["error_report_path"] = error_report_path
 
+    return data
+
+
+@router.post("/preview")
+async def preview_import(file: UploadFile, db: Session = Depends(get_db)):
+    content = await _read_upload_within_limit(file, MAX_CSV_UPLOAD_BYTES)
+    # 大 CSV 解析是 CPU/DB 密集操作，async handler 里直接跑会阻塞事件循环
+    # （期间连 /health 都不响应），卸载到 threadpool。
+    return ok(await run_in_threadpool(ImportService.preview_csv, db, content))
+
+
+@router.post("/commit")
+async def commit_import(file: UploadFile, db: Session = Depends(get_db)):
+    content = await _read_upload_within_limit(file, MAX_CSV_UPLOAD_BYTES)
+    data = await run_in_threadpool(
+        _commit_csv_work, db, content, file.filename or "import.csv"
+    )
     return ok(data)
 
 

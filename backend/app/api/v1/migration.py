@@ -6,6 +6,7 @@ from fastapi import UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
 from app.core.exceptions import AppError
@@ -43,9 +44,21 @@ def export_migration(db: Session = Depends(get_db)):
     )
 
 
+def _import_migration_work(db: Session, content: bytes, filename: str) -> dict:
+    """迁移导入全链路（解压校验 + 清表重建 + 提交）打包成一个同步单元，
+    供 run_in_threadpool 调用：事务边界完整落在同一 worker 线程。"""
+    data = MigrationService.import_package(db, io.BytesIO(content), filename)
+    db.commit()
+    return data
+
+
 @router.post('/import')
 async def import_migration(file: UploadFile, db: Session = Depends(get_db)):
     content = await _read_upload_within_limit(file, MAX_MIGRATION_UPLOAD_BYTES)
-    data = MigrationService.import_package(db, io.BytesIO(content), file.filename or 'migration.zip')
-    db.commit()
-    return ok(data)
+    # 迁移包上限 256MB，解压 + 逐行重建是重操作；async handler 里直接跑会阻塞
+    # 事件循环（期间连 /health 都不响应），卸载到 threadpool。
+    return ok(
+        await run_in_threadpool(
+            _import_migration_work, db, content, file.filename or 'migration.zip'
+        )
+    )

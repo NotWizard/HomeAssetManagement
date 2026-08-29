@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复大文件导入期间整个后端无响应：CSV 预检/提交与迁移包导入原本在 async 路由里同步执行重活，阻塞事件循环（连健康检查都不响应）；现在重活经 `run_in_threadpool` 卸载到工作线程，事务边界完整落在同一线程。（整改清单 v2 · V2-14）
+- Fix the backend becoming unresponsive during large imports. CSV preview/commit and migration package import previously ran heavy work synchronously inside async routes, blocking the event loop (even health checks stalled). The heavy work now runs in the threadpool via `run_in_threadpool`, with transaction boundaries kept entirely on the same worker thread. (Remediation v2 · V2-14)
+
 - 修复桌面模式下 API 请求无超时兜底、卸载取消失效：桌面桥（IPC）路径原先忽略 timeoutMs 与 signal，主进程挂起时请求永不返回；新增 `withRequestTimeout` 为桌面路径补齐与 web fetch 一致的 30s 超时与取消透传。（整改清单 v2 · V2-13）
 - Fix desktop-mode API requests having no timeout fallback and ignoring cancellation. The desktop bridge (IPC) path previously dropped `timeoutMs` and `signal`, so a stuck main process meant requests never returned. A new `withRequestTimeout` gives the desktop path the same 30s timeout and cancellation semantics as the web fetch path. (Remediation v2 · V2-13)
 

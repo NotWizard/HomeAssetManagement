@@ -6,6 +6,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `docs/整改清单-v2.md`：全仓深度审查报告（44 项发现：4 高 / 19 中 / 21 低），与整改清单 v1 互补，作为本轮逐项修复的基线清单。
+- Add `docs/整改清单-v2.md`: a full-repo review report (44 findings: 4 high / 19 medium / 21 low) complementing remediation list v1, serving as the baseline for this round of item-by-item fixes.
+
 ## [0.5.0] - 2026-07-03
 
 ### Added

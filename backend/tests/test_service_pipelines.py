@@ -214,7 +214,7 @@ def test_refresh_rates_uses_fetch_and_upsert_stages(monkeypatch):
 
     def fake_fetch(rate_date: date, base_currency: str):
         calls.append(("fetch", rate_date, base_currency))
-        return "frankfurter", {"USD": Decimal("7.10")}
+        return "frankfurter", date(2026, 3, 31), {"USD": Decimal("7.10")}
 
     def fake_upsert(
         session,
@@ -240,11 +240,12 @@ def test_refresh_rates_uses_fetch_and_upsert_stages(monkeypatch):
         )
 
     assert count == 2
+    # 请求 4-1 但 provider 数据实际属于 3-31：upsert 必须以实际数据日期落库
     assert calls == [
         ("fetch", date(2026, 4, 1), "CNY"),
         (
             "upsert",
-            date(2026, 4, 1),
+            date(2026, 3, 31),
             "CNY",
             "frankfurter",
             {"USD": Decimal("7.10")},

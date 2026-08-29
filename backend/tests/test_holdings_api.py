@@ -123,10 +123,11 @@ def test_create_foreign_currency_holding_fetches_rate_on_empty_cache(monkeypatch
     _reset_runtime_data()
     import app.services.fx_service as fx_module
 
+    # 回显请求日期作为实际数据日期，保持原有精确命中路径
     monkeypatch.setattr(
         fx_module,
         "_fetch_provider_rates",
-        lambda *_args: ("chinamoney", {"USD": Decimal("0.14")}),
+        lambda rate_date, *_args: ("chinamoney", rate_date, {"USD": Decimal("0.14")}),
     )
 
     with TestClient(app) as client:

@@ -41,10 +41,13 @@ class FXService:
         if provider_payload is None:
             return 0
 
-        provider_name, latest_rates = provider_payload
+        provider_name, actual_date, latest_rates = provider_payload
+        # 以汇率源返回的实际数据日期落库，而非请求的 rate_date：周末/节假日
+        # provider 返回的是最近交易日数据，若错标为当天，resolve_rate_for_pair
+        # 会把它当作精确值（is_estimated=False），污染历史快照重估。
         return _upsert_daily_rates(
             session,
-            rate_date=rate_date,
+            rate_date=actual_date,
             base_currency=base,
             provider_name=provider_name,
             latest_rates=latest_rates,
@@ -126,17 +129,16 @@ class FXService:
         # 不再用历史 fallback 兜底就只能 raise；这里的同步调用是不可避免的"冷启动税"。
         if allow_refresh:
             FXService.refresh_rates(session, as_of_date, base)
-            exact = session.scalar(
-                select(FxRateDaily).where(
-                    and_(
-                        FxRateDaily.rate_date == as_of_date,
-                        FxRateDaily.base_currency == base,
-                        FxRateDaily.quote_currency == quote,
-                    )
-                )
+            # refresh 以实际数据日期落库（周末/节假日可能是更早的交易日），因此
+            # 递归重走完整查询（精确 + 历史 fallback），而不是只查 as_of 当天；
+            # allow_refresh=False 保证不会二次 refresh、不会无限递归。
+            return FXService.resolve_rate_for_pair(
+                session,
+                quote_currency=quote,
+                base_currency=base,
+                as_of=as_of_date,
+                allow_refresh=False,
             )
-            if exact:
-                return Decimal(exact.rate), exact.is_estimated
 
         raise AppError(
             5000,
@@ -202,7 +204,8 @@ def _trigger_background_refresh(rate_date: date, base_currency: str) -> None:
 def _fetch_provider_rates(
     rate_date: date,
     base_currency: str,
-) -> tuple[str, dict[str, Decimal]] | None:
+) -> tuple[str, date, dict[str, Decimal]] | None:
+    """返回 (provider, 实际数据日期, rates)；全部 provider 失败时返回 None。"""
     providers = [
         ("chinamoney", _fetch_chinamoney),
         ("frankfurter", _fetch_frankfurter),
@@ -210,7 +213,8 @@ def _fetch_provider_rates(
 
     for name, fn in providers:
         try:
-            return name, fn(rate_date, base_currency)
+            actual_date, rates = fn(rate_date, base_currency)
+            return name, actual_date, rates
         except Exception as exc:  # noqa: BLE001
             logger.warning("fx provider %s failed: %s", name, exc)
 
@@ -302,7 +306,27 @@ def _fetch_with_retry(url: str, params: dict[str, str]) -> dict[str, Any]:
     raise last_exc
 
 
-def _fetch_chinamoney(rate_date: date, base: str) -> dict[str, Decimal]:
+def _parse_provider_date(raw: Any, requested: date, *, provider: str) -> date:
+    """解析汇率源返回的实际数据日期。
+
+    chinamoney 按窗口查询返回最近一个交易日记录、frankfurter 在周末/假日返回
+    前一工作日数据，两者的实际日期都可能早于请求日期。日期缺失 / 非法 / 晚于
+    请求日期都视为该 provider 失败（交给下一 provider），绝不静默错标日期。
+    """
+    if not isinstance(raw, str):
+        raise ValueError(f"{provider} rate date is missing")
+    try:
+        actual = date.fromisoformat(raw)
+    except ValueError as exc:
+        raise ValueError(f"{provider} rate date is invalid: {raw!r}") from exc
+    if actual > requested:
+        raise ValueError(
+            f"{provider} rate date is after requested date: {actual} > {requested}"
+        )
+    return actual
+
+
+def _fetch_chinamoney(rate_date: date, base: str) -> tuple[date, dict[str, Decimal]]:
     settings = get_settings()
     data = _fetch_with_retry(
         settings.fx_primary_url,
@@ -325,6 +349,9 @@ def _fetch_chinamoney(rate_date: date, base: str) -> dict[str, Decimal]:
     ):
         raise ValueError("chinamoney rates is empty")
 
+    actual_date = _parse_provider_date(
+        records[0].get("date"), rate_date, provider="chinamoney"
+    )
     values = records[0].get("values", [])
     if not isinstance(values, list) or len(values) != len(pairs):
         raise ValueError("chinamoney rates is invalid")
@@ -347,18 +374,21 @@ def _fetch_chinamoney(rate_date: date, base: str) -> dict[str, Decimal]:
     base_rate = cny_rates.get(base.upper())
     if base_rate is None:
         raise ValueError(f"chinamoney does not support base currency: {base}")
-    return {
+    return actual_date, {
         currency: rate / base_rate
         for currency, rate in cny_rates.items()
         if currency != base.upper()
     }
 
 
-def _fetch_frankfurter(rate_date: date, base: str) -> dict[str, Decimal]:
+def _fetch_frankfurter(rate_date: date, base: str) -> tuple[date, dict[str, Decimal]]:
     settings = get_settings()
     url = f"{settings.fx_fallback_url}/{rate_date.isoformat()}"
     data = _fetch_with_retry(url, {"base": base})
+    actual_date = _parse_provider_date(
+        data.get("date"), rate_date, provider="frankfurter"
+    )
     rates = data.get("rates", {})
     if not isinstance(rates, dict) or not rates:
         raise ValueError("frankfurter rates is empty")
-    return {k.upper(): Decimal(str(v)) for k, v in rates.items()}
+    return actual_date, {k.upper(): Decimal(str(v)) for k, v in rates.items()}

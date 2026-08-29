@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- 修复开发模式开启 `HBS_REQUIRE_AUTH=true` 时浏览器跨域预检必失败：CORS `allow_headers` 补上 `X-HBS-Token`（桌面同源场景不受影响）。（整改清单 v2 · V2-29）
+- Fix browser CORS preflight always failing in dev mode with `HBS_REQUIRE_AUTH=true`: `X-HBS-Token` is now in the CORS `allow_headers` list (the same-origin desktop scenario is unaffected). (Remediation v2 · V2-29)
+
 - 优化迁移包校验与恢复的分类解析性能：原先每条持仓逐行 3 次 SELECT（大包下校验+恢复共 6N 次小查询），现在一次性预取分类表后按名字路径 O(1) 解析，错误消息与原有分级提示完全一致。（整改清单 v2 · V2-28）
 - Optimize category path resolution during migration validation and restore: previously 3 SELECTs per holding (6N small queries across both passes for large packages), now a single upfront category-table prefetch with O(1) name-path lookups, preserving the exact graduated error messages. (Remediation v2 · V2-28)
 

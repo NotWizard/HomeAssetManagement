@@ -89,6 +89,23 @@ def test_wildcard_method_is_no_longer_emitted(reload_app_with_cors):
     assert "POST" in methods
 
 
+def test_cors_allows_hbs_token_header(reload_app_with_cors):
+    """dev 模式开启 require_auth 时，X-HBS-Token 必须在 CORS 白名单内，否则预检失败。"""
+    app = reload_app_with_cors(None)
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/health",
+            headers={
+                "Origin": "http://127.0.0.1:5173",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "x-hbs-token",
+            },
+        )
+
+    assert "x-hbs-token" in response.headers.get("access-control-allow-headers", "").lower()
+
+
 def test_empty_cors_origins_disables_cors(reload_app_with_cors):
     """HBS_CORS_ORIGINS='' 时 CORSMiddleware 完全不挂载（适配桌面同源）。"""
     app = reload_app_with_cors("")

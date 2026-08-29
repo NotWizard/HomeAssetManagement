@@ -27,7 +27,14 @@ export type DesktopPaths = {
 };
 
 function toSqliteUrl(filePath: string): string {
-  return `sqlite:///${filePath.replace(/\\/g, '/')}`;
+  const normalized = filePath.replace(/\\/g, '/');
+  // 实测 SQLAlchemy URL 解析会把 '?' 之后当 query 截断，而 percent-encoding
+  // （%3F）又不会被 unquote 回来（会当成字面文件名），无法转义往返；
+  // 含 '?' 的路径直接 fail fast，避免静默写到错误的数据库文件。
+  if (normalized.includes('?')) {
+    throw new Error(`数据库路径不允许包含 '?' 字符: ${normalized}`);
+  }
+  return `sqlite:///${normalized}`;
 }
 
 export function buildDesktopPaths(options: DesktopPathOptions): DesktopPaths {

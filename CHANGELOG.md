@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复桌面端数据库路径含 `?` 时静默写到错误文件：SQLAlchemy URL 解析会把 `?` 后内容当 query 截断且 percent-encoding 无法往返，现在直接 fail fast 给出明确错误。（整改清单 v2 · V2-44）
+- Fix the desktop database path silently resolving to the wrong file when containing `?`: SQLAlchemy URL parsing truncates at `?` as a query separator and percent-encoding does not round-trip, so the app now fails fast with a clear error. (Remediation v2 · V2-44)
+
 - 修复桌面日志文件无界增长：`main.log` 原先纯 append 无轮转；现在启动时超过 5MB 即截断，仅保留最近 1MB 并写入截断标记。（整改清单 v2 · V2-41）
 - Fix unbounded desktop log growth: `main.log` was append-only with no rotation. Logs over 5MB are now truncated at startup, keeping the most recent 1MB with a truncation marker. (Remediation v2 · V2-41)
 

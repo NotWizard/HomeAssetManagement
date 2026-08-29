@@ -93,3 +93,27 @@ test('桌面配置会根据打包状态解析前端和后端入口', async () =>
     '/Applications/HouseholdBalanceSheet.app/Contents/Resources/backend/hbs-backend/hbs-backend'
   );
 });
+
+test('数据库路径含 ? 时 fail fast，避免 SQLAlchemy URL 截断到错误文件', async () => {
+  const configModule = await import('../src/config.ts');
+
+  assert.throws(
+    () =>
+      configModule.buildDesktopPaths({
+        userDataDir: '/tmp/weird?dir',
+        projectRoot: '/repo',
+        isPackaged: false,
+        platform: 'darwin',
+      }),
+    /不允许包含 '\?'/
+  );
+
+  // 空格 / # / % 实测可安全往返
+  const paths = configModule.buildDesktopPaths({
+    userDataDir: '/tmp/has space#and%percent',
+    projectRoot: '/repo',
+    isPackaged: false,
+    platform: 'darwin',
+  });
+  assert.match(paths.databaseUrl, /has space#and%percent/);
+});

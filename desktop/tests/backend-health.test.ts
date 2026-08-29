@@ -113,3 +113,54 @@ test('等待后端就绪超时时会带上最后一次失败分类', async () =>
 
   assert.equal(attempts.length, 2);
 });
+
+test('健康探测会校验 app_name，防止端口被其他服务抢占后误判就绪', async () => {
+  const module = await import('../src/backend-health.ts');
+
+  // 其他服务返回了同形 ok payload，但 app_name 不符 → 不是我们的后端
+  const wrongService = await module.probeBackendHealth({
+    healthUrl: 'http://127.0.0.1:41001/health',
+    requestTimeoutMs: 100,
+    expectedAppName: 'Household Balance Sheet',
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'ok', app_name: 'Some Other Service' }),
+    }),
+  });
+  assert.deepEqual(wrongService, {
+    kind: 'unexpected_service',
+    appName: 'Some Other Service',
+  });
+
+  // app_name 匹配才算就绪
+  const ready = await module.probeBackendHealth({
+    healthUrl: 'http://127.0.0.1:41001/health',
+    requestTimeoutMs: 100,
+    expectedAppName: 'Household Balance Sheet',
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'ok', app_name: 'Household Balance Sheet' }),
+    }),
+  });
+  assert.deepEqual(ready, { kind: 'ready' });
+
+  // 未传 expectedAppName 时保持旧行为（仅校验 status）
+  const legacy = await module.probeBackendHealth({
+    healthUrl: 'http://127.0.0.1:41001/health',
+    requestTimeoutMs: 100,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'ok' }),
+    }),
+  });
+  assert.deepEqual(legacy, { kind: 'ready' });
+
+  // 失败文案包含重试指引
+  assert.match(
+    module.formatBackendHealthFailure({ kind: 'unexpected_service', appName: 'X' }),
+    /端口被其他服务占用/
+  );
+});

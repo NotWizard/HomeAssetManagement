@@ -15,6 +15,7 @@ export type BackendHealthProbeResult =
   | { kind: 'timeout' }
   | { kind: 'http_error'; status: number }
   | { kind: 'invalid_payload' }
+  | { kind: 'unexpected_service'; appName?: string }
   | { kind: 'network_error'; message: string };
 
 export type WaitForBackendReadyOptions = {
@@ -26,6 +27,8 @@ export type WaitForBackendReadyOptions = {
   getExitCode: () => number | null;
   fetchImpl?: HealthFetchLike;
   sleep?: (ms: number) => Promise<void>;
+  /** 期望的 app_name：识别端口被其他服务抢占的场景。 */
+  expectedAppName?: string;
 };
 
 function getErrorCode(error: unknown): string | undefined {
@@ -62,6 +65,8 @@ export async function probeBackendHealth(options: {
   healthUrl: string;
   requestTimeoutMs: number;
   fetchImpl?: HealthFetchLike;
+  /** 期望的 app_name：防止端口被其他服务抢占后把别人的 200 当成后端就绪。 */
+  expectedAppName?: string;
 }): Promise<BackendHealthProbeResult> {
   const fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init) as Promise<HealthResponseLike>);
   const controller = new AbortController();
@@ -75,14 +80,24 @@ export async function probeBackendHealth(options: {
 
     const payload = await response.json().catch(() => null);
     if (
-      payload &&
-      typeof payload === 'object' &&
-      (payload as { status?: unknown }).status === 'ok'
+      !payload ||
+      typeof payload !== 'object' ||
+      (payload as { status?: unknown }).status !== 'ok'
     ) {
-      return { kind: 'ready' };
+      return { kind: 'invalid_payload' };
     }
 
-    return { kind: 'invalid_payload' };
+    if (options.expectedAppName) {
+      const appName = (payload as { app_name?: unknown }).app_name;
+      if (appName !== options.expectedAppName) {
+        return {
+          kind: 'unexpected_service',
+          appName: typeof appName === 'string' ? appName : undefined,
+        };
+      }
+    }
+
+    return { kind: 'ready' };
   } catch (error) {
     if (isAbortError(error)) {
       return { kind: 'timeout' };
@@ -110,6 +125,8 @@ export function formatBackendHealthFailure(result: BackendHealthProbeResult): st
       return `健康检查返回 HTTP ${result.status}`;
     case 'invalid_payload':
       return '健康检查响应格式无效';
+    case 'unexpected_service':
+      return `端口被其他服务占用${result.appName ? `（${result.appName}）` : ''}，请点击重试重新分配端口`;
     case 'network_error':
       return `健康检查请求异常：${result.message}`;
   }
@@ -130,6 +147,7 @@ export async function waitForBackendReadyWithHealthCheck(
       healthUrl: options.healthUrl,
       requestTimeoutMs: options.requestTimeoutMs,
       fetchImpl: options.fetchImpl,
+      expectedAppName: options.expectedAppName,
     });
 
     if (result.kind === 'ready') {

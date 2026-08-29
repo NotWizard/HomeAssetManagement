@@ -202,6 +202,9 @@ async function waitForBackendReady(
     requestTimeoutMs: BACKEND_HEALTH_REQUEST_TIMEOUT_MS,
     isProcessExited: () => processRef.exitCode !== null,
     getExitCode: () => processRef.exitCode,
+    // 端口 bind/close 与 spawn 之间存在 TOCTOU 窗口；用 app_name 验明正身，
+    // 抢到端口的其他服务不会被误认为后端就绪。
+    expectedAppName: 'Household Balance Sheet',
   });
 }
 
@@ -514,6 +517,7 @@ async function probeAndRestartBackendOnResume(): Promise<void> {
   const result = await probeBackendHealth({
     healthUrl: `${buildAppUrl(currentPort)}/health`,
     requestTimeoutMs: BACKEND_HEALTH_REQUEST_TIMEOUT_MS,
+    expectedAppName: 'Household Balance Sheet',
   });
 
   if (result.kind === 'ready') {

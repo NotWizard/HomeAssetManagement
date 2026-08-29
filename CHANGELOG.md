@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复桌面端健康检查可能被其他本地服务冒充：端口 bind/close 与 spawn 之间存在 TOCTOU 窗口，原先只校验 `status === 'ok'`；现在健康检查同时校验 `app_name`，端口被抢占时明确报错并指引重试（重试即重新分配端口）。（整改清单 v2 · V2-39）
+- Fix desktop health checks being spoofable by other local services: a TOCTOU window exists between port bind/close and spawn, and probes previously only checked `status === 'ok'`. Health checks now also validate `app_name`; a hijacked port produces a clear error with retry guidance (retry reallocates the port). (Remediation v2 · V2-39)
+
 - 修复桌面更新状态在前端被重复订阅：`useDesktopUpdateState` 原先每个调用方各挂一份 IPC 监听并各发一次 getState（常驻左下角入口 + 设置页卡片共两份），现在改为模块级单订阅 + 多播，IPC 监听全局只有一份。（整改清单 v2 · V2-38）
 - Fix duplicate desktop update-state subscriptions on the frontend. Each `useDesktopUpdateState` caller previously attached its own IPC listener and issued its own getState (two copies for the persistent corner entry plus the Settings card). A module-level singleton subscription with multicast now keeps exactly one IPC listener. (Remediation v2 · V2-38)
 

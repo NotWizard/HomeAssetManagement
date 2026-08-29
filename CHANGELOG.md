@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复打包态后端日志完全丢失：后端 sidecar 的 stdout/stderr 原先只转发到主进程控制台（Finder 启动时无人接收），现在同步落盘 `main.log`，错误页“打开日志目录”提交日志的指引真正可用。（整改清单 v2 · V2-22）
+- Fix backend logs being completely lost in packaged builds. The sidecar's stdout/stderr was only forwarded to the main process console (unreadable when launched from Finder); it now also lands in `main.log`, making the error page's “open logs directory” guidance actually useful. (Remediation v2 · V2-22)
+
 - 修复安装更新时主进程被同步解压冻结数秒：`ditto` 解压与 staged 目录清理从同步 `spawnSync` 改为异步 `spawn`，解压期间窗口与 IPC 保持响应。（整改清单 v2 · V2-21）
 - Fix the main process freezing for seconds during update installation. `ditto` extraction and staged-directory cleanup now use async `spawn` instead of synchronous `spawnSync`, keeping the window and IPC responsive while extracting. (Remediation v2 · V2-21)
 

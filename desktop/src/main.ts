@@ -170,12 +170,20 @@ function spawnBackend(port: number): ChildProcessWithoutNullStreams {
 }
 
 function wireBackendLogs(processRef: BackendProcess): void {
-  processRef.stdout?.on('data', (chunk) => {
-    process.stdout.write(`[hbs-backend] ${chunk}`);
-  });
-  processRef.stderr?.on('data', (chunk) => {
-    process.stderr.write(`[hbs-backend] ${chunk}`);
-  });
+  const forward = (chunk: unknown, channel: 'stdout' | 'stderr') => {
+    const line = `[hbs-backend] ${String(chunk)}`;
+    if (channel === 'stdout') {
+      process.stdout.write(line);
+    } else {
+      process.stderr.write(line);
+    }
+    // 同时落盘 main.log：打包态从 Finder 启动时 stdout/stderr 无人接收，
+    // 后端日志（APScheduler 失败、DB 错误）会完全丢失，与错误页
+    // “打开日志目录提交日志”的指引相符。
+    fileLogger?.write(line);
+  };
+  processRef.stdout?.on('data', (chunk) => forward(chunk, 'stdout'));
+  processRef.stderr?.on('data', (chunk) => forward(chunk, 'stderr'));
 }
 
 async function waitForBackendReady(
@@ -546,7 +554,7 @@ ipcMain.handle('hbs:retry-bootstrap', async () => {
 });
 ipcMain.handle('hbs:open-logs-dir', async () => {
   // 错误页 / future 设置面板可一键拉起系统文件管理器到 log 目录，
-  // 方便用户把 main.log + backend log 提交给开发者排查。
+  // 方便用户把 main.log（含 renderer 控制台与后端 sidecar 输出）提交给开发者排查。
   await shell.openPath(app.getPath('logs'));
 });
 ipcMain.handle('hbs:get-runtime-token', () => apiToken);

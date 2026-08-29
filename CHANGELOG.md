@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复桌面日志文件无界增长：`main.log` 原先纯 append 无轮转；现在启动时超过 5MB 即截断，仅保留最近 1MB 并写入截断标记。（整改清单 v2 · V2-41）
+- Fix unbounded desktop log growth: `main.log` was append-only with no rotation. Logs over 5MB are now truncated at startup, keeping the most recent 1MB with a truncation marker. (Remediation v2 · V2-41)
+
 - 修复桌面打包资源缺失时静默产出残包：`.stage` 目录缺失原先被 `existsSync` 过滤跳过，打出的安装包缺前端/后端只能运行时才暴露；现在 forge package/make 时缺资源直接报错中断（dev start 不受影响）。（整改清单 v2 · V2-40）
 - Fix silently producing broken bundles when packaged resources are missing. Missing `.stage` directories were previously filtered out via `existsSync`, so the packaged app lacked the frontend/backend and only failed at runtime. Packaging now fails fast when resources are missing (dev start unaffected). (Remediation v2 · V2-40)
 

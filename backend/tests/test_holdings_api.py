@@ -751,7 +751,7 @@ def test_update_settings_only_revalues_current_family_holdings_and_snapshots():
         assert update_resp.status_code == 200
 
         daily_resp = client.get("/api/v1/snapshots/daily")
-        event_resp = client.get("/api/v1/snapshots/events")
+        event_resp = client.get("/api/v1/snapshots/events/summary")
 
     with SessionLocal() as session:
         current_holding = session.query(HoldingItem).filter(HoldingItem.name == "家庭备用金").one()

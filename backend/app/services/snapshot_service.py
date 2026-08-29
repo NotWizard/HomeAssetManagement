@@ -90,28 +90,6 @@ class SnapshotService:
         return row
 
     @staticmethod
-    def list_event_snapshots(session: Session, limit: int = 100) -> list[dict]:
-        family = get_default_family(session)
-        rows = list(
-            session.scalars(
-                select(SnapshotEvent)
-                .where(SnapshotEvent.family_id == family.id)
-                .order_by(SnapshotEvent.snapshot_at.desc())
-                .limit(max(1, min(limit, 500)))
-            )
-        )
-        return [
-            {
-                "id": row.id,
-                "family_id": row.family_id,
-                "trigger_type": row.trigger_type,
-                "snapshot_at": row.snapshot_at.isoformat(),
-                "payload": parse_snapshot_payload(row.payload_json),
-            }
-            for row in rows
-        ]
-
-    @staticmethod
     def list_daily_snapshots(session: Session, limit: int = 365) -> list[dict]:
         """每日快照元数据列表（payload_json deferred 不加载）。
 

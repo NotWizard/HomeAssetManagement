@@ -8,6 +8,9 @@
 
 ### Removed
 
+- 下线无消费方的重端点 `GET /api/v1/snapshots/events`：每次响应反序列化最多 500 条完整快照 payload（数 MB）且无任何前端/脚本调用；事件列表请使用已有的轻量 `GET /api/v1/snapshots/events/summary`。（整改清单 v2 · V2-26）
+- Retire the consumerless heavy endpoint `GET /api/v1/snapshots/events`: every response deserialized up to 500 full snapshot payloads (several MB) with no frontend or script callers. Use the existing lightweight `GET /api/v1/snapshots/events/summary` instead. (Remediation v2 · V2-26)
+
 - 移除后端零调用死代码：`invalidate_timezone_cache`（时区缓存在 settings 不可改时区的前提下无使用场景）与 `_apply_settings_update`（仅测试引用的私有入口，测试已改走公开 `update_settings`）。（整改清单 v2 · V2-24 / V2-25）
 - Remove zero-caller backend dead code: `invalidate_timezone_cache` (no use case while timezone stays non-editable) and `_apply_settings_update` (a private entry referenced only by tests; the test now goes through the public `update_settings`). (Remediation v2 · V2-24 / V2-25)
 

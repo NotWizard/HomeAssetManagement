@@ -10,12 +10,8 @@ from app.services.snapshot_service import SnapshotService
 router = APIRouter()
 
 
-@router.get("/events")
-def list_event_snapshots(
-    limit: int = Query(default=100, ge=1, le=500),
-    db: Session = Depends(get_db),
-):
-    return ok(SnapshotService.list_event_snapshots(db, limit))
+# /events 重端点已退役：无任何前端/脚本消费方，每次响应要反序列化最多 500 条
+# 完整 payload（数 MB）。事件列表请用 /events/summary（metadata-only）。
 
 
 @router.get("/daily")

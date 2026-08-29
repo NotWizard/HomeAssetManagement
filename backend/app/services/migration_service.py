@@ -4,7 +4,7 @@ import shutil
 import sqlite3
 import tempfile
 import zipfile
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -33,7 +33,6 @@ from app.models.member import Member
 from app.models.settings import SettingsModel
 from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
-from app.services.category_service import CategoryService
 from app.services.common import get_default_family
 from app.services.settings_service import DEFAULT_FX_PROVIDER
 
@@ -444,6 +443,7 @@ def _validate_package(session: Session, package: dict[str, Any]) -> None:
         _parse_datetime(member.get("updated_at"))
 
     holding_ids: set[int] = set()
+    resolve_category_path = _build_category_path_resolver(session)
     for row in _iter_ndjson_records(Path(package["archive_path"]), "holdings.ndjson"):
         holding_id = int(row["id"])
         if holding_id in holding_ids:
@@ -483,8 +483,7 @@ def _validate_package(session: Session, package: dict[str, Any]) -> None:
         if bool(row.get("is_deleted", False)):
             raise AppError(4002, "迁移包不应包含已删除持仓")
 
-        CategoryService.resolve_path_by_name(
-            session,
+        resolve_category_path(
             holding_type,
             str(row["category_l1_name"]),
             str(row["category_l2_name"]),
@@ -518,6 +517,43 @@ def _validate_package(session: Session, package: dict[str, Any]) -> None:
                 raise AppError(4002, f"每日快照引用成员不存在: {item['member_id']}")
             if "id" in item and int(item["id"]) not in holding_ids:
                 raise AppError(4002, f"每日快照引用持仓不存在: {item['id']}")
+
+
+def _build_category_path_resolver(
+    session: Session,
+) -> Callable[[str, str, str, str], tuple[Category, Category, Category]]:
+    """一次性预取全部分类，返回按名字路径 O(1) 解析的函数。
+
+    迁移校验与恢复每条 holding 都要按名字解析三级分类；逐行 3 次 SELECT
+    在大包下是 6N 次小查询，这里压到 1 次全表预取。错误消息与
+    CategoryService.resolve_path_by_name 保持一致。
+    """
+    l1_by_name: dict[tuple[str, str], Category] = {}
+    l2_by_parent: dict[tuple[str, int, str], Category] = {}
+    l3_by_parent: dict[tuple[str, int, str], Category] = {}
+    for cat in session.scalars(select(Category).order_by(Category.id.asc())):
+        if cat.level == 1:
+            l1_by_name.setdefault((cat.type, cat.name), cat)
+        elif cat.level == 2 and cat.parent_id is not None:
+            l2_by_parent.setdefault((cat.type, cat.parent_id, cat.name), cat)
+        elif cat.level == 3 and cat.parent_id is not None:
+            l3_by_parent.setdefault((cat.type, cat.parent_id, cat.name), cat)
+
+    def resolve(
+        ctype: str, l1_name: str, l2_name: str, l3_name: str
+    ) -> tuple[Category, Category, Category]:
+        l1 = l1_by_name.get((ctype, l1_name))
+        if l1 is None:
+            raise ValueError(f"找不到一级分类: {l1_name}")
+        l2 = l2_by_parent.get((ctype, l1.id, l2_name))
+        if l2 is None:
+            raise ValueError(f"找不到二级分类: {l2_name}")
+        l3 = l3_by_parent.get((ctype, l2.id, l3_name))
+        if l3 is None:
+            raise ValueError(f"找不到三级分类: {l3_name}")
+        return l1, l2, l3
+
+    return resolve
 
 
 def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any]:
@@ -566,9 +602,9 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
     session.flush()
 
     holdings_count = 0
+    resolve_category_path = _build_category_path_resolver(session)
     for row in _iter_ndjson_records(archive_path, "holdings.ndjson"):
-        l1, l2, l3 = CategoryService.resolve_path_by_name(
-            session,
+        l1, l2, l3 = resolve_category_path(
             str(row["type"]),
             str(row["category_l1_name"]),
             str(row["category_l2_name"]),

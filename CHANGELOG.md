@@ -16,6 +16,9 @@
 
 ### Fixed
 
+- 优化迁移包校验与恢复的分类解析性能：原先每条持仓逐行 3 次 SELECT（大包下校验+恢复共 6N 次小查询），现在一次性预取分类表后按名字路径 O(1) 解析，错误消息与原有分级提示完全一致。（整改清单 v2 · V2-28）
+- Optimize category path resolution during migration validation and restore: previously 3 SELECTs per holding (6N small queries across both passes for large packages), now a single upfront category-table prefetch with O(1) name-path lookups, preserving the exact graduated error messages. (Remediation v2 · V2-28)
+
 - 修复后台汇率刷新线程无去重：同一缺失日期被反复查询时会并发多个线程同时请求外部数据源并写库；现在同一 (日期, 基准币) 在途只保留一个后台刷新线程。（整改清单 v2 · V2-27）
 - Fix undeduplicated background FX refresh threads: repeated lookups of the same missing date could spawn multiple concurrent threads hitting external providers and writing to the database. Only one in-flight refresh thread per (date, base currency) is now kept. (Remediation v2 · V2-27)
 

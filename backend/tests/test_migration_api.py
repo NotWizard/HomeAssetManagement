@@ -3,6 +3,7 @@ import io
 import json
 import zipfile
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy import select
@@ -509,3 +510,23 @@ def test_import_migration_clears_snapshot_events_and_import_logs():
     with SessionLocal() as session:
         assert session.scalar(select(func.count()).select_from(SnapshotEvent)) == 0
         assert session.scalar(select(func.count()).select_from(ImportLog)) == 0
+
+
+def test_category_path_resolver_preserves_graduated_error_messages():
+    """预取解析器必须与 resolve_path_by_name 保持相同的分级错误消息。"""
+    from app.services.bootstrap import init_database
+    from app.services.migration_service import _build_category_path_resolver
+
+    init_database()
+    with SessionLocal() as session:
+        resolve = _build_category_path_resolver(session)
+
+        with pytest.raises(ValueError, match='找不到一级分类'):
+            resolve('asset', '不存在的一级', 'x', 'y')
+        with pytest.raises(ValueError, match='找不到二级分类'):
+            resolve('asset', '现金存款类', '不存在的二级', 'y')
+        with pytest.raises(ValueError, match='找不到三级分类'):
+            resolve('asset', '现金存款类', '银行存款', '不存在的三级')
+
+        l1, l2, l3 = resolve('asset', '现金存款类', '银行存款', '活期')
+        assert (l1.level, l2.level, l3.level) == (1, 2, 3)

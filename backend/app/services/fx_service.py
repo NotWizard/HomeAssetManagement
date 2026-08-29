@@ -195,6 +195,11 @@ class FXService:
         )
 
 
+# 后台刷新 in-flight 去重表：同一 (date, base) 已有线程在跑就不再起新线程，
+# 避免同一缺失日期被反复查询时并发多个线程同时打外部 provider + 写库。
+_fx_refresh_in_flight: set[tuple[date, str]] = set()
+
+
 def _trigger_background_refresh(rate_date: date, base_currency: str) -> None:
     """Fire-and-forget 触发一次 FX refresh，不阻塞调用方。
 
@@ -205,6 +210,11 @@ def _trigger_background_refresh(rate_date: date, base_currency: str) -> None:
     线程内自己创建新 Session，避免跨线程共享 Session（SQLAlchemy 不允许）；
     任何异常都吞掉（只是后台尽力而为，不能影响主请求），仅记 warning。
     """
+    key = (rate_date, base_currency)
+    if key in _fx_refresh_in_flight:
+        return
+    _fx_refresh_in_flight.add(key)
+
     def _run() -> None:
         try:
             with SessionLocal() as bg_session:
@@ -217,6 +227,8 @@ def _trigger_background_refresh(rate_date: date, base_currency: str) -> None:
                 base_currency,
                 exc,
             )
+        finally:
+            _fx_refresh_in_flight.discard(key)
 
     Thread(target=_run, daemon=True, name=f"fx-refresh-{base_currency}-{rate_date}").start()
 

@@ -307,3 +307,60 @@ def test_list_rates_fallback_returns_latest_per_currency_only():
         assert sorted(by_quote) == ["EUR", "USD"]
         assert all(row.rate_date == date(2026, 6, 27) for row in rows)
         assert Decimal(by_quote["USD"].rate) == Decimal("7.20")
+
+
+def test_trigger_background_refresh_dedupes_in_flight_same_key(monkeypatch):
+    """同一 (date, base) 已有后台刷新在跑时，不再起第二个线程。"""
+    import threading
+    import time
+
+    import app.services.fx_service as fx_module
+
+    entered = threading.Event()
+    release = threading.Event()
+    calls: list[tuple] = []
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def commit(self):
+            pass
+
+    def fake_refresh(_session, rate_date, base_currency):
+        calls.append((rate_date, base_currency))
+        entered.set()
+        release.wait(2)
+        return 1
+
+    monkeypatch.setattr(FXService, "refresh_rates", fake_refresh)
+    monkeypatch.setattr(fx_module, "SessionLocal", lambda: FakeSession())
+
+    key = (date(2026, 6, 28), "CNY")
+    try:
+        fx_module._trigger_background_refresh(*key)
+        assert entered.wait(2), "第一个后台刷新应已启动"
+        fx_module._trigger_background_refresh(*key)
+        release.set()
+
+        deadline = time.time() + 2
+        while key in fx_module._fx_refresh_in_flight and time.time() < deadline:
+            time.sleep(0.01)
+        assert calls == [key], "in-flight 期间同 key 重复触发应被去重"
+
+        # 线程结束后去重键已释放，允许再次触发
+        entered.clear()
+        release.set()
+        fx_module._trigger_background_refresh(*key)
+        assert entered.wait(2), "去重键释放后应能再次触发"
+        release.set()
+        deadline = time.time() + 2
+        while key in fx_module._fx_refresh_in_flight and time.time() < deadline:
+            time.sleep(0.01)
+        assert calls == [key, key]
+    finally:
+        release.set()
+        fx_module._fx_refresh_in_flight.discard(key)

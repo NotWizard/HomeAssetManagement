@@ -42,6 +42,10 @@ const UPDATE_ERROR_STATE_TTL_MS = 60 * 60 * 1000;
 const UPDATE_NETWORK_FAILURE_MEMORY_MS = 24 * 60 * 60 * 1000;
 const UPDATE_SUBDIR = 'updates';
 const UPDATE_STATE_FILE = 'state.json';
+// 更新链路所有元数据请求的超时：防止网关挂起不断连时 checking 状态无限悬挂。
+const UPDATE_REQUEST_TIMEOUT_MS = 30_000;
+// 主资产下载不限总时长（慢网拉大文件合法），只看门狗“无数据间隔”。
+const UPDATE_DOWNLOAD_STALL_TIMEOUT_MS = 60_000;
 const RELEASES_API_URL =
   'https://api.github.com/repos/NotWizard/HouseholdBalanceSheet/releases';
 const RELEASES_LATEST_URL =
@@ -435,6 +439,7 @@ async function headReleaseAsset(
     headers: {
       'User-Agent': 'HouseholdBalanceSheet-Updater',
     },
+    signal: AbortSignal.timeout(UPDATE_REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -456,6 +461,7 @@ async function fetchLatestReleaseByRedirect(): Promise<GithubRelease[]> {
     headers: {
       'User-Agent': 'HouseholdBalanceSheet-Updater',
     },
+    signal: AbortSignal.timeout(UPDATE_REQUEST_TIMEOUT_MS),
   });
   const tagName = parseVersionTagFromLocation(response.headers.get('location'));
   const version = tagName ? parseVersionFromTag(tagName) : null;
@@ -502,6 +508,7 @@ export async function fetchLatestReleases(): Promise<GithubRelease[]> {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'HouseholdBalanceSheet-Updater',
       },
+      signal: AbortSignal.timeout(UPDATE_REQUEST_TIMEOUT_MS),
     });
     if (response.ok) {
       return (await response.json()) as GithubRelease[];
@@ -799,12 +806,31 @@ export function createUpdateController(options: UpdateControllerOptions) {
     // 声明在 try 外：catch 分支需要 destroy 写流 / 取消 reader，避免句柄与连接泄漏。
     let fileStream: WriteStream | null = null;
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    // 主资产下载看门狗（提到 try 外：catch 也要能解除）：不限总时长
+    // （慢网拉大文件合法），只掐“长时间无数据”的挂死连接。
+    const downloadAbort = new AbortController();
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
+    const armStallWatchdog = () => {
+      if (stallTimer) {
+        clearTimeout(stallTimer);
+      }
+      stallTimer = setTimeout(() => {
+        downloadAbort.abort(new Error('下载超时：长时间没有收到数据'));
+      }, UPDATE_DOWNLOAD_STALL_TIMEOUT_MS);
+    };
+    const disarmStallWatchdog = () => {
+      if (stallTimer) {
+        clearTimeout(stallTimer);
+        stallTimer = null;
+      }
+    };
 
     try {
       await mkdir(updatesDir, { recursive: true });
       // 1) 先取期望摘要（短文本，独立请求，失败即拒绝下载）
       const shaResponse = await fetch(state.sha256AssetUrl, {
         headers: { 'User-Agent': 'HouseholdBalanceSheet-Updater' },
+        signal: AbortSignal.timeout(UPDATE_REQUEST_TIMEOUT_MS),
       });
       if (!shaResponse.ok) {
         throw new Error(`无法获取 SHA-256 校验文件: HTTP ${shaResponse.status}`);
@@ -815,10 +841,13 @@ export function createUpdateController(options: UpdateControllerOptions) {
       }
 
       // 2) 下载主资产并同步增量计算 SHA-256
+      armStallWatchdog();
       const response = await fetch(state.assetUrl, {
         headers: { 'User-Agent': 'HouseholdBalanceSheet-Updater' },
+        signal: downloadAbort.signal,
       });
       if (!response.ok || !response.body) {
+        disarmStallWatchdog();
         throw new Error(`下载更新失败: HTTP ${response.status}`);
       }
 
@@ -864,6 +893,8 @@ export function createUpdateController(options: UpdateControllerOptions) {
         if (chunk.done) {
           break;
         }
+        // 每收到一个 chunk 重置看门狗：有数据流动就不算挂死
+        armStallWatchdog();
         if (streamError) {
           throw streamError;
         }
@@ -882,6 +913,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
       }
       // 循环结束 flush 一次，保证 100% / 最终 downloadedBytes 落到 state.json + listeners
       flushProgressNow();
+      disarmStallWatchdog();
 
       if (streamError) {
         throw streamError;
@@ -923,6 +955,7 @@ export function createUpdateController(options: UpdateControllerOptions) {
     } catch (error) {
       // 先关流、取消 reader，再删 .partial：避免残留缓冲继续写已删除 inode，
       // 也防止 fetch 底层连接悬挂。
+      disarmStallWatchdog();
       fileStream?.destroy();
       if (reader) {
         await reader.cancel().catch(() => undefined);

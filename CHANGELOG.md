@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复桌面更新链路所有 fetch 无超时：元数据/校验文件请求统一 30s 超时，主资产下载改为 60s 无数据看门狗（不限总时长，慢网拉大文件不受影响），连接挂死不再无限悬挂。（整改清单 v2 · V2-7）
+- Fix all updater fetches lacking timeouts. Metadata and checksum requests now share a 30s timeout, while the main asset download uses a 60s no-data watchdog instead of a total-time limit so slow networks can still finish large packages. Stalled connections no longer hang forever. (Remediation v2 · V2-7)
+
 - 修复桌面更新下载写盘失败可能直接打崩主进程：写流创建即挂 error 监听（原先下载循环结束后才挂），下载循环接入 drain 背压避免慢盘时内存堆积，异常路径先关流再清理 .partial，且清理失败不再遮盖原始错误。（整改清单 v2 · V2-6）
 - Fix desktop update downloads potentially crashing the main process on write failures. The write stream now gets an error listener immediately upon creation (previously only after the download loop), the loop respects drain backpressure so slow disks no longer pile the package up in memory, failure paths destroy the stream before removing the partial file, and cleanup failures no longer mask the original error. (Remediation v2 · V2-6)
 

@@ -1271,3 +1271,62 @@ test('下载写盘失败进入 download 错误态而不是打崩主进程', asyn
     rmSync(userDataDir, { recursive: true, force: true });
   }
 });
+
+test('更新链路所有 fetch 都携带超时 signal', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const { createHash } = await import('node:crypto');
+  const userDataDir = mkdtempSync(join(tmpdir(), 'hbs-fetch-signal-'));
+  const assetName = 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip';
+  const content = new Uint8Array([1, 2, 3]);
+  const expectedSha256 = createHash('sha256').update(content).digest('hex');
+  const seenSignals: Array<{ url: string; hasSignal: boolean }> = [];
+
+  const originalFetch = global.fetch;
+  global.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    seenSignals.push({ url, hasSignal: init?.signal instanceof AbortSignal });
+    if (url.endsWith('.sha256')) {
+      return new Response(`${expectedSha256}  ${assetName}\n`, { status: 200 });
+    }
+    return new Response(content, { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.5.0',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir,
+      fetchJsonReleases: async () => [
+        {
+          tag_name: 'v0.6.0',
+          name: 'v0.6.0',
+          draft: false,
+          prerelease: false,
+          assets: [
+            { name: assetName, browser_download_url: 'https://example.test/a.zip' },
+            { name: `${assetName}.sha256`, browser_download_url: 'https://example.test/a.zip.sha256' },
+          ],
+        } as never,
+      ],
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => null,
+      persistState: () => undefined,
+      now: () => 1_700_000_000_000,
+    });
+
+    await controller.checkForUpdates({ manual: true });
+    const state = await controller.downloadUpdate();
+    assert.equal(state.status, 'downloaded');
+
+    assert.ok(seenSignals.length >= 2, '应至少发起 sha256 与主资产两次 fetch');
+    for (const entry of seenSignals) {
+      assert.equal(entry.hasSignal, true, `${entry.url} 缺少 AbortSignal`);
+    }
+  } finally {
+    global.fetch = originalFetch;
+    rmSync(userDataDir, { recursive: true, force: true });
+  }
+});

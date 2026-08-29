@@ -11,9 +11,31 @@ const backendBundleDir = resolve(configDir, '.stage/backend');
 const iconPath = resolve(desktopAssetsDir, 'icon.icns');
 const dmgBackgroundPath = resolve(desktopAssetsDir, 'dmg-background.png');
 
-const extraResource = [frontendDistDir, backendBundleDir].filter((resourcePath) =>
-  existsSync(resourcePath)
-);
+const requiredResources = [frontendDistDir, backendBundleDir];
+
+/**
+ * 打包资源 fail fast：原先 missing 时静默 filter 跳过，会产出缺前端/后端的残包。
+ * 注意不能在模块顶层抛——make-macos-release.mjs 在 stage 之前就会 import 本文件
+ * （拿 dmgVisualConfig）；electron-forge start（dev）也不需要 stage 资源。
+ * 因此改为 getter 惰性求值：只有 forge package/make 读取 extraResource 时才校验。
+ */
+export function resolveExtraResources(options?: {
+  existsSyncImpl?: (path: string) => boolean;
+  isForgeStart?: boolean;
+}): string[] {
+  const exists = options?.existsSyncImpl ?? existsSync;
+  const isForgeStart = options?.isForgeStart ?? process.argv.includes('start');
+  const missing = requiredResources.filter((resourcePath) => !exists(resourcePath));
+  if (missing.length === 0) {
+    return [...requiredResources];
+  }
+  if (isForgeStart) {
+    return requiredResources.filter((resourcePath) => exists(resourcePath));
+  }
+  throw new Error(
+    `缺少打包资源目录：${missing.join(', ')}。请先运行 npm run stage:resources（make/package 脚本会自动处理）。`
+  );
+}
 
 // dmg 视觉配置：保留为单一真理源，由 desktop/scripts/build-dmg.mjs 在 forge make 之后用 hdiutil
 // 自制 dmg 时读取。原本走 @electron-forge/maker-dmg → electron-installer-dmg → appdmg
@@ -46,7 +68,11 @@ const config: ForgeConfig = {
     appBundleId: 'com.householdbalancesheet.desktop',
     appCategoryType: 'public.app-category.finance',
     asar: true,
-    extraResource,
+    // 惰性 getter：forge 在 package/make 时才读取 extraResource，此时 stage 已完成；
+    // 缺资源直接抛错中断打包，而不是静默产出残包。
+    get extraResource(): string[] {
+      return resolveExtraResources();
+    },
     icon: iconPath,
     name: 'HouseholdBalanceSheet',
     // 默认 packager 会把 Electron Framework 内全部 ~55 个 .lproj 一并带出来

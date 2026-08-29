@@ -61,3 +61,24 @@ test('桌面 package.json 不再依赖 @electron-forge/maker-dmg', async () => {
   );
   assert.equal(typeof pkg.devDependencies['@electron-forge/maker-zip'], 'string');
 });
+
+test('打包资源缺失时 fail fast，forge start（dev）模式降级为过滤', async () => {
+  const { resolveExtraResources } = await import('../forge.config.ts');
+
+  // 全部存在：两个都返回
+  const all = resolveExtraResources({ existsSyncImpl: () => true });
+  assert.equal(all.length, 2);
+
+  // package/make 场景（非 start）：缺失即抛错，不再静默产出残包
+  assert.throws(
+    () => resolveExtraResources({ existsSyncImpl: () => false, isForgeStart: false }),
+    /缺少打包资源目录/
+  );
+
+  // dev start 场景：过滤缺失项而不是抛错
+  const filtered = resolveExtraResources({
+    existsSyncImpl: () => false,
+    isForgeStart: true,
+  });
+  assert.deepEqual(filtered, []);
+});

@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复迁移包导入后残留“幽灵”历史：恢复时原先漏清 `snapshot_event` 与 `import_log` 两张表，导入后仍会列出已失效旧家庭状态的事件快照与导入日志；现在恢复删除清单已补齐这两张表。（整改清单 v2 · V2-16）
+- Fix ghost history surviving migration package imports. The restore path previously forgot to clear `snapshot_event` and `import_log`, so event snapshots and import logs from the replaced family state lingered after import. Both tables are now included in the restore-time delete list. (Remediation v2 · V2-16)
+
 - 修复并发写同一天快照时用户请求偶发 500：`snapshot_daily` 与 `daily_totals` 的写入从 SELECT-then-INSERT 改为 SQLite `INSERT ... ON CONFLICT DO UPDATE`，定时任务与用户操作并发撞同一天不再触发唯一键冲突回滚。（整改清单 v2 · V2-15）
 - Fix user requests occasionally failing with HTTP 500 when concurrent writers snapshot the same day. Writes to `snapshot_daily` and `daily_totals` now use SQLite `INSERT ... ON CONFLICT DO UPDATE` instead of SELECT-then-INSERT, so a scheduled job racing a user edit no longer hits unique-constraint rollbacks. (Remediation v2 · V2-15)
 

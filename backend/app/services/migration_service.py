@@ -28,9 +28,11 @@ logger = logging.getLogger(__name__)
 from app.models.category import Category
 from app.models.daily_total import DailyTotal
 from app.models.holding_item import HoldingItem
+from app.models.import_log import ImportLog
 from app.models.member import Member
 from app.models.settings import SettingsModel
 from app.models.snapshot_daily import SnapshotDaily
+from app.models.snapshot_event import SnapshotEvent
 from app.services.category_service import CategoryService
 from app.services.common import get_default_family
 from app.services.settings_service import DEFAULT_FX_PROVIDER
@@ -527,8 +529,13 @@ def _restore_package(session: Session, package: dict[str, Any]) -> dict[str, Any
     family.updated_at = _parse_datetime(family_payload.get("updated_at")) or family.updated_at
     session.flush()
 
+    # 导出包不含 snapshot_event / import_log 两个域，恢复时必须一并清掉：
+    # 否则会残留导入前旧家庭状态的“幽灵”事件快照（payload 引用已删除的
+    # holding/member id、旧基准币）与旧导入日志。
     session.execute(delete(DailyTotal).where(DailyTotal.family_id == family.id))
     session.execute(delete(SnapshotDaily).where(SnapshotDaily.family_id == family.id))
+    session.execute(delete(SnapshotEvent).where(SnapshotEvent.family_id == family.id))
+    session.execute(delete(ImportLog).where(ImportLog.family_id == family.id))
     session.execute(delete(HoldingItem).where(HoldingItem.family_id == family.id))
     session.execute(delete(Member).where(Member.family_id == family.id))
     session.execute(delete(SettingsModel).where(SettingsModel.family_id == family.id))

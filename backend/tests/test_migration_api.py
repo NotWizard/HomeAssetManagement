@@ -469,3 +469,43 @@ def test_import_migration_rejects_invalid_snapshot_payload_and_rolls_back():
 
     state = _collect_state()
     assert state == baseline
+
+
+def test_import_migration_clears_snapshot_events_and_import_logs():
+    """迁移恢复必须清掉导出包不含的域（snapshot_event / import_log），
+    否则残留导入前旧家庭状态的“幽灵”历史。"""
+    from sqlalchemy import func
+
+    from app.models.import_log import ImportLog
+    from app.models.snapshot_event import SnapshotEvent
+
+    with TestClient(app) as client:
+        _seed_exportable_data(client)
+        export_response = client.post('/api/v1/migration/export')
+        assert export_response.status_code == 200
+
+        # 导出后制造幽灵历史：一条事件快照 + 一条导入日志
+        with SessionLocal() as session:
+            family = get_default_family(session)
+            SnapshotService.create_event_snapshot(session, 'update', note='ghost')
+            session.add(
+                ImportLog(
+                    family_id=family.id,
+                    file_name='ghost.csv',
+                    total_rows=1,
+                    inserted_rows=1,
+                )
+            )
+            session.commit()
+            assert session.scalar(select(func.count()).select_from(SnapshotEvent)) > 0
+            assert session.scalar(select(func.count()).select_from(ImportLog)) > 0
+
+        import_response = client.post(
+            '/api/v1/migration/import',
+            files={'file': ('migration.zip', export_response.content, 'application/zip')},
+        )
+        assert import_response.status_code == 200
+
+    with SessionLocal() as session:
+        assert session.scalar(select(func.count()).select_from(SnapshotEvent)) == 0
+        assert session.scalar(select(func.count()).select_from(ImportLog)) == 0

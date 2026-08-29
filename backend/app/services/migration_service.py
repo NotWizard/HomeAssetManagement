@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import shutil
+import sqlite3
 import tempfile
 import zipfile
 from collections.abc import Iterable, Iterator
@@ -294,7 +295,22 @@ def _create_sqlite_backup_before_import() -> Path | None:
         backups_dir.mkdir(parents=True, exist_ok=True)
         timestamp = utc_now_naive().strftime("%Y-%m-%dT%H-%M-%S")
         backup_path = backups_dir / f"migration-{timestamp}.db"
-        shutil.copy2(db_path, backup_path)
+        # 用 sqlite3 在线备份 API 而不是 shutil.copy2：WAL 模式下最近提交可能仍在
+        # app.db-wal 中未 checkpoint，直接 copy 主文件会缺最新事务，复制途中遇到
+        # 写入还会得到 torn copy。online backup 读到的是一致的最新已提交状态。
+        try:
+            source = sqlite3.connect(str(db_path))
+            try:
+                target = sqlite3.connect(str(backup_path))
+                try:
+                    source.backup(target)
+                finally:
+                    target.close()
+            finally:
+                source.close()
+        except Exception:
+            backup_path.unlink(missing_ok=True)
+            raise
         return backup_path
     except Exception as exc:  # noqa: BLE001
         logger.warning("migration import: 创建 SQLite 备份失败：%s", exc, exc_info=True)

@@ -280,11 +280,16 @@ def test_import_migration_replaces_existing_data():
 
 
 def test_create_sqlite_backup_before_import_writes_file_to_storage_dir(tmp_path, monkeypatch):
-    """直接测 _create_sqlite_backup_before_import：模拟一个 sqlite db 文件，验证备份目录与命名。"""
+    """直接测 _create_sqlite_backup_before_import：真实 sqlite db，验证备份目录、命名与内容可读。"""
     import importlib
+    import sqlite3
 
     fake_db_file = tmp_path / "fake.db"
-    fake_db_file.write_bytes(b"fake-sqlite-content")
+    conn = sqlite3.connect(str(fake_db_file))
+    conn.execute("CREATE TABLE t (v TEXT)")
+    conn.execute("INSERT INTO t VALUES ('hello')")
+    conn.commit()
+    conn.close()
     monkeypatch.setenv("HBS_DATABASE_URL", f"sqlite:///{fake_db_file}")
     monkeypatch.setenv("HBS_STORAGE_DIR", str(tmp_path))
 
@@ -302,8 +307,52 @@ def test_create_sqlite_backup_before_import_writes_file_to_storage_dir(tmp_path,
         assert backup_path.parent == tmp_path / "backups"
         assert backup_path.name.startswith("migration-")
         assert backup_path.name.endswith(".db")
-        assert backup_path.read_bytes() == b"fake-sqlite-content"
+        backup_conn = sqlite3.connect(str(backup_path))
+        try:
+            assert backup_conn.execute("SELECT v FROM t").fetchall() == [("hello",)]
+        finally:
+            backup_conn.close()
     finally:
+        config_module.get_settings.cache_clear()
+        importlib.reload(config_module)
+        importlib.reload(migration_module)
+
+
+def test_create_sqlite_backup_includes_latest_wal_commits(tmp_path, monkeypatch):
+    """WAL 未 checkpoint 时备份也必须包含最新提交（shutil.copy2 时代会缺）。"""
+    import importlib
+    import sqlite3
+
+    db_file = tmp_path / "wal.db"
+    source = sqlite3.connect(str(db_file))
+    source.execute("PRAGMA journal_mode=WAL")
+    source.execute("CREATE TABLE t (v TEXT)")
+    source.execute("INSERT INTO t VALUES ('wal-only')")
+    source.commit()
+    # 源连接保持打开，WAL 不会自动 checkpoint，最新提交仍只在 -wal 文件里
+    assert (tmp_path / "wal.db-wal").exists()
+    assert (tmp_path / "wal.db-wal").stat().st_size > 0
+
+    monkeypatch.setenv("HBS_DATABASE_URL", f"sqlite:///{db_file}")
+    monkeypatch.setenv("HBS_STORAGE_DIR", str(tmp_path))
+
+    import app.core.config as config_module
+    import app.services.migration_service as migration_module
+
+    config_module.get_settings.cache_clear()
+    importlib.reload(config_module)
+    importlib.reload(migration_module)
+
+    try:
+        backup_path = migration_module._create_sqlite_backup_before_import()
+        assert backup_path is not None
+        backup_conn = sqlite3.connect(str(backup_path))
+        try:
+            assert backup_conn.execute("SELECT v FROM t").fetchall() == [("wal-only",)]
+        finally:
+            backup_conn.close()
+    finally:
+        source.close()
         config_module.get_settings.cache_clear()
         importlib.reload(config_module)
         importlib.reload(migration_module)

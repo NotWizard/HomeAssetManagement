@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复迁移导入前的 SQLite 备份在 WAL 模式下可能缺最新事务：备份从直接复制主库文件改为 sqlite3 在线备份 API，始终得到一致的最新已提交状态，失败时清理半成品备份文件。（整改清单 v2 · V2-4）
+- Fix the pre-import SQLite backup potentially missing the latest transactions under WAL mode. Backups now use the sqlite3 online backup API instead of copying the main database file, always capturing a consistent latest committed state, and partial backup files are cleaned up on failure. (Remediation v2 · V2-4)
+
 - 修复同一 CSV 文件内业务键重复导致重复持仓落库或静默覆盖：解析阶段即对文件内重复业务键报行级错误（preview 与正式提交语义一致），用户可下载错误明细修正后重导。（整改清单 v2 · V2-3）
 - Fix duplicate business keys within one CSV file causing duplicated holdings or silent overwrites. The parse phase now flags in-file duplicate keys as row-level errors (preview matches commit semantics), and users can download the error report to fix and re-import. (Remediation v2 · V2-3)
 

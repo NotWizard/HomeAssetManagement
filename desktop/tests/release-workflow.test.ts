@@ -55,3 +55,13 @@ test('release workflow 强制校验 tag 与三端包版本一致', () => {
   const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8');
   assert.match(readme, /当前发布产物仅包含 Apple Silicon 版本/);
 });
+
+test('CI desktop job 包含 emit 构建冒烟，与 release 流水线无验证漂移', () => {
+  const ciSource = readFileSync(
+    resolve(process.cwd(), '.github/workflows/ci.yml'),
+    'utf8'
+  );
+  // typecheck（--noEmit）之外必须真的跑 tsc -p 产出 dist，
+  // 否则 rewriteRelativeImportExtensions 重写等 emit 期错误会延迟到发版才暴露
+  assert.match(ciSource, /npm --prefix desktop run build/);
+});

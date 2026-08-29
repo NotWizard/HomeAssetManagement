@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复 CI desktop job 与发布流水线的验证漂移：原先只做 typecheck（--noEmit），emit 期错误（如 import 扩展名重写、preload 产物缺失）要延迟到发版才暴露；CI 现在实际执行 `tsc -p` 构建冒烟。（整改清单 v2 · V2-23）
+- Fix validation drift between the CI desktop job and the release pipeline. CI previously only ran typecheck (--noEmit), so emit-time errors (import-extension rewrites, missing preload artifacts) only surfaced at release time. CI now runs a real `tsc -p` build as a smoke check. (Remediation v2 · V2-23)
+
 - 修复打包态后端日志完全丢失：后端 sidecar 的 stdout/stderr 原先只转发到主进程控制台（Finder 启动时无人接收），现在同步落盘 `main.log`，错误页“打开日志目录”提交日志的指引真正可用。（整改清单 v2 · V2-22）
 - Fix backend logs being completely lost in packaged builds. The sidecar's stdout/stderr was only forwarded to the main process console (unreadable when launched from Finder); it now also lands in `main.log`, making the error page's “open logs directory” guidance actually useful. (Remediation v2 · V2-22)
 

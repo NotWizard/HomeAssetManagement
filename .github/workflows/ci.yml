@@ -87,5 +87,11 @@ jobs:
       - name: Typecheck
         run: npm --prefix desktop run typecheck
 
+      # emit 冒烟：typecheck 是 --noEmit，rewriteRelativeImportExtensions 重写
+      # （./update-workflow.ts → .js）与 preload.cts → preload.cjs 产物缺失等问题
+      # 只在真正 emit 时暴露；不跑 build 的话这些错误会延迟到 release 才发现。
+      - name: Build
+        run: npm --prefix desktop run build
+
       - name: Source-level tests
         run: node --test desktop/tests/*.test.ts

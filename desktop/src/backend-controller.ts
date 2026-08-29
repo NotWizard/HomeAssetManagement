@@ -50,6 +50,8 @@ export function createBackendController(deps: BackendControllerDependencies) {
   let readyPromise: Promise<void> | null = null;
   let unexpectedExitHandler: UnexpectedExitHandler | null = null;
   let hasBeenReady = false;
+  // 进程是否真的退出过：信号杀死场景下 Node 的 exitCode 仍是 null，只能靠 exit 事件追踪。
+  let processExited = false;
 
   async function preparePort(): Promise<number> {
     if (port === null) {
@@ -97,6 +99,57 @@ export function createBackendController(deps: BackendControllerDependencies) {
     }
   }
 
+  function waitForExitEvent(
+    proc: BackendProcess,
+    timeoutMs: number
+  ): Promise<boolean> {
+    if (processExited || proc.exitCode !== null) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolveWait) => {
+      const timer = setTimeout(() => resolveWait(false), timeoutMs);
+      proc.on('exit', () => {
+        clearTimeout(timer);
+        resolveWait(true);
+      });
+    });
+  }
+
+  /**
+   * 退出链路专用：SIGTERM 后真正等待进程退出，宽限期过后升级 SIGKILL。
+   *
+   * 与 stop() 的差异：stop() 的 SIGKILL 兜底是 unref 定时器，应用退出阶段
+   * 事件循环随之销毁，兜底永远不会执行（PyInstaller 二进制忽略 SIGTERM
+   * 就变僵尸 sidecar，还占着同一个 app.db）。本方法挂起调用方直到进程
+   * 真的退出（或兜底 SIGKILL + 1s 收敛等待）。
+   */
+  async function stopAndWaitForExit(graceMs: number): Promise<void> {
+    const target = processRef;
+    if (!target) {
+      clearState({ resetPort: false });
+      return;
+    }
+
+    if (!processExited && target.exitCode === null) {
+      try {
+        target.kill();
+      } catch {
+        // 进程可能已经退出/被回收，忽略
+      }
+      const exitedGracefully = await waitForExitEvent(target, graceMs);
+      if (!exitedGracefully) {
+        try {
+          target.kill('SIGKILL');
+        } catch {
+          // 进程可能已经退出/被回收，忽略
+        }
+        await waitForExitEvent(target, 1_000);
+      }
+    }
+
+    clearState({ resetPort: false });
+  }
+
   function onUnexpectedExit(handler: UnexpectedExitHandler) {
     unexpectedExitHandler = handler;
   }
@@ -115,6 +168,7 @@ export function createBackendController(deps: BackendControllerDependencies) {
     if (!processRef) {
       try {
         processRef = deps.spawnBackend(ensuredPort);
+      processExited = false;
       } catch (error) {
         clearState({ resetPort: true });
         throw error;
@@ -127,6 +181,7 @@ export function createBackendController(deps: BackendControllerDependencies) {
       let rejectStartup: (error: unknown) => void = () => undefined;
 
       currentProcess.on('exit', (code, signal) => {
+        processExited = true;
         // 启动期就 exit：通过 rejectStartup 立刻报错，避免 waitForBackendReady 轮询到超时
         // 才返回笼统的 "backend never ready"，让用户看到真正的退出原因。
         if (!hasBeenReady) {
@@ -145,6 +200,8 @@ export function createBackendController(deps: BackendControllerDependencies) {
       });
 
       currentProcess.on('error', (error) => {
+        // spawn 失败意味着进程根本没起来，视为已终结，避免退出链路空等宽限期。
+        processExited = true;
         if (hasBeenReady) {
           if (unexpectedExitHandled) {
             return;
@@ -203,6 +260,7 @@ export function createBackendController(deps: BackendControllerDependencies) {
     ensureReady,
     stop: () => stop({ resetPort: false }),
     stopAndResetPort: () => stop({ resetPort: true }),
+    stopAndWaitForExit,
     onUnexpectedExit,
     getPort,
   };

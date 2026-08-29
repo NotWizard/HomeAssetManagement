@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复退出应用时后端 sidecar 可能变僵尸进程：原 SIGKILL 兜底挂在 unref 定时器上，退出阶段事件循环销毁后永不执行；现在 before-quit 会拦截退出，等待后端真正退出（SIGTERM → 宽限期 → SIGKILL 升级）后才放行，避免孤儿进程占用同一本地数据库与调度任务。（整改清单 v2 · V2-8）
+- Fix backend sidecars potentially becoming zombies on app quit. The SIGKILL fallback lived on an unref'd timer that never fires once the event loop is torn down. before-quit now intercepts the quit, waits for the backend to actually exit (SIGTERM → grace period → SIGKILL escalation), and only then lets the app exit, preventing orphan processes from holding the same local database and duplicating scheduled jobs. (Remediation v2 · V2-8)
+
 - 修复桌面更新链路所有 fetch 无超时：元数据/校验文件请求统一 30s 超时，主资产下载改为 60s 无数据看门狗（不限总时长，慢网拉大文件不受影响），连接挂死不再无限悬挂。（整改清单 v2 · V2-7）
 - Fix all updater fetches lacking timeouts. Metadata and checksum requests now share a 30s timeout, while the main asset download uses a 60s no-data watchdog instead of a total-time limit so slow networks can still finish large packages. Stalled connections no longer hang forever. (Remediation v2 · V2-7)
 

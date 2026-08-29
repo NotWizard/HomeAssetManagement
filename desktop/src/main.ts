@@ -621,11 +621,26 @@ app.on('activate', async () => {
   await bootstrap();
 });
 
-app.on('before-quit', () => {
+// before-quit 只拦截一次：后端真正退出后置 true，app.exit(0) 重入时直接放行。
+let backendShutdownComplete = false;
+
+app.on('before-quit', (event) => {
   updateController.stop();
-  backendController.stopAndResetPort();
-  // 把残余缓冲 flush + end stream；fire-and-forget，不阻塞退出。
-  void fileLogger?.close();
+  if (backendShutdownComplete) {
+    return;
+  }
+  // stopAndResetPort 的 SIGKILL 兜底是 unref 定时器，事件循环随退出销毁后
+  // 永远不会执行（PyInstaller 二进制忽略 SIGTERM 即成僵尸 sidecar，还占着
+  // 同一个 app.db）。拦截本次退出，异步等后端真的退出（SIGTERM → 宽限期 →
+  // SIGKILL）后再放行。
+  event.preventDefault();
+  void (async () => {
+    await backendController.stopAndWaitForExit(BACKEND_KILL_GRACE_MS);
+    backendShutdownComplete = true;
+    // 把残余缓冲 flush + end stream；fire-and-forget，不阻塞退出。
+    void fileLogger?.close();
+    app.exit(0);
+  })();
 });
 
 app.on('window-all-closed', () => {

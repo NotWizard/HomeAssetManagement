@@ -98,7 +98,9 @@ export function EntryHoldingsTable({
     }
   }, [focusedMemberId]);
 
-  const toggleGroup = (memberId: number) => {
+  // useCallback 锁定引用：GroupBlock 是 memo 组件，每次 render 新建闭包会让
+  // 浅比较永远失败、memo 形同虚设。memberId 由子组件内部回传。
+  const toggleGroup = useCallback((memberId: number) => {
     setCollapsedGroupIds((current) => {
       const next = new Set(current);
       if (next.has(memberId)) {
@@ -108,7 +110,7 @@ export function EntryHoldingsTable({
       }
       return next;
     });
-  };
+  }, []);
 
   return (
     <div className="overflow-x-auto">
@@ -149,7 +151,7 @@ export function EntryHoldingsTable({
                 selectedIdSet={selectedIdSet}
                 deletePending={deletePending}
                 baseCurrency={baseCurrency}
-                onToggle={() => toggleGroup(group.summary.memberId)}
+                onToggle={toggleGroup}
                 onToggleHoldingSelection={onToggleHoldingSelection}
                 onOpenEditDialog={onOpenEditDialog}
                 onDeleteHolding={onDeleteHolding}
@@ -178,7 +180,7 @@ type GroupBlockProps = {
   selectedIdSet: Set<number>;
   deletePending: boolean;
   baseCurrency: string;
-  onToggle: () => void;
+  onToggle: (memberId: number) => void;
   onToggleHoldingSelection: (id: number, checked: boolean) => void;
   onOpenEditDialog: (row: Holding) => void;
   onDeleteHolding: (id: number) => void;
@@ -220,7 +222,7 @@ function GroupBlockBase({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={onToggle}
+                onClick={() => onToggle(summary.memberId)}
                 aria-label={collapsed ? '展开成员组' : '折叠成员组'}
                 aria-expanded={!collapsed}
               >

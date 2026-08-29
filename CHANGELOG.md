@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复录入页成员分组组件的 memo 失效：内联 `onToggle` 闭包每次渲染都新建，浅比较永远失败；`toggleGroup` 改为 `useCallback` 稳定引用，memberId 由子组件内部回传，勾选/输入不再连带重渲染全部分组。（整改清单 v2 · V2-19）
+- Fix the memoized member-group blocks on the entry page never actually memoizing: the inline `onToggle` closure was recreated every render, so shallow comparison always failed. `toggleGroup` is now a stable `useCallback` reference with memberId passed back from inside the child, so checking boxes or typing no longer re-renders every group. (Remediation v2 · V2-19)
+
 - 修复 CSV 导入提交成功后按钮立即恢复可点、可能重复导入同一文件：成功后现在会清空所选文件与预检结果，提交按钮随之禁用，需重新选择文件。（整改清单 v2 · V2-18）
 - Fix the CSV import page allowing accidental re-submission of the same file right after a successful commit. The selected file and preview are now cleared on success, disabling the submit button until a new file is chosen. (Remediation v2 · V2-18)
 

@@ -8,10 +8,11 @@ import {
   ApiError,
   fetchWithTimeout,
   safeParseJson,
+  withRequestTimeout,
   type RequestExtras,
 } from './apiTransport';
 
-export { ApiError, ApiTimeoutError, fetchWithTimeout, safeParseJson } from './apiTransport';
+export { ApiError, ApiTimeoutError, fetchWithTimeout, safeParseJson, withRequestTimeout } from './apiTransport';
 export type { RequestExtras } from './apiTransport';
 
 function normalizeResponse<T>(payload: unknown, status = 200): T {
@@ -63,10 +64,15 @@ async function request<T>(
       | 'POST'
       | 'PUT'
       | 'DELETE';
-    return requestDesktopJson<T>(
-      url,
-      method,
-      typeof options?.body === 'string' ? options.body : undefined
+    // 桌面桥（IPC）Promise 没有内建超时/取消：包一层与 web fetch 路径一致的语义，
+    // 主进程挂起时不再永不返回，React Query 卸载取消也能生效。
+    return withRequestTimeout(
+      requestDesktopJson<T>(
+        url,
+        method,
+        typeof options?.body === 'string' ? options.body : undefined
+      ),
+      { timeoutMs: options?.timeoutMs, signal: options?.signal }
     );
   }
 
@@ -140,8 +146,10 @@ export async function postForm<T>(
 ): Promise<T> {
   const desktopBridge = getDesktopBridge();
   if (desktopBridge?.isDesktop) {
-    return normalizeResponse<T>(
-      await desktopBridge.api.form.post(url, serializeFormData(formData))
+    return withRequestTimeout(
+      desktopBridge.api.form.post(url, serializeFormData(formData))
+        .then((payload) => normalizeResponse<T>(payload)),
+      { timeoutMs: extras?.timeoutMs, signal: extras?.signal }
     );
   }
 

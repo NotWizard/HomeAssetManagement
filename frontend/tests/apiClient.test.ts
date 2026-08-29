@@ -80,3 +80,40 @@ test('safeParseJson 对空响应体返回 undefined 不抛错', async () => {
   const value = await safeParseJson(response);
   assert.equal(value, undefined);
 });
+
+test('withRequestTimeout 在桌面桥挂起时按超时抛出 ApiTimeoutError', async () => {
+  const { withRequestTimeout } = await import('../src/services/apiTransport.ts');
+
+  const stuck = new Promise<never>(() => {});
+  await assert.rejects(
+    withRequestTimeout(stuck, { timeoutMs: 30 }),
+    (err: unknown) => err instanceof ApiTimeoutError
+  );
+});
+
+test('withRequestTimeout 透传外部 signal 取消原因', async () => {
+  const { withRequestTimeout } = await import('../src/services/apiTransport.ts');
+
+  const controller = new AbortController();
+  const cancelReason = new Error('react-query-unmount');
+  const stuck = new Promise<never>(() => {});
+  setTimeout(() => controller.abort(cancelReason), 10);
+
+  await assert.rejects(
+    withRequestTimeout(stuck, { timeoutMs: 5_000, signal: controller.signal }),
+    (err: unknown) => err === cancelReason
+  );
+});
+
+test('withRequestTimeout 正常返回结果，且已取消的 signal 立即生效', async () => {
+  const { withRequestTimeout } = await import('../src/services/apiTransport.ts');
+
+  assert.equal(await withRequestTimeout(Promise.resolve(42)), 42);
+
+  const controller = new AbortController();
+  controller.abort(new Error('already-aborted'));
+  await assert.rejects(
+    withRequestTimeout(Promise.resolve(1), { signal: controller.signal }),
+    (err: unknown) => (err as Error).message === 'already-aborted'
+  );
+});

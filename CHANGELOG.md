@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复桌面模式下 API 请求无超时兜底、卸载取消失效：桌面桥（IPC）路径原先忽略 timeoutMs 与 signal，主进程挂起时请求永不返回；新增 `withRequestTimeout` 为桌面路径补齐与 web fetch 一致的 30s 超时与取消透传。（整改清单 v2 · V2-13）
+- Fix desktop-mode API requests having no timeout fallback and ignoring cancellation. The desktop bridge (IPC) path previously dropped `timeoutMs` and `signal`, so a stuck main process meant requests never returned. A new `withRequestTimeout` gives the desktop path the same 30s timeout and cancellation semantics as the web fetch path. (Remediation v2 · V2-13)
+
 - 修复图表 tooltip 的 HTML 注入面：持仓名/成员名等用户输入（含 CSV 导入渠道）原先直接拼进 ECharts tooltip 的 HTML；新增统一 `escapeHtml` 工具并接入相关性矩阵、波动率、币种构成、币种敞口与桑基图的全部 tooltip 拼接点。（整改清单 v2 · V2-12）
 - Fix an HTML injection vector in chart tooltips. User-controlled strings such as holding and member names (including the CSV import channel) were previously interpolated into ECharts tooltip HTML as-is. A shared `escapeHtml` utility now covers every tooltip interpolation point across the correlation matrix, volatility, currency breakdown, currency exposure, and Sankey charts. (Remediation v2 · V2-12)
 

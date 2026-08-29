@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复桌面更新状态在前端被重复订阅：`useDesktopUpdateState` 原先每个调用方各挂一份 IPC 监听并各发一次 getState（常驻左下角入口 + 设置页卡片共两份），现在改为模块级单订阅 + 多播，IPC 监听全局只有一份。（整改清单 v2 · V2-38）
+- Fix duplicate desktop update-state subscriptions on the frontend. Each `useDesktopUpdateState` caller previously attached its own IPC listener and issued its own getState (two copies for the persistent corner entry plus the Settings card). A module-level singleton subscription with multicast now keeps exactly one IPC listener. (Remediation v2 · V2-38)
+
 - 修复弹窗不支持键盘退出：Dialog 组件原先只能点遮罩关闭；现在支持 Escape 关闭、打开即聚焦面板、Tab 键在面板内循环（轻量焦点陷阱），并补齐 `role="dialog"`/`aria-modal` 语义。（整改清单 v2 · V2-37）
 - Fix dialogs being impossible to dismiss via keyboard. The Dialog component previously only closed via backdrop click; it now supports Escape to close, focuses the panel on open, cycles Tab within the panel (lightweight focus trap), and carries proper `role="dialog"`/`aria-modal` semantics. (Remediation v2 · V2-37)
 

@@ -267,3 +267,16 @@ test('左下角更新入口的安装确认有 catch 兜底，不产生 unhandled
   assert.match(confirmBlock[0], /catch/);
   assert.match(confirmBlock[0], /setInstallError/);
 });
+
+test('useDesktopUpdateState 使用模块级单订阅多播，不再每调用方各挂一份 IPC 监听', () => {
+  const source = readFileSync(
+    resolve(process.cwd(), 'src/components/layout/useDesktopUpdateState.ts'),
+    'utf8'
+  );
+  // 单例守卫 + 监听器集合多播
+  assert.match(source, /bridgeSubscribed/);
+  assert.match(source, /const listeners = new Set/);
+  // onUpdateStateChanged 只在 ensureBridgeSubscription 内调用一次
+  const matches = source.match(/onUpdateStateChanged\(/g) ?? [];
+  assert.equal(matches.length, 1, 'IPC 监听应只在单例订阅处出现一次');
+});

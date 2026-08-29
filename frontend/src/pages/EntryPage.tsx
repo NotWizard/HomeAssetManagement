@@ -28,6 +28,12 @@ import {
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { type SearchableSelectOption } from '../components/ui/searchable-select';
+import {
+  COMMON_CURRENCIES,
+  CURRENCY_LABELS,
+  CURRENCY_SEARCH_TEXT,
+  formatCurrencyLabel,
+} from '../utils/currency';
 import { PageHeader } from '../components/layout/PageHeader';
 import { fetchCategories } from '../services/categories';
 import {
@@ -56,18 +62,14 @@ type HoldingFilterType = 'all' | 'asset' | 'liability';
 const EMPTY_HOLDINGS: Holding[] = [];
 const EMPTY_MEMBERS: Member[] = [];
 
-const COMMON_CURRENCY_OPTIONS: SearchableSelectOption[] = [
-  { value: 'CNY', label: 'CNY（人民币）', searchText: '人民币 china chinese yuan renminbi' },
-  { value: 'USD', label: 'USD（美元）', searchText: '美元 us dollar america' },
-  { value: 'EUR', label: 'EUR（欧元）', searchText: '欧元 euro' },
-  { value: 'HKD', label: 'HKD（港币）', searchText: '港币 hong kong dollar' },
-  { value: 'JPY', label: 'JPY（日元）', searchText: '日元 yen japan' },
-  { value: 'GBP', label: 'GBP（英镑）', searchText: '英镑 pound uk' },
-  { value: 'AUD', label: 'AUD（澳元）', searchText: '澳元 australia dollar' },
-  { value: 'CAD', label: 'CAD（加拿大元）', searchText: '加拿大元 canada dollar' },
-  { value: 'CHF', label: 'CHF（瑞士法郎）', searchText: '瑞士法郎 swiss franc' },
-  { value: 'SGD', label: 'SGD（新加坡元）', searchText: '新加坡元 singapore dollar' },
-];
+// 币种清单统一来自 utils/currency，新增币种只改一处
+const COMMON_CURRENCY_OPTIONS: SearchableSelectOption[] = COMMON_CURRENCIES.map(
+  (currency) => ({
+    value: currency,
+    label: CURRENCY_LABELS[currency],
+    searchText: CURRENCY_SEARCH_TEXT[currency],
+  })
+);
 
 export function EntryPage() {
   const queryClient = useQueryClient();
@@ -203,7 +205,7 @@ export function EntryPage() {
     if (!current || COMMON_CURRENCY_OPTIONS.some((option) => String(option.value) === current)) {
       return COMMON_CURRENCY_OPTIONS;
     }
-    return [{ value: current, label: `${current}（当前币种）`, searchText: current }, ...COMMON_CURRENCY_OPTIONS];
+    return [{ value: current, label: formatCurrencyLabel(current), searchText: current }, ...COMMON_CURRENCY_OPTIONS];
   }, [form.currency]);
 
   const memberNameMap = useMemo(() => {

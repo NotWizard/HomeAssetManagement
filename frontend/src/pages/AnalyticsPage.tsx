@@ -28,6 +28,7 @@ import {
   fetchVolatility,
 } from '../services/analytics';
 import { fetchSettings } from '../services/settings';
+import { formatCurrencyLabel } from '../utils/currency';
 import { type AnalyticsView, useUIStore } from '../store/uiStore';
 
 const VIEW_OPTIONS: Array<{ value: AnalyticsView; label: string; description: string }> = [
@@ -35,19 +36,6 @@ const VIEW_OPTIONS: Array<{ value: AnalyticsView; label: string; description: st
   { value: 'risk', label: '风险与配置', description: '关注波动、相关性以及当前配置是否偏离目标。' },
   { value: 'currency', label: '币种总览', description: '按币种查看资产、负债、净资产和各项条目的占比。' },
 ];
-
-const CURRENCY_LABELS: Record<string, string> = {
-  CNY: 'CNY（人民币）',
-  USD: 'USD（美元）',
-  EUR: 'EUR（欧元）',
-  HKD: 'HKD（港币）',
-  JPY: 'JPY（日元）',
-  GBP: 'GBP（英镑）',
-  AUD: 'AUD（澳元）',
-  CAD: 'CAD（加拿大元）',
-  CHF: 'CHF（瑞士法郎）',
-  SGD: 'SGD（新加坡元）',
-};
 
 export function AnalyticsPage() {
   const {
@@ -295,6 +283,3 @@ export function AnalyticsPage() {
   );
 }
 
-function formatCurrencyLabel(currency: string) {
-  return CURRENCY_LABELS[currency] ?? `${currency}（当前币种）`;
-}

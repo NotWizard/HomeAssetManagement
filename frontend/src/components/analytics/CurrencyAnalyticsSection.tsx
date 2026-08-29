@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Skeleton } from '../ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
 import type { CurrencyOverviewDetail, CurrencySummary } from '../../services/analytics';
+import { formatCurrencyLabel } from '../../utils/currency';
 import { formatCurrency, formatPercent } from '../../utils/format';
 
 const CurrencyExposureChart = lazy(() =>
@@ -24,19 +25,6 @@ type CurrencyAnalyticsSectionProps = {
   currencyOverviewIsError: boolean;
   currencyOverviewIsLoading: boolean;
   baseCurrency: string;
-};
-
-const CURRENCY_LABELS: Record<string, string> = {
-  CNY: 'CNY（人民币）',
-  USD: 'USD（美元）',
-  EUR: 'EUR（欧元）',
-  HKD: 'HKD（港币）',
-  JPY: 'JPY（日元）',
-  GBP: 'GBP（英镑）',
-  AUD: 'AUD（澳元）',
-  CAD: 'CAD（加拿大元）',
-  CHF: 'CHF（瑞士法郎）',
-  SGD: 'SGD（新加坡元）',
 };
 
 export function CurrencyAnalyticsSection({
@@ -311,6 +299,3 @@ function formatError(error: unknown) {
   return error instanceof Error ? error.message : '请求失败';
 }
 
-function formatCurrencyLabel(currency: string) {
-  return CURRENCY_LABELS[currency] ?? `${currency}（当前币种）`;
-}

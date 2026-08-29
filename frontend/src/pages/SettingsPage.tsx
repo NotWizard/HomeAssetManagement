@@ -17,19 +17,14 @@ import {
 import { exportMigrationPackage, importMigrationPackage } from '../services/migration';
 import { fetchSettings, updateSettings } from '../services/settings';
 import type { MigrationImportResult, SettingsUpdatePayload } from '../types';
+import { COMMON_CURRENCIES, CURRENCY_LABELS, formatCurrencyLabel } from '../utils/currency';
+import { formatError } from '../utils/formatError';
 
-const COMMON_CURRENCY_OPTIONS = [
-  { value: 'CNY', label: 'CNY 人民币' },
-  { value: 'USD', label: 'USD 美元' },
-  { value: 'EUR', label: 'EUR 欧元' },
-  { value: 'JPY', label: 'JPY 日元' },
-  { value: 'GBP', label: 'GBP 英镑' },
-  { value: 'HKD', label: 'HKD 港币' },
-  { value: 'AUD', label: 'AUD 澳元' },
-  { value: 'CAD', label: 'CAD 加拿大元' },
-  { value: 'CHF', label: 'CHF 瑞士法郎' },
-  { value: 'SGD', label: 'SGD 新加坡元' },
-];
+// 币种清单统一来自 utils/currency，新增币种只改一处
+const COMMON_CURRENCY_OPTIONS = COMMON_CURRENCIES.map((currency) => ({
+  value: currency,
+  label: CURRENCY_LABELS[currency],
+}));
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -55,7 +50,7 @@ export function SettingsPage() {
     if (COMMON_CURRENCY_OPTIONS.some((option) => option.value === current)) {
       return COMMON_CURRENCY_OPTIONS;
     }
-    return [{ value: current, label: `${current} 当前币种` }, ...COMMON_CURRENCY_OPTIONS];
+    return [{ value: current, label: formatCurrencyLabel(current) }, ...COMMON_CURRENCY_OPTIONS];
   }, [form.base_currency]);
 
   useEffect(() => {
@@ -287,9 +282,4 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </label>
   );
-}
-
-function formatError(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return '操作失败，请稍后重试';
 }

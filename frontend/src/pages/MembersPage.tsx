@@ -9,11 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { PageHeader } from '../components/layout/PageHeader';
 import { invalidateMemberHoldingRelatedQueries, invalidateMemberQueries, queryKeys } from '../services/holdingRelatedQueries';
 import { createMember, deleteMember, fetchMembers } from '../services/members';
-
-function formatError(error: unknown) {
-  if (error instanceof Error) return error.message;
-  return '操作失败，请稍后重试';
-}
+import { formatError } from '../utils/formatError';
 
 export function MembersPage() {
   const queryClient = useQueryClient();

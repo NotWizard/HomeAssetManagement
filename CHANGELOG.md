@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复桌面更新器在下载/检查中途退出后永久卡死：`checking`/`downloading` 瞬态之前会被持久化到 `state.json` 但启动清洗不覆盖，重启后所有更新入口静默失效；现在启动时 `checking` 复位为 idle、未完成的 `downloading` 回退为 available（已完成 rename 的恢复为 downloaded）。（整改清单 v2 · V2-5）
+- Fix the desktop updater deadlocking permanently after quitting mid-check or mid-download. The transient `checking`/`downloading` states were persisted to `state.json` but never sanitized on startup, silently disabling every update entry point. Startup now resets `checking` to idle and rolls unfinished `downloading` back to available (or downloaded when the verified archive is already in place). (Remediation v2 · V2-5)
+
 - 修复迁移导入前的 SQLite 备份在 WAL 模式下可能缺最新事务：备份从直接复制主库文件改为 sqlite3 在线备份 API，始终得到一致的最新已提交状态，失败时清理半成品备份文件。（整改清单 v2 · V2-4）
 - Fix the pre-import SQLite backup potentially missing the latest transactions under WAL mode. Backups now use the sqlite3 online backup API instead of copying the main database file, always capturing a consistent latest committed state, and partial backup files are cleaned up on failure. (Remediation v2 · V2-4)
 

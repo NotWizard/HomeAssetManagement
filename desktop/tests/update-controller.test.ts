@@ -1015,3 +1015,139 @@ test('退避：连续网络失败 >=3 次后轮询 noop，manual=true 时无视�
     process.stderr.write = originalWrite;
   }
 });
+
+test('sanitize 启动时把卡住的 checking 瞬态清洗为 idle，不再死锁', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.5.0',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-sanitize-checking',
+    // fetch 失败：观察 sanitize 后的降级状态，而不是被一次成功检查覆盖
+    fetchJsonReleases: async () => {
+      throw new Error('network down');
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'checking',
+      currentVersion: '0.5.0',
+      lastCheckedAt: 1_700_000_000_000,
+    }),
+    persistState: () => undefined,
+    now: () => 1_700_000_100_000,
+  });
+
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    await controller.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  // 修复前：checking 瞬态被恢复，checkForUpdates 入口守卫永远 early-return，状态永久卡死
+  assert.equal(controller.getState().status, 'idle');
+});
+
+test('sanitize 启动时把未完成的 downloading 清洗为 available，可重新下载', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+
+  const controller = updateControllerModule.createUpdateController({
+    appVersion: '0.5.0',
+    arch: 'arm64',
+    isPackaged: true,
+    userDataDir: '/tmp/hbs-userdata-sanitize-downloading',
+    fetchJsonReleases: async () => {
+      throw new Error('network down');
+    },
+    scheduleInterval() {
+      return { dispose() {} };
+    },
+    loadPersistedState: () => ({
+      status: 'downloading',
+      currentVersion: '0.5.0',
+      latestVersion: '0.6.0',
+      assetName: 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip',
+      assetUrl: 'https://example.com/asset.zip',
+      sha256AssetUrl: 'https://example.com/asset.zip.sha256',
+      // 最终包路径不存在（下载中断，只有 .partial），不应误判为已下载完成
+      downloadedFilePath: '/tmp/hbs-userdata-sanitize-downloading/updates/nonexistent.zip',
+      downloadedBytes: 1024,
+      progress: 12,
+      lastCheckedAt: 1_700_000_000_000,
+    }),
+    persistState: () => undefined,
+    now: () => 1_700_000_100_000,
+  });
+
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = (() => true) as typeof process.stderr.write;
+  try {
+    await controller.start();
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+
+  const state = controller.getState();
+  assert.equal(state.status, 'available');
+  assert.equal(state.downloadedFilePath, undefined);
+  assert.equal(state.downloadedBytes, undefined);
+  assert.equal(state.progress, undefined);
+  // 资产信息保留，用户/轮询可重新下载
+  assert.equal(state.assetName, 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip');
+});
+
+test('sanitize 启动时把已完成 rename 的 downloading 恢复为 downloaded', async () => {
+  const updateControllerModule = await import('../src/update-controller.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'hbs-sanitize-dl-done-'));
+  const updatesDir = join(dir, 'updates');
+  mkdirSync(updatesDir, { recursive: true });
+  const archivePath = join(updatesDir, 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip');
+  writeFileSync(archivePath, 'already-verified-bytes');
+
+  try {
+    const controller = updateControllerModule.createUpdateController({
+      appVersion: '0.5.0',
+      arch: 'arm64',
+      isPackaged: true,
+      userDataDir: dir,
+      fetchJsonReleases: async () => {
+        throw new Error('network down');
+      },
+      scheduleInterval() {
+        return { dispose() {} };
+      },
+      loadPersistedState: () => ({
+        status: 'downloading',
+        currentVersion: '0.5.0',
+        latestVersion: '0.6.0',
+        assetName: 'HouseholdBalanceSheet-0.6.0-macos-arm64.zip',
+        assetUrl: 'https://example.com/asset.zip',
+        downloadedFilePath: archivePath,
+        downloadedBytes: 23,
+        totalBytes: 23,
+        lastCheckedAt: 1_700_000_000_000,
+      }),
+      persistState: () => undefined,
+      now: () => 1_700_000_100_000,
+    });
+
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = (() => true) as typeof process.stderr.write;
+    try {
+      await controller.start();
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    const state = controller.getState();
+    assert.equal(state.status, 'downloaded');
+    assert.equal(state.progress, 100);
+    assert.equal(state.downloadedFilePath, archivePath);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

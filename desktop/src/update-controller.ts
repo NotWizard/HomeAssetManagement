@@ -276,6 +276,32 @@ function sanitizePersistedState(
     };
   }
 
+  // === 瞬态清洗：上次退出/崩溃时正卡在 checking / downloading ===
+  // 这两个状态是内存态，重启后没有任何底层操作仍在进行；若原样恢复，
+  // checkForUpdates / downloadUpdate 的入口守卫会永远 early-return（死锁），
+  // 且 UI 没有任何错误提示。checking 直接回 idle（下次轮询重新检查）。
+  if (nextState.status === 'checking') {
+    nextState = { ...nextState, status: 'idle' };
+  }
+
+  // downloading：最终包路径存在即说明上次已完成 sha256 校验并 rename
+  // （rename 只发生在校验通过之后），直接回 downloaded；否则回到 available，
+  // 清掉幻影 downloadedFilePath（半截 .partial 由 start() 启动清理），
+  // 让下次轮询/用户重试能重新下载。
+  if (nextState.status === 'downloading') {
+    const fileReady =
+      !!nextState.downloadedFilePath && existsSync(nextState.downloadedFilePath);
+    nextState = fileReady
+      ? { ...nextState, status: 'downloaded', progress: 100 }
+      : {
+          ...nextState,
+          status: 'available',
+          downloadedFilePath: undefined,
+          downloadedBytes: undefined,
+          progress: undefined,
+        };
+  }
+
   // === error 状态 TTL 清洗 ===
   // 超过 1h 的陈旧 error（典型：上一轮 GitHub 403 后用户未重启的冷 state.json）
   // 复位到 idle，避免每次启动都误显"更新失败"。保留 lastSuccessfulCheckAt 让

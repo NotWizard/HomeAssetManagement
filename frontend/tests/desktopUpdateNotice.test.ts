@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -252,4 +254,16 @@ test('手动检查会在 60 秒内复用结果并识别本次网络失败', () =
     }),
     false
   );
+});
+
+test('左下角更新入口的安装确认有 catch 兜底，不产生 unhandled rejection', () => {
+  // 组件无法 node --test 渲染，用源码级断言锁定（与设置页卡片的 catch 语义对齐）
+  const source = readFileSync(
+    resolve(process.cwd(), 'src/components/layout/DesktopUpdateNotice.tsx'),
+    'utf8'
+  );
+  const confirmBlock = source.match(/const confirmInstall = async[\s\S]*?\n  \};/);
+  assert.ok(confirmBlock, '应找到 confirmInstall');
+  assert.match(confirmBlock[0], /catch/);
+  assert.match(confirmBlock[0], /setInstallError/);
 });

@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复左下角更新入口点击“立即升级并重启”失败后无任何提示且产生 unhandled rejection：安装确认现在捕获异常并在对话框内给出可见错误，与设置页手动更新卡片行为一致。（整改清单 v2 · V2-36）
+- Fix the bottom-left update entry silently failing on “Install and restart” with an unhandled rejection. The install confirmation now catches errors and shows a visible message in the dialog, matching the Settings manual-update card. (Remediation v2 · V2-36)
+
 - 修复 web 模式下导入错误明细下载与迁移包导出使用裸 `fetch` 无超时：本地服务挂起时这两个请求会永不返回，现在统一走带 30s 超时的 `fetchWithTimeout`。（整改清单 v2 · V2-35）
 - Fix bare `fetch` without timeout for the import-error download and migration export on the web path: both requests could hang forever if the local service stalled. They now go through `fetchWithTimeout` with a 30s timeout. (Remediation v2 · V2-35)
 

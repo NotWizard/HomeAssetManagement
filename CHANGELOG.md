@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复发布流水线不校验 tag 与包版本一致性：release workflow 现在在构建前强制断言 tag == desktop/frontend/backend 三端版本号，不一致直接 fail fast，避免产物名与更新器期望不符导致更新静默失效。x64 未随 CI 发布的缺口维持 README 的显式声明（仅 Apple Silicon）。（整改清单 v2 · V2-9）
+- Fix the release pipeline never checking tag-to-package-version consistency. The release workflow now asserts tag == desktop/frontend/backend versions before building and fails fast otherwise, preventing silent update breakage from asset-name mismatches. The x64 gap remains an explicit README-documented decision (Apple Silicon only). (Remediation v2 · V2-9)
+
 - 修复退出应用时后端 sidecar 可能变僵尸进程：原 SIGKILL 兜底挂在 unref 定时器上，退出阶段事件循环销毁后永不执行；现在 before-quit 会拦截退出，等待后端真正退出（SIGTERM → 宽限期 → SIGKILL 升级）后才放行，避免孤儿进程占用同一本地数据库与调度任务。（整改清单 v2 · V2-8）
 - Fix backend sidecars potentially becoming zombies on app quit. The SIGKILL fallback lived on an unref'd timer that never fires once the event loop is torn down. before-quit now intercepts the quit, waits for the backend to actually exit (SIGTERM → grace period → SIGKILL escalation), and only then lets the app exit, preventing orphan processes from holding the same local database and duplicating scheduled jobs. (Remediation v2 · V2-8)
 

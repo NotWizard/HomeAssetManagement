@@ -44,3 +44,14 @@ test('release workflow 会把 Developer ID p12 证书导入临时 keychain', () 
   assert.match(workflowSource, /KEYCHAIN_PATH="\$RUNNER_TEMP\/hbs-signing\.keychain-db"/);
   assert.match(workflowSource, /HBS_MACOS_CODESIGN_KEYCHAIN=\$KEYCHAIN_PATH/);
 });
+
+test('release workflow 强制校验 tag 与三端包版本一致', () => {
+  // 更新器按 tag 版本拼资产名、产物名取自 package.json，不一致会让更新静默失效
+  assert.match(workflowSource, /name: Assert tag matches package versions/);
+  assert.match(workflowSource, /require\('\.\/desktop\/package\.json'\)\.version/);
+  assert.match(workflowSource, /require\('\.\/frontend\/package\.json'\)\.version/);
+  assert.match(workflowSource, /app_version: str = /);
+  // README 已声明仅发布 Apple Silicon，x64 缺口为显式设计而非遗漏
+  const readme = readFileSync(resolve(process.cwd(), 'README.md'), 'utf8');
+  assert.match(readme, /当前发布产物仅包含 Apple Silicon 版本/);
+});

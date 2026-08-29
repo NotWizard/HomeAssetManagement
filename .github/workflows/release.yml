@@ -87,6 +87,26 @@ jobs:
             frontend/package-lock.json
             desktop/package-lock.json
 
+      - name: Assert tag matches package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve_tag.outputs.tag }}"
+          DESKTOP_VERSION="$(node -p "require('./desktop/package.json').version")"
+          FRONTEND_VERSION="$(node -p "require('./frontend/package.json').version")"
+          BACKEND_VERSION="$(sed -n 's/^    app_version: str = "\(.*\)"$/\1/p' backend/app/core/config.py)"
+          if [ -z "$BACKEND_VERSION" ]; then
+            echo "::error::无法从 backend/app/core/config.py 解析 app_version"
+            exit 1
+          fi
+          # 更新器按 tag 版本拼资产名，产物名却取自 package.json：一旦发 tag 忘 bump
+          # 版本号，产物名与更新器期望不符，更新静默失效且无任何报错。这里 fail fast。
+          if [ "$TAG" != "v$DESKTOP_VERSION" ] || [ "$DESKTOP_VERSION" != "$FRONTEND_VERSION" ] || [ "$DESKTOP_VERSION" != "$BACKEND_VERSION" ]; then
+            echo "::error::版本不一致：tag=$TAG desktop=$DESKTOP_VERSION frontend=$FRONTEND_VERSION backend=$BACKEND_VERSION"
+            exit 1
+          fi
+          echo "版本一致性校验通过：$TAG == $DESKTOP_VERSION（desktop/frontend/backend 三端一致）"
+
       - name: Install backend (desktop) deps into .venv
         run: |
           python -m venv .venv

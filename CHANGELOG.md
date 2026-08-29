@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复录入表单“期望占比”留空必报错的自相矛盾：提示文案写明“留空表示不参与计算”，校验却强制必填；现在留空合法并提交为 null，非空才校验 0–100 范围，顺带拦住非数字输入穿透。（整改清单 v2 · V2-11）
+- Fix the entry form's “target ratio” field contradicting itself: the hint said leaving it empty opts out of rebalancing, yet validation rejected empty values. Empty is now valid and submitted as null, non-empty values are range-checked 0–100, and non-numeric input no longer slips through. (Remediation v2 · V2-11)
+
 - 修复分析看板“风险与配置”视图的再平衡金额可能错标为 ¥：settings 查询原先只在币种总览视图启用，冷启动直达风险视图时基准币回退默认值 CNY；现在 risk 与 currency 视图都会加载 settings。（整改清单 v2 · V2-10）
 - Fix rebalance amounts in the Analytics “Risk & Allocation” view potentially being mislabeled with ¥. The settings query was previously only enabled for the currency view, so landing directly on the risk view fell back to the default CNY. Settings now load for both risk and currency views. (Remediation v2 · V2-10)
 

@@ -152,3 +152,39 @@ test('buildHoldingPayload 会输出提交 API 所需 payload，并对负债清�
     null
   );
 });
+
+test('资产期望占比留空合法且提交为 null，非法数字被拒绝', async () => {
+  const { buildHoldingPayload, validateEntryForm } = await import('../src/components/entry/entryPageController.ts');
+
+  const baseForm = {
+    memberId: '2',
+    name: '美元存款',
+    category: { type: 'asset' as const, l1Id: 4, l2Id: 5, l3Id: 6 },
+    currency: 'USD',
+    amountOriginal: '12.34',
+  };
+
+  // 留空 / 纯空白：与表单提示“留空表示不参与计算”一致，校验通过且 payload 为 null
+  for (const targetRatio of ['', '   ']) {
+    const validation = validateEntryForm({ ...baseForm, targetRatio });
+    assert.equal(validation.error, null);
+    assert.ok(validation.category);
+    assert.equal(
+      buildHoldingPayload({ ...baseForm, targetRatio }, validation.category).target_ratio,
+      null
+    );
+  }
+
+  // 非数字（NaN 穿透）与超范围都要拒绝
+  for (const targetRatio of ['abc', '-1', '100.1']) {
+    assert.equal(
+      validateEntryForm({ ...baseForm, targetRatio }).error,
+      '资产期望占比必须在 0 到 100 之间'
+    );
+  }
+
+  // 边界值 0 与 100 合法
+  for (const targetRatio of ['0', '100']) {
+    assert.equal(validateEntryForm({ ...baseForm, targetRatio }).error, null);
+  }
+});

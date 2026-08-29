@@ -97,13 +97,14 @@ export function validateEntryForm(form: EntryFormState): EntryFormValidationResu
   if (!hasValidTwoDecimalAmount(form.amountOriginal)) {
     return { error: '金额必须大于 0，且最多支持两位小数', category: null };
   }
-  if (
-    form.category.type === 'asset' &&
-    (!form.targetRatio ||
-      Number(form.targetRatio) < 0 ||
-      Number(form.targetRatio) > 100)
-  ) {
-    return { error: '资产期望占比必须在 0 到 100 之间', category: null };
+  // 资产期望占比：留空合法（不参与再平衡，与表单提示文案一致）；
+  // 非空才校验为 0–100 的有效数字（顺带拦住 'abc' 这类 NaN 穿透）。
+  const rawTargetRatio = form.targetRatio.trim();
+  if (form.category.type === 'asset' && rawTargetRatio !== '') {
+    const ratio = Number(rawTargetRatio);
+    if (!Number.isFinite(ratio) || ratio < 0 || ratio > 100) {
+      return { error: '资产期望占比必须在 0 到 100 之间', category: null };
+    }
   }
 
   return {
@@ -125,6 +126,10 @@ export function buildHoldingPayload(
     category_l3_id: category.l3Id,
     currency: form.currency.trim().toUpperCase(),
     amount_original: form.amountOriginal,
-    target_ratio: category.type === 'asset' ? form.targetRatio : null,
+    // 资产留空 → null（不参与再平衡）；负债永远为 null
+    target_ratio:
+      category.type === 'asset' && form.targetRatio.trim() !== ''
+        ? form.targetRatio.trim()
+        : null,
   };
 }

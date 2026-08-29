@@ -129,3 +129,14 @@ test('resolveNextSelectedCurrency 会在币种视图下保持合法选择，否�
     'USD'
   );
 });
+
+test('shouldLoadSettingsForView：risk 与 currency 视图加载 settings，overview 不加载', async () => {
+  const { shouldLoadSettingsForView } = await import(
+    '../src/components/analytics/analyticsPageState.ts'
+  );
+
+  // risk 视图要展示再平衡金额的基准币符号，不加载会错标为默认 CNY
+  assert.equal(shouldLoadSettingsForView('risk'), true);
+  assert.equal(shouldLoadSettingsForView('currency'), true);
+  assert.equal(shouldLoadSettingsForView('overview'), false);
+});

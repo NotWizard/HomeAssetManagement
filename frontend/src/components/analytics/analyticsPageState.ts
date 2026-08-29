@@ -62,6 +62,15 @@ export function applyEndDateChange(
   };
 }
 
+/**
+ * settings 查询是否需要随视图启用：risk（再平衡金额符号）与 currency（折算基准）
+ * 都要展示基准币；overview 不展示金额符号，省下这次请求。
+ * 修复前只在 currency 视图启用，冷启动直达 risk 视图时基准币被错标为默认 'CNY'。
+ */
+export function shouldLoadSettingsForView(view: AnalyticsViewLike): boolean {
+  return view !== 'overview';
+}
+
 export function resolveNextSelectedCurrency(options: {
   analyticsView: AnalyticsViewLike;
   currencySummaries: CurrencySummary[];

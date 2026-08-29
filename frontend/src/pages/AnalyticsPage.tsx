@@ -9,6 +9,7 @@ import {
   isAnalyticsDateRangeReady,
   resolveAnalyticsDateRange,
   resolveNextSelectedCurrency,
+  shouldLoadSettingsForView,
 } from '../components/analytics/analyticsPageState';
 import { CurrencyAnalyticsSection } from '../components/analytics/CurrencyAnalyticsSection';
 import { OverviewAnalyticsSection } from '../components/analytics/OverviewAnalyticsSection';
@@ -160,7 +161,7 @@ export function AnalyticsPage() {
   const settingsQuery = useQuery({
     queryKey: queryKeys.settings.all(),
     queryFn: fetchSettings,
-    enabled: analyticsView === 'currency',
+    enabled: shouldLoadSettingsForView(analyticsView),
   });
 
   const currencySummaries = currencyOverviewQuery.data?.currencies ?? [];

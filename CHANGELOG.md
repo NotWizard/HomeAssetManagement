@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复分析看板“风险与配置”视图的再平衡金额可能错标为 ¥：settings 查询原先只在币种总览视图启用，冷启动直达风险视图时基准币回退默认值 CNY；现在 risk 与 currency 视图都会加载 settings。（整改清单 v2 · V2-10）
+- Fix rebalance amounts in the Analytics “Risk & Allocation” view potentially being mislabeled with ¥. The settings query was previously only enabled for the currency view, so landing directly on the risk view fell back to the default CNY. Settings now load for both risk and currency views. (Remediation v2 · V2-10)
+
 - 修复发布流水线不校验 tag 与包版本一致性：release workflow 现在在构建前强制断言 tag == desktop/frontend/backend 三端版本号，不一致直接 fail fast，避免产物名与更新器期望不符导致更新静默失效。x64 未随 CI 发布的缺口维持 README 的显式声明（仅 Apple Silicon）。（整改清单 v2 · V2-9）
 - Fix the release pipeline never checking tag-to-package-version consistency. The release workflow now asserts tag == desktop/frontend/backend versions before building and fails fast otherwise, preventing silent update breakage from asset-name mismatches. The x64 gap remains an explicit README-documented decision (Apple Silicon only). (Remediation v2 · V2-9)
 

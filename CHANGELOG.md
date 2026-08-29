@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- `docs/整改清单-v2.md` 全部 44 项处理完毕：43 项修复落地，V2-42（桌面 postinstall 死脚本）复核驳回——`macos-alias` rebuild 仍被 build-dmg.mjs 的 ds-store 链路需要，非死脚本。修复记录表已回填逐项状态与 commit。
+- All 44 items in `docs/整改清单-v2.md` are now resolved: 43 fixes landed, and V2-42 (desktop postinstall dead script) was rejected on re-verification — the `macos-alias` rebuild is still required by build-dmg.mjs's ds-store chain. The remediation table now records per-item status and commits.
+
 - 修复桌面端数据库路径含 `?` 时静默写到错误文件：SQLAlchemy URL 解析会把 `?` 后内容当 query 截断且 percent-encoding 无法往返，现在直接 fail fast 给出明确错误。（整改清单 v2 · V2-44）
 - Fix the desktop database path silently resolving to the wrong file when containing `?`: SQLAlchemy URL parsing truncates at `?` as a query separator and percent-encoding does not round-trip, so the app now fails fast with a clear error. (Remediation v2 · V2-44)
 

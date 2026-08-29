@@ -22,6 +22,9 @@
 
 ### Fixed
 
+- 修复弹窗不支持键盘退出：Dialog 组件原先只能点遮罩关闭；现在支持 Escape 关闭、打开即聚焦面板、Tab 键在面板内循环（轻量焦点陷阱），并补齐 `role="dialog"`/`aria-modal` 语义。（整改清单 v2 · V2-37）
+- Fix dialogs being impossible to dismiss via keyboard. The Dialog component previously only closed via backdrop click; it now supports Escape to close, focuses the panel on open, cycles Tab within the panel (lightweight focus trap), and carries proper `role="dialog"`/`aria-modal` semantics. (Remediation v2 · V2-37)
+
 - 修复左下角更新入口点击“立即升级并重启”失败后无任何提示且产生 unhandled rejection：安装确认现在捕获异常并在对话框内给出可见错误，与设置页手动更新卡片行为一致。（整改清单 v2 · V2-36）
 - Fix the bottom-left update entry silently failing on “Install and restart” with an unhandled rejection. The install confirmation now catches errors and shows a visible message in the dialog, matching the Settings manual-update card. (Remediation v2 · V2-36)
 

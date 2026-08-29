@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -36,6 +37,39 @@ def test_import_preview_detects_insert_or_update_actions():
         assert preview["total_rows"] == 1
         assert preview["failed_rows"] == 0
         assert preview["inserted_rows"] == 1
+
+
+def test_import_rejects_duplicate_business_key_within_same_file():
+    """同一 CSV 内业务键重复的行必须报错，杜绝重复持仓落库或静默覆盖。"""
+    init_database()
+    with SessionLocal() as session:
+        session.query(SnapshotEvent).delete()
+        session.query(SnapshotDaily).delete()
+        session.query(HoldingItem).delete()
+        session.query(Member).delete()
+        session.add(Member(family_id=1, name="Alice"))
+        session.commit()
+
+        content = "\n".join(
+            [
+                "name,type,member,category_l1,category_l2,category_l3,currency,amount_original,target_ratio",
+                "现金,asset,Alice,现金存款类,银行存款,活期,CNY,700,20",
+                "现金,asset,Alice,现金存款类,银行存款,活期,CNY,800,20",
+            ]
+        ).encode("utf-8")
+
+        preview = ImportService.preview_csv(session, content)
+        assert preview["total_rows"] == 2
+        assert preview["failed_rows"] == 1
+        assert "重复条目" in (preview["rows"][1]["error"] or "")
+
+        result, _parsed = ImportService.commit_csv(session, content, "dup.csv")
+        assert result["inserted_rows"] == 1
+        assert result["failed_rows"] == 1
+
+        holdings = session.query(HoldingItem).filter(HoldingItem.name == "现金").all()
+        assert len(holdings) == 1
+        assert Decimal(str(holdings[0].amount_original)) == Decimal("700")
 
 
 def test_import_preview_rejects_ambiguous_duplicate_member_names():

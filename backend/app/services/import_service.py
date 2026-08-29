@@ -258,9 +258,24 @@ def _parse_csv(content: bytes, prefetch: _ImportPrefetch) -> list[ParsedRow]:
         ]
 
     parsed_rows: list[ParsedRow] = []
+    # 文件内业务键去重：action 在解析阶段一次性定好，若不做此检查，同一文件两行
+    # 同键且库中不存在时都会判 insert 并重复落库（holding_item 无唯一约束）；
+    # 库中已存在时则后写覆盖先写，preview 计数误导。重复行直接报错，由用户裁决。
+    seen_keys: dict[tuple[str, str, int, int], int] = {}
     for idx, raw in enumerate(reader, start=2):
         try:
             payload = _build_payload(raw, prefetch)
+            key = (
+                payload["type"],
+                payload["name"],
+                payload["member_id"],
+                payload["category_l3_id"],
+            )
+            if key in seen_keys:
+                raise ValueError(
+                    f"文件内存在重复条目（与第 {seen_keys[key]} 行业务键相同），请合并后重试"
+                )
+            seen_keys[key] = idx
             action = _resolve_action(payload, prefetch)
             parsed_rows.append(ParsedRow(index=idx, payload=payload, action=action, error=None))
         except Exception as exc:  # noqa: BLE001

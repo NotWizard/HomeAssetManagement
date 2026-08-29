@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复同一 CSV 文件内业务键重复导致重复持仓落库或静默覆盖：解析阶段即对文件内重复业务键报行级错误（preview 与正式提交语义一致），用户可下载错误明细修正后重导。（整改清单 v2 · V2-3）
+- Fix duplicate business keys within one CSV file causing duplicated holdings or silent overwrites. The parse phase now flags in-file duplicate keys as row-level errors (preview matches commit semantics), and users can download the error report to fix and re-import. (Remediation v2 · V2-3)
+
 - 修复基准币切换后历史 `daily_totals` 汇总行不重建、与 snapshot payload 永久失同步：重估全部快照时现在同步按新基准币口径重建对应 `daily_totals` 行，两口径不再混杂。（整改清单 v2 · V2-2）
 - Fix historical `daily_totals` rows not being rebuilt after a base currency switch, which left them permanently out of sync with snapshot payloads. Revaluing snapshots now rebuilds the corresponding `daily_totals` rows in the new base currency within the same transaction. (Remediation v2 · V2-2)
 

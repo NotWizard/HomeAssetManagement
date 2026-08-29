@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复图表 tooltip 的 HTML 注入面：持仓名/成员名等用户输入（含 CSV 导入渠道）原先直接拼进 ECharts tooltip 的 HTML；新增统一 `escapeHtml` 工具并接入相关性矩阵、波动率、币种构成、币种敞口与桑基图的全部 tooltip 拼接点。（整改清单 v2 · V2-12）
+- Fix an HTML injection vector in chart tooltips. User-controlled strings such as holding and member names (including the CSV import channel) were previously interpolated into ECharts tooltip HTML as-is. A shared `escapeHtml` utility now covers every tooltip interpolation point across the correlation matrix, volatility, currency breakdown, currency exposure, and Sankey charts. (Remediation v2 · V2-12)
+
 - 修复录入表单“期望占比”留空必报错的自相矛盾：提示文案写明“留空表示不参与计算”，校验却强制必填；现在留空合法并提交为 null，非空才校验 0–100 范围，顺带拦住非数字输入穿透。（整改清单 v2 · V2-11）
 - Fix the entry form's “target ratio” field contradicting itself: the hint said leaving it empty opts out of rebalancing, yet validation rejected empty values. Empty is now valid and submitted as null, non-empty values are range-checked 0–100, and non-numeric input no longer slips through. (Remediation v2 · V2-11)
 

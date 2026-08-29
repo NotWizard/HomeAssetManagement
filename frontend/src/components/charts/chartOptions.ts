@@ -5,6 +5,7 @@ import type {
   SankeyData,
   VolatilityItem,
 } from '../../services/analytics';
+import { escapeHtml } from '../../utils/escapeHtml';
 import { formatCurrency, formatPercent } from '../../utils/format';
 import {
   CORRELATION_HEATMAP_Y_AXIS_LABEL,
@@ -287,7 +288,8 @@ export function buildVolatilityChartOption(data: VolatilityItem[]) {
         if (!head) {
           return '';
         }
-        const label = head.axisValueLabel ?? head.name ?? '';
+        // label 是资产名（用户输入），tooltip renderMode 为 html，必须转义
+        const label = escapeHtml(head.axisValueLabel ?? head.name ?? '');
         return formatVolatilityTooltip(label, head.value);
       },
     },
@@ -351,10 +353,13 @@ export function buildCorrelationHeatmapOption(data: CorrelationData) {
     tooltip: {
       formatter: (params: { data: [number, number, number] }) => {
         const [x, y, v] = params.data;
+        // 资产名是用户输入，tooltip renderMode 为 html，必须转义
+        const yName = escapeHtml(data.assets[y]);
+        const xName = escapeHtml(data.assets[x]);
         if (v === MISSING_CORRELATION) {
-          return `${data.assets[y]} vs ${data.assets[x]}<br/>样本不足`;
+          return `${yName} vs ${xName}<br/>样本不足`;
         }
-        return `${data.assets[y]} vs ${data.assets[x]}<br/>${v.toFixed(4)}`;
+        return `${yName} vs ${xName}<br/>${v.toFixed(4)}`;
       },
     },
     grid: {
@@ -439,7 +444,8 @@ export function buildCurrencyExposureChartOption(data: CurrencySummary[], baseCu
         if (!params.length) {
           return '';
         }
-        const lines = [`${params[0].axisValue}`];
+        // axisValue 是用户录入的币种代码，需转义；seriesName 为固定中文文案
+        const lines = [escapeHtml(`${params[0].axisValue}`)];
         for (const item of params) {
           lines.push(`${item.seriesName}：${formatCurrency(item.value, baseCurrency)}`);
         }
@@ -504,7 +510,7 @@ export function buildCurrencyBreakdownChartOption(
       trigger: 'item',
       formatter: (params: { name: string; value: number; data: CurrencyBreakdownItem }) => {
         return [
-          params.name,
+          escapeHtml(params.name),
           `金额：${formatCurrency(params.value, currency)}`,
           `占比：${formatPercent(params.data.share_pct)}`,
         ].join('<br/>');
@@ -607,7 +613,7 @@ export function buildSankeyChartOption(data: SankeyData) {
           const sourceNode = nodeMap.get(params.data?.source ?? '');
           const targetNode = nodeMap.get(params.data?.target ?? '');
           const lines = [
-            `${getDisplayName(sourceNode)} → ${getDisplayName(targetNode)}`,
+            `${escapeHtml(getDisplayName(sourceNode))} → ${escapeHtml(getDisplayName(targetNode))}`,
             `金额：${formatSankeyValue(params.data?.value)}`,
           ];
           if (targetNode?.holding_type && targetNode.share_pct != null) {
@@ -618,18 +624,21 @@ export function buildSankeyChartOption(data: SankeyData) {
 
         const node = getNodeByParams(params);
         if (!node) {
-          return `${params.name ?? '未命名节点'}<br/>金额：${formatSankeyValue(params.value)}`;
+          return `${escapeHtml(params.name ?? '未命名节点')}<br/>金额：${formatSankeyValue(params.value)}`;
         }
 
-        const lines = [getDisplayName(node), `金额：${formatSankeyValue(node.amount)}`];
+        const lines = [
+          escapeHtml(getDisplayName(node)),
+          `金额：${formatSankeyValue(node.amount)}`,
+        ];
         if (node.member_name && !memberNodeIds.has(node.id)) {
-          lines.push(`成员：${node.member_name}`);
+          lines.push(`成员：${escapeHtml(node.member_name)}`);
         }
         if (node.holding_type) {
           lines.push(`类型：${node.holding_type === 'asset' ? '资产' : '负债'}`);
         }
         if (node.category_path) {
-          lines.push(`分类：${node.category_path}`);
+          lines.push(`分类：${escapeHtml(node.category_path)}`);
         }
         if (node.holding_type && node.share_pct != null) {
           lines.push(`占比：${formatSankeyPercent(node.share_pct)}`);

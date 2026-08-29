@@ -258,3 +258,52 @@ def test_resolve_rate_returns_app_error_when_all_fx_providers_fail(monkeypatch):
             )
 
     assert exc_info.value.code == 5000
+
+
+def test_list_rates_fallback_returns_latest_per_currency_only():
+    """目标日期无行时，兜底应返回每币种最近一次汇率，而不是全量历史。"""
+    from app.services.bootstrap import init_database
+
+    init_database()
+    with SessionLocal() as session:
+        session.query(FxRateDaily).delete()
+        # 两个币种 × 两个日期 + 一行其他基准币（不应混入）
+        for quote, rate_old, rate_new in [("USD", "7.10", "7.20"), ("EUR", "7.80", "7.90")]:
+            session.add(
+                FxRateDaily(
+                    rate_date=date(2026, 6, 26),
+                    base_currency="CNY",
+                    quote_currency=quote,
+                    rate=Decimal(rate_old),
+                    provider="test",
+                    is_estimated=False,
+                )
+            )
+            session.add(
+                FxRateDaily(
+                    rate_date=date(2026, 6, 27),
+                    base_currency="CNY",
+                    quote_currency=quote,
+                    rate=Decimal(rate_new),
+                    provider="test",
+                    is_estimated=False,
+                )
+            )
+        session.add(
+            FxRateDaily(
+                rate_date=date(2026, 6, 27),
+                base_currency="USD",
+                quote_currency="EUR",
+                rate=Decimal("1.1"),
+                provider="test",
+                is_estimated=False,
+            )
+        )
+        session.flush()
+
+        rows = FXService.list_rates(session, on_date=date(2026, 6, 28))
+
+        by_quote = {row.quote_currency: row for row in rows}
+        assert sorted(by_quote) == ["EUR", "USD"]
+        assert all(row.rate_date == date(2026, 6, 27) for row in rows)
+        assert Decimal(by_quote["USD"].rate) == Decimal("7.20")

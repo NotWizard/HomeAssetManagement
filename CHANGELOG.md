@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复汇率列表接口在目标日期无数据时返回全量历史的问题：兜底分支原先无 LIMIT 无去重（一年约 7000+ 行），现在按币种分组返回各自最近一次可用汇率。（整改清单 v2 · V2-17）
+- Fix the FX rates endpoint returning unbounded full history when no rows exist for the requested date. The fallback previously had neither LIMIT nor dedupe (~7000+ rows after a year); it now returns the latest available rate per currency. (Remediation v2 · V2-17)
+
 - 修复迁移包导入后残留“幽灵”历史：恢复时原先漏清 `snapshot_event` 与 `import_log` 两张表，导入后仍会列出已失效旧家庭状态的事件快照与导入日志；现在恢复删除清单已补齐这两张表。（整改清单 v2 · V2-16）
 - Fix ghost history surviving migration package imports. The restore path previously forgot to clear `snapshot_event` and `import_log`, so event snapshots and import logs from the replaced family state lingered after import. Both tables are now included in the restore-time delete list. (Remediation v2 · V2-16)
 

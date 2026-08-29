@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from sqlalchemy import and_
 from sqlalchemy import desc
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -166,11 +167,30 @@ class FXService:
         )
         if rows:
             return rows
+        # 兜底语义是“每币种最近一次可用汇率”，不是全量历史：原实现无 LIMIT 无去重，
+        # 一年后会返回约 7000+ 行。按币种分组取 MAX(rate_date) 再回 join 取行。
+        latest_dates = (
+            select(
+                FxRateDaily.quote_currency,
+                func.max(FxRateDaily.rate_date).label("latest_date"),
+            )
+            .where(FxRateDaily.base_currency == base)
+            .group_by(FxRateDaily.quote_currency)
+            .subquery()
+        )
         return list(
             session.scalars(
                 select(FxRateDaily)
+                .join(
+                    latest_dates,
+                    and_(
+                        FxRateDaily.quote_currency
+                        == latest_dates.c.quote_currency,
+                        FxRateDaily.rate_date == latest_dates.c.latest_date,
+                    ),
+                )
                 .where(FxRateDaily.base_currency == base)
-                .order_by(desc(FxRateDaily.rate_date), FxRateDaily.quote_currency.asc())
+                .order_by(FxRateDaily.quote_currency.asc())
             )
         )
 

@@ -97,28 +97,31 @@ def test_update_settings_runs_base_currency_pipeline_only_when_currency_changes(
 
 
 
-def test_apply_settings_update_reports_base_currency_change():
+def test_update_settings_runs_revalue_pipeline_only_on_base_currency_change():
+    """走公开入口 update_settings：基准币变化才触发重估管道（生成事件快照），
+    仅调阈值不触发。"""
+    from app.models.snapshot_event import SnapshotEvent
+
+    init_database()
     with SessionLocal() as session:
         session.query(SettingsModel).delete()
+        session.query(SnapshotEvent).delete()
         session.flush()
-        settings = SettingsService.get_settings(session)
-        changed = __import__("app.services.settings_service", fromlist=["_apply_settings_update"])._apply_settings_update(
-            settings,
-            base_currency="USD",
-            rebalance_threshold_pct=8,
+
+        settings = SettingsService.update_settings(
+            session, base_currency="USD", rebalance_threshold_pct=8
         )
-        assert changed is True
         assert settings.base_currency == "USD"
         assert settings.rebalance_threshold_pct == 8
         assert settings.fx_provider == "frankfurter"
+        event_count_after_change = session.query(SnapshotEvent).count()
+        assert event_count_after_change > 0
 
-        changed_again = __import__("app.services.settings_service", fromlist=["_apply_settings_update"])._apply_settings_update(
-            settings,
-            base_currency="USD",
-            rebalance_threshold_pct=9,
+        settings = SettingsService.update_settings(
+            session, base_currency="USD", rebalance_threshold_pct=9
         )
-        assert changed_again is False
         assert settings.rebalance_threshold_pct == 9
+        assert session.query(SnapshotEvent).count() == event_count_after_change
 
 
 def test_import_commit_csv_runs_prepare_apply_finalize_stages_in_order(monkeypatch):

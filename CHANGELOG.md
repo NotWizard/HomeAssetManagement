@@ -6,7 +6,10 @@
 
 ## [Unreleased]
 
-### Fixed
+### Removed
+
+- 移除后端零调用死代码：`invalidate_timezone_cache`（时区缓存在 settings 不可改时区的前提下无使用场景）与 `_apply_settings_update`（仅测试引用的私有入口，测试已改走公开 `update_settings`）。（整改清单 v2 · V2-24 / V2-25）
+- Remove zero-caller backend dead code: `invalidate_timezone_cache` (no use case while timezone stays non-editable) and `_apply_settings_update` (a private entry referenced only by tests; the test now goes through the public `update_settings`). (Remediation v2 · V2-24 / V2-25)
 
 - 修复 CI desktop job 与发布流水线的验证漂移：原先只做 typecheck（--noEmit），emit 期错误（如 import 扩展名重写、preload 产物缺失）要延迟到发版才暴露；CI 现在实际执行 `tsc -p` 构建冒烟。（整改清单 v2 · V2-23）
 - Fix validation drift between the CI desktop job and the release pipeline. CI previously only ran typecheck (--noEmit), so emit-time errors (import-extension rewrites, missing preload artifacts) only surfaced at release time. CI now runs a real `tsc -p` build as a smoke check. (Remediation v2 · V2-23)

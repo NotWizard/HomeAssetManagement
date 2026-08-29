@@ -36,11 +36,6 @@ def resolve_timezone_name(session: Session | None = None) -> str:
     return resolved
 
 
-def invalidate_timezone_cache(session: Session) -> None:
-    """Settings 更新后调用：清掉当前 session 的 tz 缓存避免读到旧值。"""
-    session.info.pop(_TIMEZONE_NAME_CACHE_KEY, None)
-
-
 def get_business_tzinfo(session: Session | None = None) -> ZoneInfo:
     timezone_name = resolve_timezone_name(session)
     try:

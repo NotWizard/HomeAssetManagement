@@ -139,21 +139,6 @@ def _revalue_all_holdings(
 
 
 
-def _apply_settings_update(
-    settings: SettingsModel,
-    *,
-    base_currency: str,
-    rebalance_threshold_pct: float,
-) -> bool:
-    plan = _build_settings_update_plan(
-        settings,
-        base_currency=base_currency,
-        rebalance_threshold_pct=rebalance_threshold_pct,
-    )
-    _apply_settings_update_plan(settings, plan)
-    return plan.base_currency_changed
-
-
 def _apply_settings_update_plan(
     settings: SettingsModel,
     plan: SettingsUpdatePlan,

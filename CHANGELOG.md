@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复 CSV 导入提交成功后按钮立即恢复可点、可能重复导入同一文件：成功后现在会清空所选文件与预检结果，提交按钮随之禁用，需重新选择文件。（整改清单 v2 · V2-18）
+- Fix the CSV import page allowing accidental re-submission of the same file right after a successful commit. The selected file and preview are now cleared on success, disabling the submit button until a new file is chosen. (Remediation v2 · V2-18)
+
 - 修复汇率列表接口在目标日期无数据时返回全量历史的问题：兜底分支原先无 LIMIT 无去重（一年约 7000+ 行），现在按币种分组返回各自最近一次可用汇率。（整改清单 v2 · V2-17）
 - Fix the FX rates endpoint returning unbounded full history when no rows exist for the requested date. The fallback previously had neither LIMIT nor dedupe (~7000+ rows after a year); it now returns the latest available rate per currency. (Remediation v2 · V2-17)
 

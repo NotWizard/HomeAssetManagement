@@ -25,6 +25,7 @@ export function ImportPage() {
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [downloadingImportId, setDownloadingImportId] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const logsQuery = useQuery({
     queryKey: queryKeys.importLogs.all(),
@@ -45,6 +46,13 @@ export function ImportPage() {
     mutationFn: (target: File) => commitImport(target),
     onSuccess: async () => {
       setError(null);
+      // 成功后清空文件与预检结果：否则提交按钮立即恢复可点，
+      // 误点会把同一文件重复导入（重复日志、潜在的重复插数）。
+      setFile(null);
+      setPreview(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       await invalidateImportLogQueries(queryClient);
       // CSV import 一次可能批量插入/更新数十条 holding，对分析数据冲击大，走全失效
       await invalidateAllHoldingDependentQueries(queryClient);
@@ -83,6 +91,7 @@ export function ImportPage() {
               选择 CSV 文件（UTF-8 编码）
             </div>
             <Input
+              ref={fileInputRef}
               type="file"
               accept=".csv"
               onChange={(event) => {

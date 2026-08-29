@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 收紧桌面端导航守卫：原先 `127.0.0.1` 任意端口都视为内部地址，渲染窗口一旦被诱导导航到恶意本地服务页面，该页面即获得带 token 的完整本地 API 能力；现在只放行与当前后端端口精确同源的地址。（整改清单 v2 · V2-20）
+- Tighten desktop navigation guards. Previously any `127.0.0.1` port counted as internal, so a renderer window lured onto a malicious local service page would gain full token-authenticated local API access. Only URLs exactly matching the current backend port now count as internal. (Remediation v2 · V2-20)
+
 - 修复录入页成员分组组件的 memo 失效：内联 `onToggle` 闭包每次渲染都新建，浅比较永远失败；`toggleGroup` 改为 `useCallback` 稳定引用，memberId 由子组件内部回传，勾选/输入不再连带重渲染全部分组。（整改清单 v2 · V2-19）
 - Fix the memoized member-group blocks on the entry page never actually memoizing: the inline `onToggle` closure was recreated every render, so shallow comparison always failed. `toggleGroup` is now a stable `useCallback` reference with memberId passed back from inside the child, so checking boxes or typing no longer re-renders every group. (Remediation v2 · V2-19)
 

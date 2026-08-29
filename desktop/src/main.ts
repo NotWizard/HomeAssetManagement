@@ -32,6 +32,10 @@ import {
   waitForBackendReadyWithHealthCheck,
 } from './backend-health.js';
 import {
+  isExternalHttpUrl,
+  isInternalNavigationUrl,
+} from './navigation-guard.js';
+import {
   UPDATE_IPC_CHANNELS,
   createUpdateController,
 } from './update-controller.js';
@@ -241,26 +245,8 @@ function showWindowError(window: BrowserWindow, message: string): void {
  * - `web-contents-created`：上面两条对将来创建的任何 webContents 同样生效
  */
 function wireNavigationGuards(): void {
-  const isInternalUrl = (url: string): boolean => {
-    if (url.startsWith('file://')) return true;
-    try {
-      const parsed = new URL(url);
-      return (
-        parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
-      );
-    } catch {
-      return false;
-    }
-  };
-
-  const isExternalHttpUrl = (url: string): boolean => {
-    try {
-      const parsed = new URL(url);
-      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-      return false;
-    }
-  };
+  const isInternalUrl = (url: string): boolean =>
+    isInternalNavigationUrl(url, backendController.getPort());
 
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-navigate', (event, url) => {

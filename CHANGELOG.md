@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复基准币切换后历史 `daily_totals` 汇总行不重建、与 snapshot payload 永久失同步：重估全部快照时现在同步按新基准币口径重建对应 `daily_totals` 行，两口径不再混杂。（整改清单 v2 · V2-2）
+- Fix historical `daily_totals` rows not being rebuilt after a base currency switch, which left them permanently out of sync with snapshot payloads. Revaluing snapshots now rebuilds the corresponding `daily_totals` rows in the new base currency within the same transaction. (Remediation v2 · V2-2)
+
 - 修复周末/节假日的汇率被错标为当天精确值：中国外汇交易中心按窗口返回最近交易日记录、Frankfurter 在非交易日返回前一工作日数据，两者现在都以响应自带的实际数据日期落库；非交易日查询走历史 fallback 并正确标记为估算值，空缓存冷启动在周末也不再报“无法获取汇率”。（整改清单 v2 · V2-1）
 - Fix weekend/holiday FX rates being stored as exact same-day values. Both the CFETS window query and Frankfurter non-trading-day responses now persist under the actual data date from the response; non-trading-day lookups use the historical fallback marked as estimated, and cold starts on weekends no longer fail with “rate unavailable”. (Remediation v2 · V2-1)
 

@@ -291,15 +291,19 @@ class SnapshotService:
         )
         for row in daily_rows:
             payload = parse_snapshot_payload(row.payload_json)
-            row.payload_json = _json_dumps(
-                _revalue_snapshot_payload(
-                    session,
-                    payload,
-                    base_currency=base_currency,
-                    as_of=row.snapshot_date,
-                    rate_cache=rate_cache,
-                    allow_rate_refresh=allow_rate_refresh,
-                )
+            revalued = _revalue_snapshot_payload(
+                session,
+                payload,
+                base_currency=base_currency,
+                as_of=row.snapshot_date,
+                rate_cache=rate_cache,
+                allow_rate_refresh=allow_rate_refresh,
+            )
+            row.payload_json = _json_dumps(revalued)
+            # 同步重建 daily_totals 汇总副本：基准币切换后 payload 已是新币口径，
+            # 若 daily_totals 残留旧币数值，totals-only 端点会把两种量纲混在一起返回。
+            _upsert_daily_total(
+                session, family.id, row.snapshot_date, revalued.get("totals") or {}
             )
 
         event_rows = list(

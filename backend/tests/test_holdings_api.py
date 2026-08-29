@@ -1,10 +1,13 @@
 from datetime import date
+from datetime import timedelta
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import undefer
 
 from app.core.database import SessionLocal
+from app.models.daily_total import DailyTotal
 from app.models.family import Family
 from app.models.fx_rate_daily import FxRateDaily
 from app.main import app
@@ -14,6 +17,7 @@ from app.models.settings import SettingsModel
 from app.models.snapshot_daily import SnapshotDaily
 from app.models.snapshot_event import SnapshotEvent
 from app.services.bootstrap import init_database
+from app.services.snapshot_service import SnapshotService
 
 
 def _reset_runtime_data() -> None:
@@ -238,6 +242,75 @@ def test_update_settings_revalues_existing_holdings_and_daily_snapshot():
     assert update_resp.json()["data"]["base_currency"] == "USD"
     assert holdings_resp.json()["data"][0]["amount_base"] == 100.0
     assert trend_resp.json()["data"]["total_asset"][-1] == 100.0
+
+
+def test_update_settings_rebase_rebuilds_daily_totals_history():
+    """基准币切换后，历史 daily_totals 必须与 snapshot payload 同步重建为新币口径。"""
+    _reset_runtime_data()
+    with SessionLocal() as session:
+        session.query(DailyTotal).delete()
+        today = date.today()
+        past = today - timedelta(days=3)
+        for rate_date in (past, today):
+            session.add(
+                FxRateDaily(
+                    rate_date=rate_date,
+                    base_currency="USD",
+                    quote_currency="CNY",
+                    rate=Decimal("7"),
+                    provider="test",
+                    is_estimated=False,
+                )
+            )
+        session.commit()
+
+    with TestClient(app) as client:
+        member_id = client.post("/api/v1/members", json={"name": "Dave"}).json()["data"]["id"]
+        tree = client.get("/api/v1/categories", params={"type": "asset"}).json()["data"]
+        l1, l2, l3 = _find_category_path(tree, ("现金存款类", "银行存款", "活期"))
+        create_resp = client.post(
+            "/api/v1/holdings",
+            json={
+                "member_id": member_id,
+                "type": "asset",
+                "name": "家庭备用金",
+                "category_l1_id": l1["id"],
+                "category_l2_id": l2["id"],
+                "category_l3_id": l3["id"],
+                "currency": "CNY",
+                "amount_original": "700",
+                "target_ratio": "10",
+            },
+        )
+        assert create_resp.status_code == 200
+
+    # 造一条 CNY 口径的历史快照及其 daily_totals 副本，模拟切换前的历史数据
+    with SessionLocal() as session:
+        SnapshotService.create_daily_snapshot(session, snapshot_date=past)
+        session.commit()
+        before = session.scalar(
+            select(DailyTotal).where(DailyTotal.snapshot_date == past)
+        )
+        assert before is not None
+        assert float(before.total_asset) == 700.0
+
+    with TestClient(app) as client:
+        update_resp = client.put(
+            "/api/v1/settings",
+            json={"base_currency": "USD", "rebalance_threshold_pct": 5},
+        )
+        assert update_resp.status_code == 200
+
+    with SessionLocal() as session:
+        after = session.scalar(
+            select(DailyTotal).where(DailyTotal.snapshot_date == past)
+        )
+        assert after is not None
+        assert round(float(after.total_asset), 2) == 100.0
+        # daily_totals 与 snapshot payload 保持同一基准币口径
+        snap = SnapshotService.get_daily_snapshot(session, past)
+        assert snap is not None
+        assert round(snap["payload"]["totals"]["total_asset"], 2) == 100.0
 
 
 def test_delete_holding_updates_daily_analytics_snapshot_immediately():

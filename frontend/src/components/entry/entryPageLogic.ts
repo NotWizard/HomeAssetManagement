@@ -29,10 +29,6 @@ export function normalizeAmountInput(value: string): string | null {
   return normalized;
 }
 
-export function hasValidTwoDecimalAmount(value: string): boolean {
-  return /^\d+(?:\.\d{1,2})?$/.test(value) && Number(value) > 0;
-}
-
 export function summarizeHoldings(rows: Holding[]): BulkDeleteSummary {
   const assetCount = rows.filter((row) => row.type === 'asset').length;
   return {

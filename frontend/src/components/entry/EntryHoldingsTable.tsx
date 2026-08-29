@@ -205,7 +205,6 @@ function GroupBlockBase({
   const visibleAssetTotal = summary.totalRatio;
   const showRows = !collapsed && rows.length > 0;
   const ChevronIcon = collapsed ? ChevronRight : ChevronDown;
-  const overflowDanger = overflowRatio > TARGET_RATIO_EPSILON;
 
   return (
     <>
@@ -284,7 +283,6 @@ function GroupBlockBase({
                 isAsset={isAsset}
                 ratioValue={ratioValue}
                 ratioCellClass={ratioCellClass}
-                overflowDanger={overflowDanger}
                 focused={focused}
                 selected={selectedIdSet.has(row.id)}
                 memberName={summary.memberName}
@@ -306,7 +304,6 @@ type EntryHoldingRowProps = {
   isAsset: boolean;
   ratioValue: number | null;
   ratioCellClass: string;
-  overflowDanger: boolean;
   focused: boolean;
   selected: boolean;
   memberName: string;
@@ -322,7 +319,6 @@ function EntryHoldingRowBase({
   isAsset,
   ratioValue,
   ratioCellClass,
-  overflowDanger,
   focused,
   selected,
   memberName,
@@ -372,11 +368,7 @@ function EntryHoldingRowBase({
         {formatCurrency(row.amount_base, baseCurrency)}
       </TableCell>
       <TableCell className={cn('text-right tabular-nums', ratioCellClass)}>
-        {ratioValue == null
-          ? '-'
-          : overflowDanger && isAsset
-            ? `${ratioValue}%`
-            : `${ratioValue}%`}
+        {ratioValue == null ? '-' : `${ratioValue}%`}
       </TableCell>
       <TableCell>
         <div className="flex justify-end gap-2">

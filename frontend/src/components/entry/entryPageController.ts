@@ -34,7 +34,7 @@ export const INITIAL_ENTRY_FORM: EntryFormState = {
   targetRatio: '',
 };
 
-function hasValidTwoDecimalAmount(value: string): boolean {
+export function hasValidTwoDecimalAmount(value: string): boolean {
   return /^\d+(?:\.\d{1,2})?$/.test(value) && Number(value) > 0;
 }
 

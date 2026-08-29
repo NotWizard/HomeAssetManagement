@@ -14,6 +14,9 @@
 - 移除后端零调用死代码：`invalidate_timezone_cache`（时区缓存在 settings 不可改时区的前提下无使用场景）与 `_apply_settings_update`（仅测试引用的私有入口，测试已改走公开 `update_settings`）。（整改清单 v2 · V2-24 / V2-25）
 - Remove zero-caller backend dead code: `invalidate_timezone_cache` (no use case while timezone stays non-editable) and `_apply_settings_update` (a private entry referenced only by tests; the test now goes through the public `update_settings`). (Remediation v2 · V2-24 / V2-25)
 
+- 清理前端死代码与重复定义：录入表格目标占比列的恒等同分支三目（连带移除不再使用的 `overflowDanger` prop）、总览页恒为 `'--'` 的死条件、`hasValidTwoDecimalAmount` 在 logic/controller 双份定义（归入唯一消费方 controller）。（整改清单 v2 · V2-30 / V2-31 / V2-32）
+- Remove frontend dead code and duplicate definitions: the entry table's identical-branch ternary for target ratio (plus the now-unused `overflowDanger` prop), the overview page's always-`'--'` dead condition, and the dual definition of `hasValidTwoDecimalAmount` in logic/controller (now homed solely in its only consumer, the controller). (Remediation v2 · V2-30 / V2-31 / V2-32)
+
 ### Fixed
 
 - 修复开发模式开启 `HBS_REQUIRE_AUTH=true` 时浏览器跨域预检必失败：CORS `allow_headers` 补上 `X-HBS-Token`（桌面同源场景不受影响）。（整改清单 v2 · V2-29）

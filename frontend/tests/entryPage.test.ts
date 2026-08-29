@@ -8,12 +8,13 @@ import {
   formatAllocationDeviation,
   formatTargetRatioSummary,
   hasMemberAllocationImbalance,
-  hasValidTwoDecimalAmount,
   normalizeAmountInput,
   summarizeHoldings,
   summarizeMemberAllocations,
   sumAssetTargetRatio,
 } from '../src/components/entry/entryPageLogic.ts';
+// hasValidTwoDecimalAmount 的唯一消费方是 entryPageController，函数已归入该模块
+import { hasValidTwoDecimalAmount } from '../src/components/entry/entryPageController.ts';
 import type { Holding, Member } from '../src/types/index.ts';
 
 const sampleHoldings: Holding[] = [

@@ -71,8 +71,8 @@ export function OverviewPage() {
   const settingsUnavailable = settingsQuery.isError && !settingsQuery.data;
   const rebalanceUnavailable = rebalanceQuery.isError && !rebalanceQuery.data;
   const summaryUnavailable = trendUnavailable || settingsUnavailable;
-  const baseCurrencyBadge = settingsQuery.data?.base_currency ?? (settingsUnavailable ? '--' : '--');
-  const fxProviderBadge = settingsQuery.data?.fx_provider ?? (settingsUnavailable ? '--' : '--');
+  const baseCurrencyBadge = settingsQuery.data?.base_currency ?? '--';
+  const fxProviderBadge = settingsQuery.data?.fx_provider ?? '--';
 
   const latest = useMemo(() => {
     if (!trendQuery.data || trendQuery.data.net_asset.length === 0) {

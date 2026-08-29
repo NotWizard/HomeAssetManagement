@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- 修复并发写同一天快照时用户请求偶发 500：`snapshot_daily` 与 `daily_totals` 的写入从 SELECT-then-INSERT 改为 SQLite `INSERT ... ON CONFLICT DO UPDATE`，定时任务与用户操作并发撞同一天不再触发唯一键冲突回滚。（整改清单 v2 · V2-15）
+- Fix user requests occasionally failing with HTTP 500 when concurrent writers snapshot the same day. Writes to `snapshot_daily` and `daily_totals` now use SQLite `INSERT ... ON CONFLICT DO UPDATE` instead of SELECT-then-INSERT, so a scheduled job racing a user edit no longer hits unique-constraint rollbacks. (Remediation v2 · V2-15)
+
 - 修复大文件导入期间整个后端无响应：CSV 预检/提交与迁移包导入原本在 async 路由里同步执行重活，阻塞事件循环（连健康检查都不响应）；现在重活经 `run_in_threadpool` 卸载到工作线程，事务边界完整落在同一线程。（整改清单 v2 · V2-14）
 - Fix the backend becoming unresponsive during large imports. CSV preview/commit and migration package import previously ran heavy work synchronously inside async routes, blocking the event loop (even health checks stalled). The heavy work now runs in the threadpool via `run_in_threadpool`, with transaction boundaries kept entirely on the same worker thread. (Remediation v2 · V2-14)
 

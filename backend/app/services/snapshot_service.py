@@ -5,6 +5,7 @@ from decimal import Decimal
 from sqlalchemy import and_
 from sqlalchemy import select
 from sqlalchemy import desc
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import undefer
 
@@ -59,6 +60,24 @@ class SnapshotService:
         snapshot_date = snapshot_date or business_today(session)
         payload = SnapshotService.build_current_payload(session)
 
+        # INSERT ... ON CONFLICT DO UPDATE 替代 SELECT-then-INSERT：定时任务与用户
+        # 写入并发撞同一天时，旧写法唯一键冲突会让用户请求以 500 回滚；upsert 让
+        # 后写方自然覆盖，两个写手都成功（同一天快照本就允许多次重写）。
+        stmt = sqlite_insert(SnapshotDaily).values(
+            family_id=family.id,
+            snapshot_date=snapshot_date,
+            payload_json=_json_dumps(payload),
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["family_id", "snapshot_date"],
+            set_={"payload_json": stmt.excluded.payload_json},
+        )
+        session.execute(stmt)
+
+        # 双写 daily_totals（slim 副本，给 totals-only 端点用）
+        _upsert_daily_total(session, family.id, snapshot_date, payload.get("totals") or {})
+
+        session.flush()
         row = session.scalar(
             select(SnapshotDaily).where(
                 and_(
@@ -67,20 +86,7 @@ class SnapshotService:
                 )
             )
         )
-        if row is None:
-            row = SnapshotDaily(
-                family_id=family.id,
-                snapshot_date=snapshot_date,
-                payload_json=_json_dumps(payload),
-            )
-            session.add(row)
-        else:
-            row.payload_json = _json_dumps(payload)
-
-        # 双写 daily_totals（slim 副本，给 totals-only 端点用）
-        _upsert_daily_total(session, family.id, snapshot_date, payload.get("totals") or {})
-
-        session.flush()
+        assert row is not None
         return row
 
     @staticmethod
@@ -474,28 +480,27 @@ def _upsert_daily_total(
     snapshot_daily.payload_json 仍是 holding 粒度真理源；这张表只是为
     totals-only 端点（如轻量净资产趋势）省去反序列化的副本。
     """
-    row = session.scalar(
-        select(DailyTotal).where(
-            and_(
-                DailyTotal.family_id == family_id,
-                DailyTotal.snapshot_date == snapshot_date,
-            )
-        )
-    )
     total_asset = Decimal(str(totals.get("total_asset", 0) or 0))
     total_liability = Decimal(str(totals.get("total_liability", 0) or 0))
     net_asset = Decimal(str(totals.get("net_asset", 0) or 0))
-    if row is None:
-        session.add(
-            DailyTotal(
-                family_id=family_id,
-                snapshot_date=snapshot_date,
-                total_asset=total_asset,
-                total_liability=total_liability,
-                net_asset=net_asset,
-            )
-        )
-    else:
-        row.total_asset = total_asset
-        row.total_liability = total_liability
-        row.net_asset = net_asset
+    # 与 create_daily_snapshot 同一 upsert 理由：并发写手下 SELECT-then-INSERT
+    # 的唯一键冲突会把整个请求打成 500。generated_at 的 onupdate 不会在
+    # Core upsert 上自动触发（series_builder 缓存指纹读它），显式刷新。
+    stmt = sqlite_insert(DailyTotal).values(
+        family_id=family_id,
+        snapshot_date=snapshot_date,
+        total_asset=total_asset,
+        total_liability=total_liability,
+        net_asset=net_asset,
+        generated_at=utc_now_naive(),
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["family_id", "snapshot_date"],
+        set_={
+            "total_asset": stmt.excluded.total_asset,
+            "total_liability": stmt.excluded.total_liability,
+            "net_asset": stmt.excluded.net_asset,
+            "generated_at": stmt.excluded.generated_at,
+        },
+    )
+    session.execute(stmt)

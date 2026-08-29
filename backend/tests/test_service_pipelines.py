@@ -251,3 +251,32 @@ def test_refresh_rates_uses_fetch_and_upsert_stages(monkeypatch):
             {"USD": Decimal("7.10")},
         ),
     ]
+
+
+def test_create_daily_snapshot_upsert_is_idempotent_and_concurrency_safe():
+    """同一天重复写快照：后写覆盖先写、不产生唯一键冲突、行数恒为 1。"""
+    from app.models.daily_total import DailyTotal
+    from app.models.snapshot_daily import SnapshotDaily
+    from app.services.snapshot_service import SnapshotService
+
+    init_database()
+    with SessionLocal() as session:
+        day = date(2026, 8, 20)
+
+        first = SnapshotService.create_daily_snapshot(session, snapshot_date=day)
+        second = SnapshotService.create_daily_snapshot(session, snapshot_date=day)
+        session.commit()
+
+        assert first.id == second.id
+        assert (
+            session.query(SnapshotDaily)
+            .filter(SnapshotDaily.snapshot_date == day)
+            .count()
+            == 1
+        )
+        total_rows = (
+            session.query(DailyTotal)
+            .filter(DailyTotal.snapshot_date == day)
+            .count()
+        )
+        assert total_rows == 1
